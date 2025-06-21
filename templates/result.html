@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <title>Cut Plan Results</title>
+    <!-- ✅ Bootstrap CDN -->
+    <link
+      href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css"
+      rel="stylesheet"
+    />
+  </head>
+  <body class="bg-light">
+    <div class="container py-5">
+      <h1 class="mb-4 text-center">Cut Plan Results</h1>
+
+      <div class="card p-4 shadow mb-4">
+        <h2 class="mb-3">Parts List</h2>
+        <ul class="list-group">
+          {% for part in parts %}
+          <li class="list-group-item">
+            <strong>Part #{{ loop.index }}</strong>: {{ part[0] }} x {{ part[1]
+            }} inches
+          </li>
+          {% endfor %}
+        </ul>
+      </div>
+
+      <div class="mb-4">
+        <h2>Cut Sheets</h2>
+        {% for img in sheet_images %}
+        <div class="mb-4">
+          <h5>Sheet {{ loop.index }}</h5>
+          <img
+            src="{{ url_for('static', filename='sheets/' + img) }}"
+            class="img-fluid border rounded shadow"
+          />
+        </div>
+        {% endfor %}
+      </div>
+
+      <a href="{{ url_for('index') }}" class="btn btn-secondary"
+        >Back to Form</a
+      >
+    </div>
+  </body>
+</html>

@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <title>Cabinet Cut Planner</title>
+    <!-- ✅ Bootstrap CDN -->
+    <link
+      href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css"
+      rel="stylesheet"
+    />
+  </head>
+  <body class="bg-light">
+    <div class="container py-5">
+      <h1 class="mb-4 text-center">Cabinet Cut Planner</h1>
+
+      <div class="card p-4 shadow">
+        <form method="POST">
+          <div id="parts-list">
+            <h5>Parts List</h5>
+            <div class="row mb-2">
+              <div class="col">
+                <label class="form-label">Width (in):</label>
+                <input
+                  type="number"
+                  step="0.1"
+                  name="widths"
+                  class="form-control"
+                />
+              </div>
+              <div class="col">
+                <label class="form-label">Height (in):</label>
+                <input
+                  type="number"
+                  step="0.1"
+                  name="heights"
+                  class="form-control"
+                />
+              </div>
+              <div class="col">
+                <label class="form-label">Quantity:</label>
+                <input
+                  type="number"
+                  name="quantities"
+                  value="1"
+                  class="form-control"
+                />
+              </div>
+            </div>
+          </div>
+
+          <button
+            type="button"
+            class="btn btn-secondary mb-3"
+            onclick="addRow()"
+          >
+            Add Another Part
+          </button>
+
+          <div class="mb-3">
+            <label class="form-label">Panel Width (default 96):</label>
+            <input
+              type="number"
+              step="0.1"
+              name="panel_width"
+              value="96"
+              class="form-control"
+            />
+          </div>
+
+          <div class="mb-3">
+            <label class="form-label">Panel Height (default 48):</label>
+            <input
+              type="number"
+              step="0.1"
+              name="panel_height"
+              value="48"
+              class="form-control"
+            />
+          </div>
+
+          <button type="submit" class="btn btn-primary w-100">
+            Generate Cut Plan
+          </button>
+        </form>
+      </div>
+    </div>
+
+    <script>
+      function addRow() {
+        const partsList = document.getElementById("parts-list");
+        const newRow = document.createElement("div");
+        newRow.className = "row mb-2";
+        newRow.innerHTML = `
+                <div class="col">
+                    <input type="number" step="0.1" name="widths" class="form-control" placeholder="Width">
+                </div>
+                <div class="col">
+                    <input type="number" step="0.1" name="heights" class="form-control" placeholder="Height">
+                </div>
+                <div class="col">
+                    <input type="number" name="quantities" value="1" class="form-control" placeholder="Quantity">
+                </div>
+            `;
+        partsList.appendChild(newRow);
+      }
+    </script>
+  </body>
+</html>
