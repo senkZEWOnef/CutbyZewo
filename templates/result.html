@@ -1,5 +1,18 @@
 <!DOCTYPE html>
 <html>
+  <nav class="navbar navbar-expand-lg navbar-dark bg-primary mb-4">
+    <div class="container">
+      <a class="navbar-brand" href="{{ url_for('index') }}">🗂️ byZewo</a>
+      <div class="collapse navbar-collapse">
+        <ul class="navbar-nav ms-auto">
+          <li class="nav-item">
+            <a class="nav-link" href="{{ url_for('jobs') }}">Saved Jobs</a>
+          </li>
+        </ul>
+      </div>
+    </div>
+  </nav>
+
   <head>
     <title>Cut Plan Results</title>
     <!-- ✅ Bootstrap CDN -->
