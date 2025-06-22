@@ -3,7 +3,6 @@
   <head>
     <meta charset="UTF-8" />
     <title>Saved Jobs</title>
-    <!-- ✅ Sketchy Bootstrap Theme -->
     <link
       href="https://cdn.jsdelivr.net/npm/bootswatch@5.3.0/dist/sketchy/bootstrap.min.css"
       rel="stylesheet"
@@ -11,7 +10,7 @@
   </head>
 
   <body class="bg-light">
-    <!-- ✅ Navbar -->
+    <!-- Navbar -->
     <nav class="navbar navbar-expand-lg navbar-dark bg-primary mb-4">
       <div class="container">
         <a class="navbar-brand" href="{{ url_for('index') }}">🗂️ byZewo</a>
@@ -25,7 +24,7 @@
       </div>
     </nav>
 
-    <!-- ✅ Main Content -->
+    <!-- Main Content -->
     <div class="container py-5">
       <h1 class="mb-4 text-center">📁 Saved Jobs</h1>
 
@@ -79,9 +78,9 @@
         <p class="text-center">No jobs found. Create one first!</p>
         {% endif %}
 
-        <a href="{{ url_for('index') }}" class="btn btn-secondary mt-3"
-          >⬅️ Back to Planner</a
-        >
+        <a href="{{ url_for('index') }}" class="btn btn-secondary mt-3">
+          ⬅️ Back to Planner
+        </a>
       </div>
     </div>
   </body>

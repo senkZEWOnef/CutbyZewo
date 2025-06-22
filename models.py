@@ -3,15 +3,11 @@ from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.sql import func
 from sqlalchemy.orm import sessionmaker, relationship
 
-# ✅ Base and Engine
 Base = declarative_base()
-
 DATABASE_URL = "sqlite:///byZewo.db"
 engine = create_engine(DATABASE_URL, echo=True)
-
 SessionLocal = sessionmaker(bind=engine)
 
-# ✅ User table
 class User(Base):
     __tablename__ = "users"
     id = Column(Integer, primary_key=True)
@@ -19,7 +15,6 @@ class User(Base):
     email = Column(String, unique=True, nullable=False)
     hashed_password = Column(String, nullable=False)
 
-# ✅ Job table with final_price and estimates relationship
 class Job(Base):
     __tablename__ = "jobs"
     id = Column(Integer, primary_key=True)
@@ -27,12 +22,20 @@ class Job(Base):
     notes = Column(String)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     image_folder = Column(String)
-    final_price = Column(Float, nullable=True)  # ✅ NEW
+    final_price = Column(Float, nullable=True)
 
-    # Link to estimates
     estimates = relationship("Estimate", back_populates="job", cascade="all, delete")
+    parts = relationship("Part", back_populates="job", cascade="all, delete")
 
-# ✅ New Estimate table
+class Part(Base):
+    __tablename__ = "parts"
+    id = Column(Integer, primary_key=True)
+    job_id = Column(Integer, ForeignKey("jobs.id"))
+    width = Column(Float)
+    height = Column(Float)
+
+    job = relationship("Job", back_populates="parts")
+
 class Estimate(Base):
     __tablename__ = "estimates"
     id = Column(Integer, primary_key=True)
@@ -40,5 +43,4 @@ class Estimate(Base):
     amount = Column(Float, nullable=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
-    # Backlink to Job
     job = relationship("Job", back_populates="estimates")

@@ -1,19 +1,32 @@
 <!DOCTYPE html>
 <html>
   <head>
+    <meta charset="UTF-8" />
     <title>Cabinet Cut Planner</title>
-    <!-- Sketchy Bootstrap -->
     <link
       href="https://cdn.jsdelivr.net/npm/bootswatch@5.3.0/dist/sketchy/bootstrap.min.css"
       rel="stylesheet"
     />
   </head>
   <body class="bg-light">
+    <nav class="navbar navbar-expand-lg navbar-dark bg-primary mb-4">
+      <div class="container">
+        <a class="navbar-brand" href="{{ url_for('index') }}">🗂️ byZewo</a>
+        <div class="collapse navbar-collapse">
+          <ul class="navbar-nav ms-auto">
+            <li class="nav-item">
+              <a class="nav-link" href="{{ url_for('jobs') }}">Saved Jobs</a>
+            </li>
+          </ul>
+        </div>
+      </div>
+    </nav>
+
     <div class="container py-5">
       <h1 class="mb-4 text-center display-4">Cabinet Cut Planner ✏️</h1>
 
       <div class="card p-4 shadow-sm">
-        <form method="POST" enctype="multipart/form-data">
+        <form method="POST">
           <div class="mb-3">
             <label class="form-label">Client Name:</label>
             <input
@@ -32,7 +45,9 @@
                 <label class="form-label">Width (in):</label>
                 <input
                   type="number"
-                  step="0.1"
+                  step="any"
+                  inputmode="decimal"
+                  pattern="[0-9]*[.,]?[0-9]*"
                   name="widths"
                   class="form-control"
                 />
@@ -41,7 +56,9 @@
                 <label class="form-label">Height (in):</label>
                 <input
                   type="number"
-                  step="0.1"
+                  step="any"
+                  inputmode="decimal"
+                  pattern="[0-9]*[.,]?[0-9]*"
                   name="heights"
                   class="form-control"
                 />
@@ -50,6 +67,7 @@
                 <label class="form-label">Quantity:</label>
                 <input
                   type="number"
+                  step="1"
                   name="quantities"
                   value="1"
                   class="form-control"
@@ -70,7 +88,9 @@
             <label class="form-label">Panel Width (default 96):</label>
             <input
               type="number"
-              step="0.1"
+              step="any"
+              inputmode="decimal"
+              pattern="[0-9]*[.,]?[0-9]*"
               name="panel_width"
               value="96"
               class="form-control"
@@ -81,25 +101,21 @@
             <label class="form-label">Panel Height (default 48):</label>
             <input
               type="number"
-              step="0.1"
+              step="any"
+              inputmode="decimal"
+              pattern="[0-9]*[.,]?[0-9]*"
               name="panel_height"
               value="48"
               class="form-control"
             />
           </div>
 
-          <!-- Optional: multiple file upload -->
-          <div class="mb-3">
-            <label class="form-label">Upload Job Files:</label>
-            <input type="file" name="job_files" class="form-control" multiple />
-          </div>
-
           <button type="submit" class="btn btn-primary w-100 mb-2">
             🚀 Generate Cut Plan
           </button>
-          <a href="{{ url_for('jobs') }}" class="btn btn-outline-dark w-100"
-            >📁 View Saved Jobs</a
-          >
+          <a href="{{ url_for('jobs') }}" class="btn btn-outline-dark w-100">
+            📁 View Saved Jobs
+          </a>
         </form>
       </div>
     </div>
@@ -110,16 +126,16 @@
         const newRow = document.createElement("div");
         newRow.className = "row mb-2";
         newRow.innerHTML = `
-        <div class="col">
-          <input type="number" step="0.1" name="widths" class="form-control" placeholder="Width">
-        </div>
-        <div class="col">
-          <input type="number" step="0.1" name="heights" class="form-control" placeholder="Height">
-        </div>
-        <div class="col">
-          <input type="number" name="quantities" value="1" class="form-control" placeholder="Quantity">
-        </div>
-      `;
+          <div class="col">
+            <input type="number" step="any" inputmode="decimal" pattern="[0-9]*[.,]?[0-9]*" name="widths" class="form-control" placeholder="Width">
+          </div>
+          <div class="col">
+            <input type="number" step="any" inputmode="decimal" pattern="[0-9]*[.,]?[0-9]*" name="heights" class="form-control" placeholder="Height">
+          </div>
+          <div class="col">
+            <input type="number" step="1" name="quantities" value="1" class="form-control" placeholder="Quantity">
+          </div>
+        `;
         partsList.appendChild(newRow);
       }
     </script>

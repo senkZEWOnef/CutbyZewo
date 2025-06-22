@@ -9,6 +9,7 @@
     />
   </head>
   <body class="bg-light">
+    <!-- ✅ Navbar -->
     <nav class="navbar navbar-expand-lg navbar-dark bg-primary mb-4">
       <div class="container">
         <a class="navbar-brand" href="{{ url_for('index') }}">🗂️ byZewo</a>
@@ -22,25 +23,27 @@
       </div>
     </nav>
 
+    <!-- ✅ Page Content -->
     <div class="container py-5">
       <h1 class="mb-4 text-center">Job Details</h1>
 
+      <!-- ✅ Job Info & Actions -->
       <div class="card p-4 shadow mb-4">
         <h3>Client: {{ job.client_name or "N/A" }}</h3>
         <p>
-          <strong>Created:</strong> {% if job.created_at %} {{
-          job.created_at.strftime('%Y-%m-%d %H:%M') }} {% else %} N/A {% endif
-          %}
+          <strong>Created:</strong>
+          {% if job.created_at %} {{ job.created_at.strftime('%Y-%m-%d %H:%M')
+          }} {% else %} N/A {% endif %}
         </p>
         <p><strong>Final Price:</strong> ${{ job.final_price or "N/A" }}</p>
 
-        <!-- Final Price Form -->
+        <!-- ✅ Final Price Form -->
         <form
           method="POST"
           action="{{ url_for('set_price', job_id=job.id) }}"
           class="mb-3"
         >
-          <label><strong>Update Final Price:</strong></label>
+          <label><strong>Update Final Price (USD):</strong></label>
           <div class="input-group">
             <input
               type="number"
@@ -54,7 +57,7 @@
           </div>
         </form>
 
-        <!-- Estimate Modal Trigger -->
+        <!-- ✅ Actions -->
         <button
           class="btn btn-success mb-2"
           data-bs-toggle="modal"
@@ -62,7 +65,6 @@
         >
           💰 Estimate Cost
         </button>
-
         <a
           href="{{ url_for('edit_job', job_id=job.id) }}"
           class="btn btn-warning mb-2"
@@ -81,6 +83,23 @@
         >
       </div>
 
+      <!-- ✅ Cut Parts -->
+      <div class="card p-4 shadow mb-4">
+        <h4>Cut Parts List</h4>
+        {% if parts %}
+        <ul class="list-group">
+          {% for part in parts %}
+          <li class="list-group-item">
+            Part #{{ loop.index }} — {{ part.width }} x {{ part.height }} inches
+          </li>
+          {% endfor %}
+        </ul>
+        {% else %}
+        <p>No parts found for this job.</p>
+        {% endif %}
+      </div>
+
+      <!-- ✅ Cut Sheets -->
       <div class="card p-4 shadow mb-4">
         <h4>Cut Sheets</h4>
         {% if sheet_images %}
@@ -91,6 +110,7 @@
               <img
                 src="{{ url_for('static', filename=img) }}"
                 class="card-img-top"
+                alt="Sheet {{ loop.index }}"
               />
               <div class="card-body p-2 text-center">
                 Sheet {{ loop.index }}
@@ -104,6 +124,27 @@
         {% endif %}
       </div>
 
+      <!-- ✅ Uploaded Files -->
+      <div class="card p-4 shadow mb-4">
+        <h4>Uploaded Files</h4>
+        {% if uploaded_images %}
+        <div class="row">
+          {% for img in uploaded_images %}
+          <div class="col-md-4 mb-3">
+            <img
+              src="{{ url_for('static', filename=img) }}"
+              class="img-fluid border rounded"
+              alt="Uploaded File"
+            />
+          </div>
+          {% endfor %}
+        </div>
+        {% else %}
+        <p>No files uploaded for this job.</p>
+        {% endif %}
+      </div>
+
+      <!-- ✅ Past Estimates -->
       <div class="card p-4 shadow mb-4">
         <h4>Past Estimates</h4>
         {% if estimates %}
@@ -125,7 +166,7 @@
       </div>
     </div>
 
-    <!-- Estimate Modal -->
+    <!-- ✅ Estimate Modal -->
     <div class="modal fade" id="estimateModal" tabindex="-1" aria-hidden="true">
       <div class="modal-dialog modal-lg">
         <div class="modal-content p-4">
@@ -222,31 +263,50 @@
 
     <script>
       function calculateEstimate() {
-        const linearFt = parseFloat(document.getElementById('linearFt').value) || 0;
-        const slides = parseInt(document.getElementById('numSlides').value) || 0;
-        const slidePrice = parseFloat(document.getElementById('slideType').value) || 0;
-        const hinges = parseInt(document.getElementById('numHinges').value) || 0;
-        const hingePrice = parseFloat(document.getElementById('hingeType').value) || 0;
-        const laminateUnit = parseFloat(document.getElementById('laminatePrice').value) || 0;
-        const topLaminate = parseFloat(document.getElementById('topLaminatePrice').value) || 0;
-        const installFee = parseFloat(document.getElementById('installFee').value) || 0;
+        const linearFt =
+          parseFloat(document.getElementById("linearFt").value) || 0;
+        const slides =
+          parseInt(document.getElementById("numSlides").value) || 0;
+        const slidePrice =
+          parseFloat(document.getElementById("slideType").value) || 0;
+        const hinges =
+          parseInt(document.getElementById("numHinges").value) || 0;
+        const hingePrice =
+          parseFloat(document.getElementById("hingeType").value) || 0;
+        const laminateUnit =
+          parseFloat(document.getElementById("laminatePrice").value) || 0;
+        const topLaminate =
+          parseFloat(document.getElementById("topLaminatePrice").value) || 0;
+        const installFee =
+          parseFloat(document.getElementById("installFee").value) || 0;
 
-        const sheets = {{ sheet_images|length }};
+        const sheets = Number(
+          "{{ sheet_images|length if sheet_images else 0 }}"
+        );
+
         let base = 50;
         if (linearFt > 8 && linearFt <= 16) base = 100;
         else if (linearFt > 16 && linearFt <= 20) base = 150;
         else if (linearFt > 20) base = 200;
 
-        let fee = 300;
-        if (linearFt >= 8 && linearFt <= 15) fee = 500;
+        let fee = 500;
+        if (linearFt >= 8 && linearFt <= 15) fee = 800;
         else if (linearFt >= 20) fee = linearFt * 50;
 
         const slidesCost = slides * slidePrice;
         const hingesCost = hinges * hingePrice;
-        const sheetsCost = sheets * 50;
+        const sheetsCost = sheets * 60;
         const laminatesCost = (sheets + 2) * laminateUnit;
 
-        const total = base + slidesCost + hingesCost + sheetsCost + laminatesCost + topLaminate + installFee + fee;
+        const total =
+          base +
+          slidesCost +
+          hingesCost +
+          sheetsCost +
+          laminatesCost +
+          topLaminate +
+          installFee +
+          fee;
 
         const result = `
           <h5>Estimate Breakdown</h5>
@@ -262,8 +322,8 @@
           </ul>
           <h4>Total: <strong>$${total.toFixed(2)}</strong></h4>
         `;
-        document.getElementById('estimateResult').innerHTML = result;
-        document.getElementById('estimateAmount').value = total.toFixed(2);
+        document.getElementById("estimateResult").innerHTML = result;
+        document.getElementById("estimateAmount").value = total.toFixed(2);
       }
     </script>
 
