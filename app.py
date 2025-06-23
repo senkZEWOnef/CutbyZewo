@@ -2,19 +2,28 @@ from flask import Flask, render_template, request, redirect, url_for, flash, ses
 import os, uuid, shutil
 from planner import optimize_cuts
 from visualizer import draw_sheets_to_files
-from models import SessionLocal, Job, User, Estimate, Part
+from models import SessionLocal, Job, User, Estimate, Part, Base, engine
 from werkzeug.security import generate_password_hash, check_password_hash
 from werkzeug.utils import secure_filename
-from models import Base, engine
 
-# ✅ Auto-create tables on startup
+# ✅ Always create DB tables
 Base.metadata.create_all(bind=engine)
 
-from models import Base, engine
-
-# ✅ Auto-create tables on startup
-Base.metadata.create_all(bind=engine)
-
+# ✅ Always recreate a known admin user each deploy
+db = SessionLocal()
+existing = db.query(User).filter(User.email == "ralph.ulysse509@gmail.com").first()
+if existing:
+    db.delete(existing)
+    db.commit()
+admin = User(
+    username="zewo",
+    email="ralph.ulysse509@gmail.com",
+    hashed_password=generate_password_hash("Poesie509$$$")
+)
+db.add(admin)
+db.commit()
+db.close()
+print("✅ Admin user forced created each deploy.")
 
 app = Flask(__name__)
 app.secret_key = "Poesie509$$$"
@@ -86,7 +95,6 @@ def logout():
     flash("Logged out.")
     return redirect(url_for("login"))
 
-
 @app.route("/", methods=["GET", "POST"])
 def index():
     if not current_user():
@@ -121,12 +129,10 @@ def index():
         db.add(new_job)
         db.commit()
 
-        # ✅ Save parts
         for w, h in parts:
             db.add(Part(job_id=new_job.id, width=w, height=h))
         db.commit()
 
-        # ✅ Save uploads if any
         upload_dir = f"static/uploads/{new_job.id}"
         os.makedirs(upload_dir, exist_ok=True)
         if 'job_files' in request.files:
@@ -173,14 +179,12 @@ def job_details(job_id):
     if not job:
         return "Job not found", 404
 
-    # ✅ Cut Sheets
     sheets_subfolder = os.path.relpath(job.image_folder, "static")
     sheet_images = []
     if os.path.exists(job.image_folder):
         files = sorted(f for f in os.listdir(job.image_folder) if f.endswith(".png"))
         sheet_images = [f"sheets/{os.path.basename(job.image_folder)}/{file}" for file in files]
 
-    # ✅ Uploaded Files
     upload_dir = f"static/uploads/{job.id}"
     uploaded_images = []
     if os.path.exists(upload_dir):
@@ -195,8 +199,8 @@ def job_details(job_id):
         parts=parts,
         user=current_user()
     )
-@app.route("/jobs/<int:job_id>/edit", methods=["GET", "POST"])
 
+@app.route("/jobs/<int:job_id>/edit", methods=["GET", "POST"])
 def edit_job(job_id):
     if not current_user():
         return redirect(url_for("login"))
@@ -208,10 +212,8 @@ def edit_job(job_id):
         return "Job not found", 404
 
     if request.method == "POST":
-        # ✅ 1) Update name
         job.client_name = request.form.get("client_name")
 
-        # ✅ 2) Save new uploaded files
         upload_dir = os.path.join("static", "uploads", str(job.id))
         os.makedirs(upload_dir, exist_ok=True)
         for file in request.files.getlist("job_files"):
@@ -219,7 +221,6 @@ def edit_job(job_id):
                 filename = secure_filename(file.filename)
                 file.save(os.path.join(upload_dir, filename))
 
-        # ✅ 3) Save new parts, if any
         widths = request.form.getlist("widths")
         heights = request.form.getlist("heights")
         quantities = request.form.getlist("quantities")
@@ -234,29 +235,24 @@ def edit_job(job_id):
 
         db.commit()
 
-        # ✅ 4) Re-generate cut sheets
         all_parts = db.query(Part).filter(Part.job_id == job.id).all()
         parts_tuples = [(p.width, p.height) for p in all_parts]
 
         sheets = optimize_cuts(96, 48, parts_tuples)
         sheet_dir = job.image_folder
 
-        # Clear old sheets first
         for f in os.listdir(sheet_dir):
             os.remove(os.path.join(sheet_dir, f))
 
         draw_sheets_to_files(sheets, sheet_dir)
 
-        # ✅ 5) Get ID safely
         updated_id = job.id
-
         db.close()
         flash("Job updated.")
         return redirect(url_for("job_details", job_id=updated_id))
 
     db.close()
     return render_template("edit_job.html", job=job, user=current_user())
-
 
 @app.route("/jobs/<int:job_id>/delete", methods=["POST"])
 def delete_job(job_id):
@@ -306,10 +302,6 @@ def save_estimate(job_id):
     db.close()
     flash("Estimate saved.")
     return redirect(url_for("job_details", job_id=job_id))
-
-
-
-# ✅ Keep signup, login, logout, set_price, save_estimate as they are
 
 if __name__ == "__main__":
     app.run(debug=True)
