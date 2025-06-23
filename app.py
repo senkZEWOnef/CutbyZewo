@@ -85,8 +85,6 @@ def index():
 
 @app.route("/jobs")
 def jobs():
-    if not current_user():
-        return redirect(url_for("login"))
     db = SessionLocal()
     all_jobs = db.query(Job).order_by(Job.created_at.desc()).all()
     db.close()
@@ -94,8 +92,7 @@ def jobs():
 
 @app.route("/jobs/<int:job_id>")
 def job_details(job_id):
-    if not current_user():
-        return redirect(url_for("login"))
+  
 
     db = SessionLocal()
     job = db.query(Job).filter(Job.id == job_id).first()
@@ -130,8 +127,6 @@ def job_details(job_id):
     )
 @app.route("/jobs/<int:job_id>/edit", methods=["GET", "POST"])
 def edit_job(job_id):
-    if not current_user():
-        return redirect(url_for("login"))
 
     db = SessionLocal()
     job = db.query(Job).filter(Job.id == job_id).first()
@@ -192,8 +187,8 @@ def edit_job(job_id):
 
 @app.route("/jobs/<int:job_id>/delete", methods=["POST"])
 def delete_job(job_id):
-    if not current_user():
-        return redirect(url_for("login"))
+
+
     db = SessionLocal()
     job = db.query(Job).filter(Job.id == job_id).first()
     if job:
@@ -210,8 +205,7 @@ def delete_job(job_id):
 
 @app.route("/jobs/<int:job_id>/set_price", methods=["POST"])
 def set_price(job_id):
-    if not current_user():
-        return redirect(url_for("login"))
+   
 
     new_price = request.form.get("final_price")
     db = SessionLocal()
@@ -225,8 +219,7 @@ def set_price(job_id):
 
 @app.route("/jobs/<int:job_id>/save_estimate", methods=["POST"])
 def save_estimate(job_id):
-    if not current_user():
-        return redirect(url_for("login"))
+   
 
     amount = request.form.get("amount")
     db = SessionLocal()
