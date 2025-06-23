@@ -244,6 +244,5 @@ def save_estimate(job_id):
 
 
 # ✅ Keep signup, login, logout, set_price, save_estimate as they are
-
 if __name__ == "__main__":
-    app.run(debug=True)
+    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)))
