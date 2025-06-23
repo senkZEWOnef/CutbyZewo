@@ -9,10 +9,11 @@ from werkzeug.utils import secure_filename
 app = Flask(__name__)
 app.secret_key = "Poesie509$$$"
 
-# ✅ Make sure folders exist
+# Make sure folders exist
 os.makedirs("static/sheets", exist_ok=True)
 os.makedirs("static/uploads", exist_ok=True)
 
+# ✅ Session helper
 def current_user():
     uid = session.get("user_id")
     if uid:
@@ -22,9 +23,65 @@ def current_user():
         return user
     return None
 
+# ✅ SIGNUP
+@app.route("/signup", methods=["GET", "POST"])
+def signup():
+    if request.method == "POST":
+        username = request.form.get("username")
+        email = request.form.get("email")
+        password = request.form.get("password")
+
+        db = SessionLocal()
+        existing = db.query(User).filter(User.email == email).first()
+        if existing:
+            flash("Email already registered.")
+            db.close()
+            return redirect(url_for("signup"))
+
+        hashed = generate_password_hash(password)
+        new_user = User(username=username, email=email, hashed_password=hashed)
+        db.add(new_user)
+        db.commit()
+        db.close()
+
+        flash("Account created! Please log in.")
+        return redirect(url_for("login"))
+
+    return render_template("signup.html")
+
+# ✅ LOGIN
+@app.route("/login", methods=["GET", "POST"])
+def login():
+    if request.method == "POST":
+        email = request.form.get("email")
+        password = request.form.get("password")
+
+        db = SessionLocal()
+        user = db.query(User).filter(User.email == email).first()
+        db.close()
+
+        if user and check_password_hash(user.hashed_password, password):
+            session["user_id"] = user.id
+            flash("Logged in successfully!")
+            return redirect(url_for("index"))
+        else:
+            flash("Invalid credentials.")
+
+    return render_template("login.html")
+
+# ✅ LOGOUT
+@app.route("/logout")
+def logout():
+    session.pop("user_id", None)
+    flash("Logged out.")
+    return redirect(url_for("login"))
+
+
 @app.route("/", methods=["GET", "POST"])
 def index():
- 
+    if not current_user():
+        return redirect(url_for("login"))
+
     if request.method == "POST":
         client_name = request.form.get("client_name")
         widths = request.form.getlist("widths")
@@ -85,6 +142,8 @@ def index():
 
 @app.route("/jobs")
 def jobs():
+    if not current_user():
+        return redirect(url_for("login"))
     db = SessionLocal()
     all_jobs = db.query(Job).order_by(Job.created_at.desc()).all()
     db.close()
@@ -92,7 +151,8 @@ def jobs():
 
 @app.route("/jobs/<int:job_id>")
 def job_details(job_id):
-  
+    if not current_user():
+        return redirect(url_for("login"))
 
     db = SessionLocal()
     job = db.query(Job).filter(Job.id == job_id).first()
@@ -126,7 +186,10 @@ def job_details(job_id):
         user=current_user()
     )
 @app.route("/jobs/<int:job_id>/edit", methods=["GET", "POST"])
+
 def edit_job(job_id):
+    if not current_user():
+        return redirect(url_for("login"))
 
     db = SessionLocal()
     job = db.query(Job).filter(Job.id == job_id).first()
@@ -187,8 +250,8 @@ def edit_job(job_id):
 
 @app.route("/jobs/<int:job_id>/delete", methods=["POST"])
 def delete_job(job_id):
-
-
+    if not current_user():
+        return redirect(url_for("login"))
     db = SessionLocal()
     job = db.query(Job).filter(Job.id == job_id).first()
     if job:
@@ -205,7 +268,8 @@ def delete_job(job_id):
 
 @app.route("/jobs/<int:job_id>/set_price", methods=["POST"])
 def set_price(job_id):
-   
+    if not current_user():
+        return redirect(url_for("login"))
 
     new_price = request.form.get("final_price")
     db = SessionLocal()
@@ -219,7 +283,8 @@ def set_price(job_id):
 
 @app.route("/jobs/<int:job_id>/save_estimate", methods=["POST"])
 def save_estimate(job_id):
-   
+    if not current_user():
+        return redirect(url_for("login"))
 
     amount = request.form.get("amount")
     db = SessionLocal()
@@ -235,5 +300,6 @@ def save_estimate(job_id):
 
 
 # ✅ Keep signup, login, logout, set_price, save_estimate as they are
+
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)))
+    app.run(debug=True)
