@@ -24,9 +24,7 @@ def current_user():
 
 @app.route("/", methods=["GET", "POST"])
 def index():
-    if not current_user():
-        return redirect(url_for("login"))
-
+ 
     if request.method == "POST":
         client_name = request.form.get("client_name")
         widths = request.form.getlist("widths")
