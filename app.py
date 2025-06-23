@@ -5,6 +5,16 @@ from visualizer import draw_sheets_to_files
 from models import SessionLocal, Job, User, Estimate, Part
 from werkzeug.security import generate_password_hash, check_password_hash
 from werkzeug.utils import secure_filename
+from models import Base, engine
+
+# ✅ Auto-create tables on startup
+Base.metadata.create_all(bind=engine)
+
+from models import Base, engine
+
+# ✅ Auto-create tables on startup
+Base.metadata.create_all(bind=engine)
+
 
 app = Flask(__name__)
 app.secret_key = "Poesie509$$$"
