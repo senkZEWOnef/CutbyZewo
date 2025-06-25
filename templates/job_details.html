@@ -1,63 +1,219 @@
-<!DOCTYPE html>
-<html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <title>Job Details</title>
-    <link
-      href="https://cdn.jsdelivr.net/npm/bootswatch@5.3.0/dist/sketchy/bootstrap.min.css"
-      rel="stylesheet"
-    />
-  </head>
-  <body class="bg-light">
-    <!-- ✅ Navbar -->
-    <nav class="navbar navbar-expand-lg navbar-dark bg-primary mb-4">
-      <div class="container">
-        <a class="navbar-brand" href="{{ url_for('index') }}">🗂️ byZewo</a>
-        <div class="collapse navbar-collapse">
-          <ul class="navbar-nav ms-auto">
-            <li class="nav-item">
-              <a class="nav-link" href="{{ url_for('jobs') }}">Saved Jobs</a>
-            </li>
-          </ul>
+{% extends "base.html" %} {% block title %}Job Details{% endblock %} {% block
+content %}
+
+<h1 class="mb-4 text-center">📐 Job Details</h1>
+
+<!-- ✅ Job Info & Actions -->
+<div class="card p-4 shadow mb-4">
+  <h3>Client: {{ job.client_name or "N/A" }}</h3>
+  <p>
+    <strong>Created:</strong>
+    {% if job.created_at %} {{ job.created_at.strftime('%Y-%m-%d %H:%M') }} {%
+    else %} N/A {% endif %}
+  </p>
+  <p><strong>Final Price:</strong> ${{ job.final_price or "N/A" }}</p>
+
+  <!-- ✅ Update Final Price -->
+  <form
+    method="POST"
+    action="{{ url_for('set_price', job_id=job.id) }}"
+    class="mb-3"
+  >
+    <label><strong>Update Final Price (USD):</strong></label>
+    <div class="input-group">
+      <input
+        type="number"
+        step="0.01"
+        name="final_price"
+        class="form-control"
+        value="{{ job.final_price or '' }}"
+        required
+      />
+      <button type="submit" class="btn btn-success">Save</button>
+    </div>
+  </form>
+
+  <!-- ✅ Actions -->
+  <button
+    class="btn btn-success mb-2"
+    data-bs-toggle="modal"
+    data-bs-target="#estimateModal"
+  >
+    💰 Estimate Cost
+  </button>
+  <a
+    href="{{ url_for('edit_job', job_id=job.id) }}"
+    class="btn btn-warning mb-2"
+    >✏️ Edit Job</a
+  >
+  <form
+    action="{{ url_for('delete_job', job_id=job.id) }}"
+    method="POST"
+    style="display: inline"
+    onsubmit="return confirm('Are you sure?');"
+  >
+    <button type="submit" class="btn btn-danger mb-2">🗑️ Delete Job</button>
+  </form>
+  <a href="{{ url_for('jobs') }}" class="btn btn-secondary mb-2"
+    >⬅️ Back to Jobs</a
+  >
+</div>
+
+<!-- ✅ Cut Parts -->
+<div class="card p-4 shadow mb-4">
+  <h4>Cut Parts List</h4>
+  {% if parts %}
+  <ul class="list-group">
+    {% for part in parts %}
+    <li class="list-group-item">
+      <strong>Part #{{ loop.index }}:</strong>
+      {{ part.width }} x {{ part.height }} inches —
+      <em>{{ part.thickness }} panel</em>
+    </li>
+    {% endfor %}
+  </ul>
+  {% else %}
+  <p>No parts found for this job.</p>
+  {% endif %}
+</div>
+
+<!-- ✅ Cut Sheets -->
+<div class="card p-4 shadow mb-4">
+  <h4>Cut Sheets</h4>
+  {% if sheet_images %}
+  <div class="row g-4">
+    {% for img in sheet_images %}
+    <div class="col-md-6 col-lg-4">
+      <div class="card border-0 shadow-sm">
+        <img
+          src="{{ url_for('static', filename=img[0]) }}"
+          class="card-img-top"
+          alt="Sheet {{ loop.index }}"
+        />
+        <div class="card-body p-2 text-center">
+          Sheet {{ loop.index }}<br />
+          <small class="text-muted">{{ img[1] }} panel</small>
         </div>
       </div>
-    </nav>
+    </div>
+    {% endfor %}
+  </div>
+  {% else %}
+  <p>No cut sheets found.</p>
+  {% endif %}
+</div>
 
-    <!-- ✅ Page Content -->
-    <div class="container py-5">
-      <h1 class="mb-4 text-center">Job Details</h1>
+<!-- ✅ Uploaded Files -->
+<div class="card p-4 shadow mb-4">
+  <h4>Uploaded Files</h4>
+  {% if uploaded_images %}
+  <div class="row">
+    {% for img in uploaded_images %}
+    <div class="col-md-4 mb-3">
+      <img
+        src="{{ url_for('static', filename=img) }}"
+        class="img-fluid border rounded"
+        alt="Uploaded File"
+      />
+    </div>
+    {% endfor %}
+  </div>
+  {% else %}
+  <p>No files uploaded for this job.</p>
+  {% endif %}
+</div>
 
-      <!-- ✅ Job Info & Actions -->
-      <div class="card p-4 shadow mb-4">
-        <h3>Client: {{ job.client_name or "N/A" }}</h3>
-        <p>
-          <strong>Created:</strong>
-          {% if job.created_at %} {{ job.created_at.strftime('%Y-%m-%d %H:%M')
-          }} {% else %} N/A {% endif %}
-        </p>
-        <p><strong>Final Price:</strong> ${{ job.final_price or "N/A" }}</p>
+<!-- ✅ Past Estimates -->
+<div class="card p-4 shadow mb-4">
+  <h4>Past Estimates</h4>
+  {% if estimates %}
+  <ul class="list-group">
+    {% for est in estimates %}
+    <li
+      class="list-group-item d-flex justify-content-between align-items-center"
+    >
+      ${{ "%.2f"|format(est.amount) }}
+      <small class="text-muted"
+        >{{ est.created_at.strftime('%Y-%m-%d %H:%M') }}</small
+      >
+    </li>
+    {% endfor %}
+  </ul>
+  {% else %}
+  <p>No estimates saved yet.</p>
+  {% endif %}
+</div>
 
-        <!-- ✅ Final Price Form -->
-        <form
-          method="POST"
-          action="{{ url_for('set_price', job_id=job.id) }}"
-          class="mb-3"
-        >
-          <label><strong>Update Final Price (USD):</strong></label>
-          <div class="input-group">
+<!-- ✅ Estimate Modal -->
+<div class="modal fade" id="estimateModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-lg">
+    <div class="modal-content p-4">
+      <h3 class="mb-3">📐 Estimate Cost</h3>
+      <form
+        method="POST"
+        action="{{ url_for('save_estimate', job_id=job.id) }}"
+      >
+        <div class="row mb-2">
+          <div class="col">
+            <label>Linear ft total:</label>
             <input
               type="number"
-              step="0.01"
-              name="final_price"
+              step="0.1"
+              id="linearFt"
               class="form-control"
-              value="{{ job.final_price or '' }}"
               required
             />
-            <button type="submit" class="btn btn-success">Save</button>
           </div>
-        </form>
-
-        <!-- ✅ Actions -->
+          <div class="col">
+            <label>Number of drawer slides:</label>
+            <input type="number" id="numSlides" class="form-control" required />
+            <select id="slideType" class="form-select mt-1">
+              <option value="5">Regular ($5)</option>
+              <option value="8">Soft Close ($8)</option>
+            </select>
+          </div>
+          <div class="col">
+            <label>Number of hinges:</label>
+            <input type="number" id="numHinges" class="form-control" required />
+            <select id="hingeType" class="form-select mt-1">
+              <option value="5">Regular ($5)</option>
+              <option value="8">Soft Close ($8)</option>
+            </select>
+          </div>
+        </div>
+        <div class="row mb-2">
+          <div class="col">
+            <label>Price per laminate sheet:</label>
+            <input
+              type="number"
+              step="0.1"
+              id="laminatePrice"
+              class="form-control"
+              required
+            />
+          </div>
+          <div class="col">
+            <label>Price for countertop laminate:</label>
+            <input
+              type="number"
+              step="0.1"
+              id="topLaminatePrice"
+              class="form-control"
+              required
+            />
+          </div>
+          <div class="col">
+            <label>Installation fee (if any):</label>
+            <input
+              type="number"
+              step="0.1"
+              id="installFee"
+              class="form-control"
+              value="0"
+            />
+          </div>
+        </div>
+        <input type="hidden" name="amount" id="estimateAmount" />
         <button
           class="btn btn-success mb-2"
           data-bs-toggle="modal"
@@ -65,268 +221,73 @@
         >
           💰 Estimate Cost
         </button>
-        <a
-          href="{{ url_for('edit_job', job_id=job.id) }}"
-          class="btn btn-warning mb-2"
-          >Edit Job</a
-        >
-        <form
-          action="{{ url_for('delete_job', job_id=job.id) }}"
-          method="POST"
-          style="display: inline"
-          onsubmit="return confirm('Are you sure?');"
-        >
-          <button type="submit" class="btn btn-danger mb-2">Delete Job</button>
-        </form>
-        <a href="{{ url_for('jobs') }}" class="btn btn-secondary mb-2"
-          >Back to Jobs</a
-        >
-      </div>
 
-      <!-- ✅ Cut Parts -->
-      <div class="card p-4 shadow mb-4">
-        <h4>Cut Parts List</h4>
-        {% if parts %}
-        <ul class="list-group">
-          {% for part in parts %}
-          <li class="list-group-item">
-            Part #{{ loop.index }} — {{ part.width }} x {{ part.height }} inches
-          </li>
-          {% endfor %}
-        </ul>
-        {% else %}
-        <p>No parts found for this job.</p>
-        {% endif %}
-      </div>
-
-      <!-- ✅ Cut Sheets -->
-      <div class="card p-4 shadow mb-4">
-        <h4>Cut Sheets</h4>
-        {% if sheet_images %}
-        <div class="row g-4">
-          {% for img in sheet_images %}
-          <div class="col-md-6 col-lg-4">
-            <div class="card border-0 shadow-sm">
-              <img
-                src="{{ url_for('static', filename=img) }}"
-                class="card-img-top"
-                alt="Sheet {{ loop.index }}"
-              />
-              <div class="card-body p-2 text-center">
-                Sheet {{ loop.index }}
-              </div>
-            </div>
-          </div>
-          {% endfor %}
-        </div>
-        {% else %}
-        <p>No cut sheets found.</p>
-        {% endif %}
-      </div>
-
-      <!-- ✅ Uploaded Files -->
-      <div class="card p-4 shadow mb-4">
-        <h4>Uploaded Files</h4>
-        {% if uploaded_images %}
-        <div class="row">
-          {% for img in uploaded_images %}
-          <div class="col-md-4 mb-3">
-            <img
-              src="{{ url_for('static', filename=img) }}"
-              class="img-fluid border rounded"
-              alt="Uploaded File"
-            />
-          </div>
-          {% endfor %}
-        </div>
-        {% else %}
-        <p>No files uploaded for this job.</p>
-        {% endif %}
-      </div>
-
-      <!-- ✅ Past Estimates -->
-      <div class="card p-4 shadow mb-4">
-        <h4>Past Estimates</h4>
-        {% if estimates %}
-        <ul class="list-group">
-          {% for est in estimates %}
-          <li
-            class="list-group-item d-flex justify-content-between align-items-center"
-          >
-            ${{ "%.2f"|format(est.amount) }}
-            <small class="text-muted"
-              >{{ est.created_at.strftime('%Y-%m-%d %H:%M') }}</small
-            >
-          </li>
-          {% endfor %}
-        </ul>
-        {% else %}
-        <p>No estimates saved yet.</p>
-        {% endif %}
-      </div>
+        <button type="submit" class="btn btn-success">Save Estimate</button>
+      </form>
+      <hr />
+      <div id="estimateResult" class="mt-3"></div>
     </div>
+  </div>
+</div>
 
-    <!-- ✅ Estimate Modal -->
-    <div class="modal fade" id="estimateModal" tabindex="-1" aria-hidden="true">
-      <div class="modal-dialog modal-lg">
-        <div class="modal-content p-4">
-          <h3 class="mb-3">📐 Estimate Cost</h3>
-          <form
-            method="POST"
-            action="{{ url_for('save_estimate', job_id=job.id) }}"
-          >
-            <div class="row mb-2">
-              <div class="col">
-                <label>Linear ft total:</label>
-                <input
-                  type="number"
-                  step="0.1"
-                  id="linearFt"
-                  class="form-control"
-                  required
-                />
-              </div>
-              <div class="col">
-                <label>Number of drawer slides:</label>
-                <input
-                  type="number"
-                  id="numSlides"
-                  class="form-control"
-                  required
-                />
-                <select id="slideType" class="form-select mt-1">
-                  <option value="5">Regular ($5)</option>
-                  <option value="8">Soft Close ($8)</option>
-                </select>
-              </div>
-              <div class="col">
-                <label>Number of hinges:</label>
-                <input
-                  type="number"
-                  id="numHinges"
-                  class="form-control"
-                  required
-                />
-                <select id="hingeType" class="form-select mt-1">
-                  <option value="5">Regular ($5)</option>
-                  <option value="8">Soft Close ($8)</option>
-                </select>
-              </div>
-            </div>
-            <div class="row mb-2">
-              <div class="col">
-                <label>Price per laminate sheet:</label>
-                <input
-                  type="number"
-                  step="0.1"
-                  id="laminatePrice"
-                  class="form-control"
-                  required
-                />
-              </div>
-              <div class="col">
-                <label>Price for countertop laminate:</label>
-                <input
-                  type="number"
-                  step="0.1"
-                  id="topLaminatePrice"
-                  class="form-control"
-                  required
-                />
-              </div>
-              <div class="col">
-                <label>Installation fee (if any):</label>
-                <input
-                  type="number"
-                  step="0.1"
-                  id="installFee"
-                  class="form-control"
-                  value="0"
-                />
-              </div>
-            </div>
-            <input type="hidden" name="amount" id="estimateAmount" />
-            <button
-              type="button"
-              class="btn btn-primary"
-              onclick="calculateEstimate()"
-            >
-              Calculate
-            </button>
-            <button type="submit" class="btn btn-success">Save Estimate</button>
-          </form>
-          <hr />
-          <div id="estimateResult" class="mt-3"></div>
-        </div>
-      </div>
-    </div>
+<script>
+  function calculateEstimate() {
+    const linearFt = parseFloat(document.getElementById("linearFt").value) || 0;
+    const slides = parseInt(document.getElementById("numSlides").value) || 0;
+    const slidePrice =
+      parseFloat(document.getElementById("slideType").value) || 0;
+    const hinges = parseInt(document.getElementById("numHinges").value) || 0;
+    const hingePrice =
+      parseFloat(document.getElementById("hingeType").value) || 0;
+    const laminateUnit =
+      parseFloat(document.getElementById("laminatePrice").value) || 0;
+    const topLaminate =
+      parseFloat(document.getElementById("topLaminatePrice").value) || 0;
+    const installFee =
+      parseFloat(document.getElementById("installFee").value) || 0;
+    const sheets = Number("{{ sheet_images|length if sheet_images else 0 }}");
 
-    <script>
-      function calculateEstimate() {
-        const linearFt =
-          parseFloat(document.getElementById("linearFt").value) || 0;
-        const slides =
-          parseInt(document.getElementById("numSlides").value) || 0;
-        const slidePrice =
-          parseFloat(document.getElementById("slideType").value) || 0;
-        const hinges =
-          parseInt(document.getElementById("numHinges").value) || 0;
-        const hingePrice =
-          parseFloat(document.getElementById("hingeType").value) || 0;
-        const laminateUnit =
-          parseFloat(document.getElementById("laminatePrice").value) || 0;
-        const topLaminate =
-          parseFloat(document.getElementById("topLaminatePrice").value) || 0;
-        const installFee =
-          parseFloat(document.getElementById("installFee").value) || 0;
+    let base = 50;
+    if (linearFt > 8 && linearFt <= 16) base = 100;
+    else if (linearFt > 16 && linearFt <= 20) base = 150;
+    else if (linearFt > 20) base = 200;
 
-        const sheets = Number(
-          "{{ sheet_images|length if sheet_images else 0 }}"
-        );
+    let fee = 500;
+    if (linearFt >= 8 && linearFt <= 15) fee = 800;
+    else if (linearFt >= 20) fee = linearFt * 50;
 
-        let base = 50;
-        if (linearFt > 8 && linearFt <= 16) base = 100;
-        else if (linearFt > 16 && linearFt <= 20) base = 150;
-        else if (linearFt > 20) base = 200;
+    const slidesCost = slides * slidePrice;
+    const hingesCost = hinges * hingePrice;
+    const sheetsCost = sheets * 60;
+    const laminatesCost = (sheets + 2) * laminateUnit;
 
-        let fee = 500;
-        if (linearFt >= 8 && linearFt <= 15) fee = 800;
-        else if (linearFt >= 20) fee = linearFt * 50;
+    const total =
+      base +
+      slidesCost +
+      hingesCost +
+      sheetsCost +
+      laminatesCost +
+      topLaminate +
+      installFee +
+      fee;
 
-        const slidesCost = slides * slidePrice;
-        const hingesCost = hinges * hingePrice;
-        const sheetsCost = sheets * 60;
-        const laminatesCost = (sheets + 2) * laminateUnit;
+    const result = `
+      <h5>Estimate Breakdown</h5>
+      <ul>
+        <li>Base cost: $${base.toFixed(2)}</li>
+        <li>Drawer slides: $${slidesCost.toFixed(2)}</li>
+        <li>Hinges: $${hingesCost.toFixed(2)}</li>
+        <li>Sheets: $${sheetsCost.toFixed(2)}</li>
+        <li>Laminates: $${laminatesCost.toFixed(2)}</li>
+        <li>Countertop laminate: $${topLaminate.toFixed(2)}</li>
+        <li>Installation fee: $${installFee.toFixed(2)}</li>
+        <li>My fee: $${fee.toFixed(2)}</li>
+      </ul>
+      <h4>Total: <strong>$${total.toFixed(2)}</strong></h4>
+    `;
+    document.getElementById("estimateResult").innerHTML = result;
+    document.getElementById("estimateAmount").value = total.toFixed(2);
+  }
+</script>
 
-        const total =
-          base +
-          slidesCost +
-          hingesCost +
-          sheetsCost +
-          laminatesCost +
-          topLaminate +
-          installFee +
-          fee;
-
-        const result = `
-          <h5>Estimate Breakdown</h5>
-          <ul>
-            <li>Base cost: $${base.toFixed(2)}</li>
-            <li>Drawer slides: $${slidesCost.toFixed(2)}</li>
-            <li>Hinges: $${hingesCost.toFixed(2)}</li>
-            <li>Sheets: $${sheetsCost.toFixed(2)}</li>
-            <li>Laminates: $${laminatesCost.toFixed(2)}</li>
-            <li>Countertop laminate: $${topLaminate.toFixed(2)}</li>
-            <li>Installation fee: $${installFee.toFixed(2)}</li>
-            <li>My fee: $${fee.toFixed(2)}</li>
-          </ul>
-          <h4>Total: <strong>$${total.toFixed(2)}</strong></h4>
-        `;
-        document.getElementById("estimateResult").innerHTML = result;
-        document.getElementById("estimateAmount").value = total.toFixed(2);
-      }
-    </script>
-
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
-  </body>
-</html>
+{% endblock %}

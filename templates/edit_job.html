@@ -1,117 +1,96 @@
-<!DOCTYPE html>
-<html>
-  <nav class="navbar navbar-expand-lg navbar-dark bg-primary mb-4">
-    <div class="container">
-      <a class="navbar-brand" href="{{ url_for('index') }}">🗂️ byZewo</a>
-      <div class="collapse navbar-collapse">
-        <ul class="navbar-nav ms-auto">
-          <li class="nav-item">
-            <a class="nav-link" href="{{ url_for('jobs') }}">Saved Jobs</a>
-          </li>
-        </ul>
+{% extends "base.html" %} {% block title %}Edit Job{% endblock %} {% block
+content %}
+
+<h1 class="mb-4 text-center">✏️ Edit Job</h1>
+
+<div class="card p-4 shadow-sm">
+  <form method="POST" enctype="multipart/form-data">
+    <div class="mb-3">
+      <label class="form-label">Client Name:</label>
+      <input
+        type="text"
+        name="client_name"
+        value="{{ job.client_name }}"
+        class="form-control"
+        required
+      />
+    </div>
+
+    <div class="mb-3">
+      <label class="form-label">Add More Files:</label>
+      <input type="file" name="job_files" class="form-control" multiple />
+    </div>
+    <hr />
+    <h5>Add New Parts</h5>
+    <div id="parts-list">
+      <div class="row mb-2">
+        <div class="col">
+          <label class="form-label">Width (in):</label>
+          <input type="number" step="any" name="widths" class="form-control" />
+        </div>
+        <div class="col">
+          <label class="form-label">Height (in):</label>
+          <input type="number" step="any" name="heights" class="form-control" />
+        </div>
+        <div class="col">
+          <label class="form-label">Quantity:</label>
+          <input
+            type="number"
+            step="1"
+            name="quantities"
+            value="1"
+            class="form-control"
+          />
+        </div>
+        <div class="col">
+          <label class="form-label">Thickness:</label>
+          <select name="thicknesses" class="form-select" required>
+            <option value="3/4">3/4</option>
+            <option value="1/2">1/2</option>
+            <option value="1/4">1/4</option>
+          </select>
+        </div>
       </div>
     </div>
-  </nav>
 
-  <head>
-    <title>Edit Job</title>
-    <link
-      href="https://cdn.jsdelivr.net/npm/bootswatch@5.3.0/dist/sketchy/bootstrap.min.css"
-      rel="stylesheet"
-    />
-  </head>
-  <body class="bg-light">
-    <div class="container py-5">
-      <h1 class="mb-4 text-center">✏️ Edit Job</h1>
-      <div class="card p-4 shadow-sm">
-        <form method="POST" enctype="multipart/form-data">
-          <div class="mb-3">
-            <label class="form-label">Client Name:</label>
-            <input
-              type="text"
-              name="client_name"
-              value="{{ job.client_name }}"
-              class="form-control"
-              required
-            />
+    <button
+      type="button"
+      class="btn btn-outline-primary mb-3"
+      onclick="addRow()"
+    >
+      ➕ Add Another Part
+    </button>
+
+    <script>
+      function addRow() {
+        const partsList = document.getElementById("parts-list");
+        const newRow = document.createElement("div");
+        newRow.className = "row mb-2";
+        newRow.innerHTML = `
+          <div class="col">
+            <input type="number" step="any" name="widths" class="form-control" placeholder="Width">
           </div>
-
-          <div class="mb-3">
-            <label class="form-label">Add More Files:</label>
-            <input type="file" name="job_files" class="form-control" multiple />
+          <div class="col">
+            <input type="number" step="any" name="heights" class="form-control" placeholder="Height">
           </div>
-          <hr />
-          <h5>Add New Parts</h5>
-          <div id="parts-list">
-            <div class="row mb-2">
-              <div class="col">
-                <label class="form-label">Width (in):</label>
-                <input
-                  type="number"
-                  step="any"
-                  inputmode="decimal"
-                  pattern="[0-9]*[.,]?[0-9]*"
-                  name="widths"
-                  class="form-control"
-                />
-              </div>
-              <div class="col">
-                <label class="form-label">Height (in):</label>
-                <input
-                  type="number"
-                  step="any"
-                  inputmode="decimal"
-                  pattern="[0-9]*[.,]?[0-9]*"
-                  name="heights"
-                  class="form-control"
-                />
-              </div>
-              <div class="col">
-                <label class="form-label">Quantity:</label>
-                <input
-                  type="number"
-                  step="1"
-                  name="quantities"
-                  value="1"
-                  class="form-control"
-                />
-              </div>
-            </div>
+          <div class="col">
+            <input type="number" step="1" name="quantities" value="1" class="form-control" placeholder="Quantity">
           </div>
-          <button
-            type="button"
-            class="btn btn-outline-primary mb-3"
-            onclick="addRow()"
-          >
-            ➕ Add Another Part
-          </button>
+          <div class="col">
+            <select name="thicknesses" class="form-select" required>
+              <option value="3/4">3/4</option>
+              <option value="1/2">1/2</option>
+              <option value="1/4">1/4</option>
+            </select>
+          </div>
+        `;
+        partsList.appendChild(newRow);
+      }
+    </script>
 
-          <script>
-            function addRow() {
-              const partsList = document.getElementById("parts-list");
-              const newRow = document.createElement("div");
-              newRow.className = "row mb-2";
-              newRow.innerHTML = `
-                <div class="col">
-                  <input type="number" step="any" inputmode="decimal" pattern="[0-9]*[.,]?[0-9]*" name="widths" class="form-control" placeholder="Width">
-                </div>
-                <div class="col">
-                  <input type="number" step="any" inputmode="decimal" pattern="[0-9]*[.,]?[0-9]*" name="heights" class="form-control" placeholder="Height">
-                </div>
-                <div class="col">
-                  <input type="number" step="1" name="quantities" value="1" class="form-control" placeholder="Quantity">
-                </div>
-              `;
-              partsList.appendChild(newRow);
-            }
-          </script>
+    <button type="submit" class="btn btn-success">💾 Save Changes</button>
+    <a href="{{ url_for('jobs') }}" class="btn btn-secondary">❌ Cancel</a>
+  </form>
+</div>
 
-          <button type="submit" class="btn btn-success">💾 Save Changes</button>
-          <a href="{{ url_for('jobs') }}" class="btn btn-secondary"
-            >❌ Cancel</a
-          >
-        </form>
-      </div>
-    </div>
-  </body>
-</html>
+{% endblock %}

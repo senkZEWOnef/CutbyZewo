@@ -15,6 +15,8 @@ class User(Base):
     email = Column(String, unique=True, nullable=False)
     hashed_password = Column(String, nullable=False)
 
+    jobs = relationship("Job", back_populates="owner", cascade="all, delete")
+
 class Job(Base):
     __tablename__ = "jobs"
     id = Column(Integer, primary_key=True)
@@ -24,17 +26,21 @@ class Job(Base):
     image_folder = Column(String)
     final_price = Column(Float, nullable=True)
 
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+
+    owner = relationship("User", back_populates="jobs")
     estimates = relationship("Estimate", back_populates="job", cascade="all, delete")
     parts = relationship("Part", back_populates="job", cascade="all, delete")
-
 class Part(Base):
     __tablename__ = "parts"
     id = Column(Integer, primary_key=True)
     job_id = Column(Integer, ForeignKey("jobs.id"))
     width = Column(Float)
     height = Column(Float)
+    thickness = Column(String)  # ✅ NEW FIELD: 3/4, 1/2, or 1/4
 
     job = relationship("Job", back_populates="parts")
+
 
 class Estimate(Base):
     __tablename__ = "estimates"

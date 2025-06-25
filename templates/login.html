@@ -1,38 +1,25 @@
-<!DOCTYPE html>
-<html>
-  <head>
-    <title>Login</title>
-    <link
-      href="https://cdn.jsdelivr.net/npm/bootswatch@5.3.0/dist/sketchy/bootstrap.min.css"
-      rel="stylesheet"
-    />
-  </head>
-  <body class="bg-light">
-    <div class="container py-5">
-      <h1 class="mb-4 text-center">🔐 Login</h1>
-      <div class="card p-4 shadow-sm">
-        <form method="POST">
-          <div class="mb-3">
-            <label>Email:</label>
-            <input type="email" name="email" class="form-control" required />
-          </div>
-          <div class="mb-3">
-            <label>Password:</label>
-            <input
-              type="password"
-              name="password"
-              class="form-control"
-              required
-            />
-          </div>
-          <button type="submit" class="btn btn-primary w-100">Login</button>
-          <a
-            href="{{ url_for('signup') }}"
-            class="btn btn-outline-secondary w-100 mt-2"
-            >Create Account</a
-          >
-        </form>
-      </div>
+{% extends "base.html" %} {% block title %}Login{% endblock %} {% block content
+%}
+
+<h1 class="mb-4 text-center">🔐 Login</h1>
+<div class="card p-4 shadow-sm">
+  <form method="POST">
+    <div class="mb-3">
+      <label>Email:</label>
+      <input type="email" name="email" class="form-control" required />
     </div>
-  </body>
-</html>
+    <div class="mb-3">
+      <label>Password:</label>
+      <input type="password" name="password" class="form-control" required />
+    </div>
+    <button type="submit" class="btn btn-primary w-100">Login</button>
+    <a
+      href="{{ url_for('signup') }}"
+      class="btn btn-outline-secondary w-100 mt-2"
+    >
+      Create Account
+    </a>
+  </form>
+</div>
+
+{% endblock %}

@@ -1,143 +1,117 @@
-<!DOCTYPE html>
-<html>
-  <head>
-    <meta charset="UTF-8" />
-    <title>Cabinet Cut Planner</title>
-    <link
-      href="https://cdn.jsdelivr.net/npm/bootswatch@5.3.0/dist/sketchy/bootstrap.min.css"
-      rel="stylesheet"
-    />
-  </head>
-  <body class="bg-light">
-    <nav class="navbar navbar-expand-lg navbar-dark bg-primary mb-4">
-      <div class="container">
-        <a class="navbar-brand" href="{{ url_for('index') }}">🗂️ byZewo</a>
-        <div class="collapse navbar-collapse">
-          <ul class="navbar-nav ms-auto">
-            <li class="nav-item">
-              <a class="nav-link" href="{{ url_for('jobs') }}">Saved Jobs</a>
-            </li>
-          </ul>
+{% extends "base.html" %} {% block title %}Cut Planner{% endblock %} {% block
+content %}
+
+<h1 class="mb-4 text-center display-4">Cabinet Cut Planner ✏️</h1>
+
+<div class="card p-4 shadow-sm">
+  <form method="POST">
+    <div class="mb-3">
+      <label class="form-label">Client Name:</label>
+      <input
+        type="text"
+        name="client_name"
+        class="form-control"
+        placeholder="e.g., John Doe"
+        required
+      />
+    </div>
+
+    <div id="parts-list">
+      <h5>Parts List</h5>
+      <div class="row mb-2">
+        <div class="col">
+          <label class="form-label">Width (in):</label>
+          <input type="number" step="any" name="widths" class="form-control" />
         </div>
-      </div>
-    </nav>
-
-    <div class="container py-5">
-      <h1 class="mb-4 text-center display-4">Cabinet Cut Planner ✏️</h1>
-
-      <div class="card p-4 shadow-sm">
-        <form method="POST">
-          <div class="mb-3">
-            <label class="form-label">Client Name:</label>
-            <input
-              type="text"
-              name="client_name"
-              class="form-control"
-              placeholder="e.g., John Doe"
-              required
-            />
-          </div>
-
-          <div id="parts-list">
-            <h5>Parts List</h5>
-            <div class="row mb-2">
-              <div class="col">
-                <label class="form-label">Width (in):</label>
-                <input
-                  type="number"
-                  step="any"
-                  inputmode="decimal"
-                  pattern="[0-9]*[.,]?[0-9]*"
-                  name="widths"
-                  class="form-control"
-                />
-              </div>
-              <div class="col">
-                <label class="form-label">Height (in):</label>
-                <input
-                  type="number"
-                  step="any"
-                  inputmode="decimal"
-                  pattern="[0-9]*[.,]?[0-9]*"
-                  name="heights"
-                  class="form-control"
-                />
-              </div>
-              <div class="col">
-                <label class="form-label">Quantity:</label>
-                <input
-                  type="number"
-                  step="1"
-                  name="quantities"
-                  value="1"
-                  class="form-control"
-                />
-              </div>
-            </div>
-          </div>
-
-          <button
-            type="button"
-            class="btn btn-outline-primary mb-3"
-            onclick="addRow()"
-          >
-            ➕ Add Part
-          </button>
-
-          <div class="mb-3">
-            <label class="form-label">Panel Width (default 96):</label>
-            <input
-              type="number"
-              step="any"
-              inputmode="decimal"
-              pattern="[0-9]*[.,]?[0-9]*"
-              name="panel_width"
-              value="96"
-              class="form-control"
-            />
-          </div>
-
-          <div class="mb-3">
-            <label class="form-label">Panel Height (default 48):</label>
-            <input
-              type="number"
-              step="any"
-              inputmode="decimal"
-              pattern="[0-9]*[.,]?[0-9]*"
-              name="panel_height"
-              value="48"
-              class="form-control"
-            />
-          </div>
-
-          <button type="submit" class="btn btn-primary w-100 mb-2">
-            🚀 Generate Cut Plan
-          </button>
-          <a href="{{ url_for('jobs') }}" class="btn btn-outline-dark w-100">
-            📁 View Saved Jobs
-          </a>
-        </form>
+        <div class="col">
+          <label class="form-label">Height (in):</label>
+          <input type="number" step="any" name="heights" class="form-control" />
+        </div>
+        <div class="col">
+          <label class="form-label">Quantity:</label>
+          <input
+            type="number"
+            step="1"
+            name="quantities"
+            value="1"
+            class="form-control"
+          />
+        </div>
+        <div class="col">
+          <label class="form-label">Thickness:</label>
+          <select name="thicknesses" class="form-select" required>
+            <option value="3/4">3/4</option>
+            <option value="1/2">1/2</option>
+            <option value="1/4">1/4</option>
+          </select>
+        </div>
       </div>
     </div>
 
-    <script>
-      function addRow() {
-        const partsList = document.getElementById("parts-list");
-        const newRow = document.createElement("div");
-        newRow.className = "row mb-2";
-        newRow.innerHTML = `
-          <div class="col">
-            <input type="number" step="any" inputmode="decimal" pattern="[0-9]*[.,]?[0-9]*" name="widths" class="form-control" placeholder="Width">
-          </div>
-          <div class="col">
-            <input type="number" step="any" inputmode="decimal" pattern="[0-9]*[.,]?[0-9]*" name="heights" class="form-control" placeholder="Height">
-          </div>
-          <div class="col">
-            <input type="number" step="1" name="quantities" value="1" class="form-control" placeholder="Quantity">
-          </div>
-        `;
-        partsList.appendChild(newRow);
-      }
-    </script>
-  </body>
-</html>
+    <button
+      type="button"
+      class="btn btn-outline-primary mb-3"
+      onclick="addRow()"
+    >
+      ➕ Add Part
+    </button>
+
+    <div class="mb-3">
+      <label class="form-label">Panel Width (default 96):</label>
+      <input
+        type="number"
+        step="any"
+        name="panel_width"
+        value="96"
+        class="form-control"
+      />
+    </div>
+
+    <div class="mb-3">
+      <label class="form-label">Panel Height (default 48):</label>
+      <input
+        type="number"
+        step="any"
+        name="panel_height"
+        value="48"
+        class="form-control"
+      />
+    </div>
+
+    <button type="submit" class="btn btn-primary w-100 mb-2">
+      🚀 Generate Cut Plan
+    </button>
+    <a href="{{ url_for('jobs') }}" class="btn btn-outline-dark w-100">
+      📁 View Saved Jobs
+    </a>
+  </form>
+</div>
+
+<script>
+  function addRow() {
+    const partsList = document.getElementById("parts-list");
+    const newRow = document.createElement("div");
+    newRow.className = "row mb-2";
+    newRow.innerHTML = `
+      <div class="col">
+        <input type="number" step="any" name="widths" class="form-control" placeholder="Width">
+      </div>
+      <div class="col">
+        <input type="number" step="any" name="heights" class="form-control" placeholder="Height">
+      </div>
+      <div class="col">
+        <input type="number" step="1" name="quantities" value="1" class="form-control" placeholder="Quantity">
+      </div>
+      <div class="col">
+        <select name="thicknesses" class="form-select" required>
+          <option value="3/4">3/4</option>
+          <option value="1/2">1/2</option>
+          <option value="1/4">1/4</option>
+        </select>
+      </div>
+    `;
+    partsList.appendChild(newRow);
+  }
+</script>
+
+{% endblock %}
