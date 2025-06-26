@@ -1,0 +1,156 @@
+<!-- ✅ Estimate Modal with Auto Calculation -->
+<div
+  class="modal fade"
+  id="estimateModal"
+  tabindex="-1"
+  aria-labelledby="estimateModalLabel"
+  aria-hidden="true"
+>
+  <div class="modal-dialog">
+    <form method="POST" action="{{ url_for('save_estimate', job_id=job.id) }}">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title" id="estimateModalLabel">💰 Estimate Cost</h5>
+          <button
+            type="button"
+            class="btn-close"
+            data-bs-dismiss="modal"
+            aria-label="Close"
+          ></button>
+        </div>
+        <div class="modal-body">
+          <div class="mb-2">
+            <label>Linear Feet</label>
+            <input
+              type="number"
+              step="0.1"
+              class="form-control"
+              id="linearFt"
+            />
+          </div>
+
+          <div class="mb-2">
+            <label>Drawer Slides</label>
+            <input type="number" class="form-control" id="numSlides" />
+            <select class="form-select mt-1" id="slideType">
+              <option value="5">Regular ($5)</option>
+              <option value="15">Undermount ($15)</option>
+            </select>
+          </div>
+
+          <div class="mb-2">
+            <label>Hinges</label>
+            <input type="number" class="form-control" id="numHinges" />
+            <select class="form-select mt-1" id="hingeType">
+              <option value="2">Standard ($2)</option>
+              <option value="5">Soft-close ($5)</option>
+            </select>
+          </div>
+
+          <div class="mb-2">
+            <label>Laminate Sheet Price</label>
+            <input
+              type="number"
+              class="form-control"
+              id="laminatePrice"
+              value="25"
+            />
+          </div>
+
+          <div class="mb-2">
+            <label>Top Counter Laminate Price</label>
+            <input type="number" class="form-control" id="topLaminatePrice" />
+          </div>
+
+          <div class="mb-2">
+            <label>Install Fee</label>
+            <input type="number" class="form-control" id="installFee" />
+          </div>
+
+          <hr />
+          <div id="estimateResult" class="mb-3 text-dark fw-bold"></div>
+
+          <!-- Hidden input to pass total to Flask -->
+          <input type="hidden" name="amount" id="estimateAmount" />
+        </div>
+        <div class="modal-footer">
+          <button
+            type="button"
+            class="btn btn-secondary"
+            data-bs-dismiss="modal"
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            class="btn btn-outline-primary"
+            onclick="calculateEstimate()"
+          >
+            Calculate
+          </button>
+          <button type="submit" class="btn btn-success">Save Estimate</button>
+        </div>
+      </div>
+    </form>
+  </div>
+</div>
+
+<script>
+    function calculateEstimate() {
+      const linearFt = parseFloat(document.getElementById("linearFt").value) || 0;
+      const slides = parseInt(document.getElementById("numSlides").value) || 0;
+      const slidePrice = parseFloat(document.getElementById("slideType").value) || 0;
+      const hinges = parseInt(document.getElementById("numHinges").value) || 0;
+      const hingePrice = parseFloat(document.getElementById("hingeType").value) || 0;
+      const laminateUnit = parseFloat(document.getElementById("laminatePrice").value) || 0;
+      const topLaminate = parseFloat(document.getElementById("topLaminatePrice").value) || 0;
+      const installFee = parseFloat(document.getElementById("installFee").value) || 0;
+
+      // Extract number of sheets by thickness from Jinja variable
+      const sheetImages = {{ sheet_images | tojson | safe }};
+  ;
+      let count34 = 0, count12 = 0, count14 = 0;
+      for (const [path, thickness] of sheetImages) {
+        if (thickness === "3/4") count34++;
+        else if (thickness === "1/2") count12++;
+        else if (thickness === "1/4") count14++;
+      }
+
+      // Base and fee logic
+      let base = 50;
+      if (linearFt > 8 && linearFt <= 16) base = 100;
+      else if (linearFt > 16 && linearFt <= 20) base = 150;
+      else if (linearFt > 20) base = 200;
+
+      let fee = 500;
+      if (linearFt >= 8 && linearFt <= 15) fee = 800;
+      else if (linearFt >= 20) fee = linearFt * 50;
+
+      const slidesCost = slides * slidePrice;
+      const hingesCost = hinges * hingePrice;
+      const sheetsCost = count34 * 60 + count12 * 40 + count14 * 25;
+      const laminatesCost = (count34 + count12 + count14 + 2) * laminateUnit;
+
+      const total =
+        base + slidesCost + hingesCost + sheetsCost + laminatesCost + topLaminate + installFee + fee;
+
+      const result = `
+        <h5>Estimate Breakdown</h5>
+        <ul>
+          <li>Base cost: $${base.toFixed(2)}</li>
+          <li>Drawer slides: $${slidesCost.toFixed(2)}</li>
+          <li>Hinges: $${hingesCost.toFixed(2)}</li>
+          <li>¾" Sheets ($60): ${count34} = $${(count34 * 60).toFixed(2)}</li>
+          <li>½" Sheets ($40): ${count12} = $${(count12 * 40).toFixed(2)}</li>
+          <li>¼" Sheets ($25): ${count14} = $${(count14 * 25).toFixed(2)}</li>
+          <li>Laminates: $${laminatesCost.toFixed(2)}</li>
+          <li>Countertop laminate: $${topLaminate.toFixed(2)}</li>
+          <li>Installation fee: $${installFee.toFixed(2)}</li>
+          <li>My fee: $${fee.toFixed(2)}</li>
+        </ul>
+        <h4>Total: <strong>$${total.toFixed(2)}</strong></h4>
+      `;
+      document.getElementById("estimateResult").innerHTML = result;
+      document.getElementById("estimateAmount").value = total.toFixed(2);
+    }
+</script>

@@ -3,94 +3,121 @@ content %}
 
 <h1 class="mb-4 text-center">✏️ Edit Job</h1>
 
-<div class="card p-4 shadow-sm">
-  <form method="POST" enctype="multipart/form-data">
-    <div class="mb-3">
-      <label class="form-label">Client Name:</label>
+<form method="POST" enctype="multipart/form-data" class="card p-4 shadow">
+  <div class="mb-3">
+    <label class="form-label">Client Name:</label>
+    <input
+      type="text"
+      name="client_name"
+      class="form-control"
+      value="{{ job.client_name or '' }}"
+      required
+    />
+  </div>
+
+  <div class="row mb-3">
+    <div class="col">
+      <label class="form-label">Soft Deadline:</label>
       <input
-        type="text"
-        name="client_name"
-        value="{{ job.client_name }}"
+        type="date"
+        name="soft_deadline"
         class="form-control"
-        required
+        value="{{ job.soft_deadline.strftime('%Y-%m-%d') if job.soft_deadline else '' }}"
       />
     </div>
-
-    <div class="mb-3">
-      <label class="form-label">Add More Files:</label>
-      <input type="file" name="job_files" class="form-control" multiple />
+    <div class="col">
+      <label class="form-label">Hard Deadline:</label>
+      <input
+        type="date"
+        name="hard_deadline"
+        class="form-control"
+        value="{{ job.hard_deadline.strftime('%Y-%m-%d') if job.hard_deadline else '' }}"
+      />
     </div>
-    <hr />
-    <h5>Add New Parts</h5>
-    <div id="parts-list">
-      <div class="row mb-2">
-        <div class="col">
-          <label class="form-label">Width (in):</label>
-          <input type="number" step="any" name="widths" class="form-control" />
-        </div>
-        <div class="col">
-          <label class="form-label">Height (in):</label>
-          <input type="number" step="any" name="heights" class="form-control" />
-        </div>
-        <div class="col">
-          <label class="form-label">Quantity:</label>
-          <input
-            type="number"
-            step="1"
-            name="quantities"
-            value="1"
-            class="form-control"
-          />
-        </div>
-        <div class="col">
-          <label class="form-label">Thickness:</label>
-          <select name="thicknesses" class="form-select" required>
-            <option value="3/4">3/4</option>
-            <option value="1/2">1/2</option>
-            <option value="1/4">1/4</option>
-          </select>
-        </div>
+  </div>
+
+  <div class="mb-3">
+    <label class="form-label">Upload Files:</label>
+    <input type="file" name="job_files" multiple class="form-control" />
+  </div>
+
+  <h5 class="mt-4">➕ Add Parts</h5>
+  <div id="parts-list">
+    <div class="row mb-2">
+      <div class="col">
+        <input
+          type="number"
+          step="any"
+          name="widths"
+          class="form-control"
+          placeholder="Width"
+        />
+      </div>
+      <div class="col">
+        <input
+          type="number"
+          step="any"
+          name="heights"
+          class="form-control"
+          placeholder="Height"
+        />
+      </div>
+      <div class="col">
+        <input
+          type="number"
+          step="1"
+          name="quantities"
+          value="1"
+          class="form-control"
+          placeholder="Quantity"
+        />
+      </div>
+      <div class="col">
+        <select name="thicknesses" class="form-select" required>
+          <option value="3/4">3/4</option>
+          <option value="1/2">1/2</option>
+          <option value="1/4">1/4</option>
+        </select>
       </div>
     </div>
+  </div>
 
-    <button
-      type="button"
-      class="btn btn-outline-primary mb-3"
-      onclick="addRow()"
-    >
-      ➕ Add Another Part
-    </button>
+  <button
+    type="button"
+    class="btn btn-outline-secondary mb-3"
+    onclick="addRow()"
+  >
+    ➕ Add Another Part
+  </button>
 
-    <script>
-      function addRow() {
-        const partsList = document.getElementById("parts-list");
-        const newRow = document.createElement("div");
-        newRow.className = "row mb-2";
-        newRow.innerHTML = `
-          <div class="col">
-            <input type="number" step="any" name="widths" class="form-control" placeholder="Width">
-          </div>
-          <div class="col">
-            <input type="number" step="any" name="heights" class="form-control" placeholder="Height">
-          </div>
-          <div class="col">
-            <input type="number" step="1" name="quantities" value="1" class="form-control" placeholder="Quantity">
-          </div>
-          <div class="col">
-            <select name="thicknesses" class="form-select" required>
-              <option value="3/4">3/4</option>
-              <option value="1/2">1/2</option>
-              <option value="1/4">1/4</option>
-            </select>
-          </div>
-        `;
-        partsList.appendChild(newRow);
-      }
-    </script>
+  <button type="submit" class="btn btn-success w-100">💾 Save Changes</button>
+</form>
 
-    <button type="submit" class="btn btn-success">💾 Save Changes</button>
-    <a href="{{ url_for('jobs') }}" class="btn btn-secondary">❌ Cancel</a>
-  </form>
-</div>
+<script>
+  function addRow() {
+    const partsList = document.getElementById("parts-list");
+    const newRow = document.createElement("div");
+    newRow.className = "row mb-2";
+    newRow.innerHTML = `
+      <div class="col">
+        <input type="number" step="any" name="widths" class="form-control" placeholder="Width">
+      </div>
+      <div class="col">
+        <input type="number" step="any" name="heights" class="form-control" placeholder="Height">
+      </div>
+      <div class="col">
+        <input type="number" step="1" name="quantities" value="1" class="form-control" placeholder="Quantity">
+      </div>
+      <div class="col">
+        <select name="thicknesses" class="form-select" required>
+          <option value="3/4">3/4</option>
+          <option value="1/2">1/2</option>
+          <option value="1/4">1/4</option>
+        </select>
+      </div>
+    `;
+    partsList.appendChild(newRow);
+  }
+</script>
 
 {% endblock %}

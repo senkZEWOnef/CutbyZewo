@@ -1,6 +1,5 @@
 {% extends "base.html" %} {% block title %}Cut Planner{% endblock %} {% block
 content %}
-
 <h1 class="mb-4 text-center display-4">Cabinet Cut Planner ✏️</h1>
 
 <div class="card p-4 shadow-sm">
@@ -14,6 +13,17 @@ content %}
         placeholder="e.g., John Doe"
         required
       />
+    </div>
+
+    <div class="row mb-3">
+      <div class="col">
+        <label>Soft Deadline (internal):</label>
+        <input type="date" name="soft_deadline" class="form-control" />
+      </div>
+      <div class="col">
+        <label>Hard Deadline (client):</label>
+        <input type="date" name="hard_deadline" class="form-control" />
+      </div>
     </div>
 
     <div id="parts-list">
@@ -84,6 +94,10 @@ content %}
     <a href="{{ url_for('jobs') }}" class="btn btn-outline-dark w-100">
       📁 View Saved Jobs
     </a>
+
+    <a href="{{ url_for('view_stocks') }}" class="btn btn-outline-info"
+      >📊 View Stocks</a
+    >
   </form>
 </div>
 
@@ -113,5 +127,4 @@ content %}
     partsList.appendChild(newRow);
   }
 </script>
-
 {% endblock %}

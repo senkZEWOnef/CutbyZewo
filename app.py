@@ -2,15 +2,15 @@ from flask import Flask, render_template, request, redirect, url_for, flash, ses
 import os, uuid, shutil
 from planner import optimize_cuts
 from visualizer import draw_sheets_to_files
-from models import SessionLocal, Job, User, Estimate, Part, Base, engine
+from models import SessionLocal, Job, User, Estimate, Part, Base, engine, Stock
 from werkzeug.security import generate_password_hash, check_password_hash
 from werkzeug.utils import secure_filename
+from datetime import datetime
 
 # ✅ Auto-create tables
 Base.metadata.create_all(bind=engine)
 
 # ✅ Recreate known admin user on every run (optional)
-# ✅ Create admin ONCE if missing, but don't delete existing!
 db = SessionLocal()
 existing = db.query(User).filter(User.email == "ralph.ulysse509@gmail.com").first()
 if not existing:
@@ -112,7 +112,12 @@ def index():
         quantities = request.form.getlist("quantities")
         thicknesses = request.form.getlist("thicknesses")
 
-        # 1️⃣ Group parts by thickness
+        soft_deadline = request.form.get("soft_deadline") or None
+        hard_deadline = request.form.get("hard_deadline") or None
+
+        soft_deadline = datetime.strptime(soft_deadline, "%Y-%m-%d") if soft_deadline else None
+        hard_deadline = datetime.strptime(hard_deadline, "%Y-%m-%d") if hard_deadline else None
+
         parts_by_thickness = {}
         for w, h, q, t in zip(widths, heights, quantities, thicknesses):
             if w and h and q and t:
@@ -121,7 +126,6 @@ def index():
         panel_width = float(request.form.get("panel_width", 96))
         panel_height = float(request.form.get("panel_height", 48))
 
-        # 2️⃣ Create job & base folder
         job_uuid = str(uuid.uuid4())
         output_dir = f"static/sheets/{job_uuid}"
         os.makedirs(output_dir, exist_ok=True)
@@ -131,12 +135,13 @@ def index():
             client_name=client_name,
             notes="Created by Cut Planner",
             image_folder=output_dir,
-            user_id=user.id
+            user_id=user.id,
+            soft_deadline=soft_deadline,
+            hard_deadline=hard_deadline
         )
         db.add(new_job)
         db.commit()
 
-        # 3️⃣ Generate sheets per thickness
         sheet_images = []
         for t, parts in parts_by_thickness.items():
             subfolder = os.path.join(output_dir, t)
@@ -145,18 +150,15 @@ def index():
             sheets = optimize_cuts(panel_width, panel_height, parts)
             draw_sheets_to_files(sheets, subfolder)
 
-            # Track for result page
             for i in range(len(sheets)):
                 rel = f"sheets/{job_uuid}/{t}/sheet_{i+1}.png"
-                sheet_images.append( (rel, t) )
+                sheet_images.append((rel, t))
 
-            # Save parts in DB
             for w, h in parts:
                 db.add(Part(job_id=new_job.id, width=w, height=h, thickness=t))
 
         db.commit()
 
-        # 4️⃣ Save uploaded files
         upload_dir = f"static/uploads/{new_job.id}"
         os.makedirs(upload_dir, exist_ok=True)
         if 'job_files' in request.files:
@@ -171,12 +173,13 @@ def index():
 
         return render_template(
             "result.html",
-            parts=[(w, h, t) for t, ps in parts_by_thickness.items() for (w,h) in ps],
+            parts=[(w, h, t) for t, ps in parts_by_thickness.items() for (w, h) in ps],
             sheet_images=sheet_images,
             user=user
         )
 
     return render_template("index.html", user=user)
+
 
 
 # ✅ VIEW JOBS (only user's)
@@ -192,7 +195,7 @@ def jobs():
     return render_template("jobs.html", jobs=all_jobs, user=user)
 
 # ✅ JOB DETAILS
-@app.route("/jobs/<int:job_id>")
+@app.route("/jobs/<int:job_id>", methods=["GET", "POST"])
 def job_details(job_id):
     user = current_user()
     if not user:
@@ -200,13 +203,32 @@ def job_details(job_id):
 
     db = SessionLocal()
     job = db.query(Job).filter(Job.id == job_id).first()
+
+    if not job:
+        db.close()
+        return "Job not found", 404
+
+    # ✅ Handle deadline form POST
+    if request.method == "POST":
+        soft_deadline = request.form.get("soft_deadline")
+        hard_deadline = request.form.get("hard_deadline")
+
+        if soft_deadline:
+            job.soft_deadline = soft_deadline
+        if hard_deadline:
+            job.hard_deadline = hard_deadline
+
+        db.commit()
+        flash("Deadlines updated.", "success")
+        return redirect(url_for("job_details", job_id=job_id))
+
+    # ✅ Estimates and parts
     estimates = db.query(Estimate).filter(Estimate.job_id == job_id).order_by(Estimate.created_at.desc()).all()
     parts = db.query(Part).filter(Part.job_id == job_id).all()
 
+    # ✅ Sheets (3/4, 1/2, 1/4 inch)
     sheet_images = []
-
     if job and os.path.exists(job.image_folder):
-        # Try modern structure first (subfolders by thickness)
         found_any = False
         for thickness in ["3/4", "1/2", "1/4"]:
             subfolder = os.path.join(job.image_folder, thickness)
@@ -215,24 +237,20 @@ def job_details(job_id):
                 files = sorted(f for f in os.listdir(subfolder) if f.endswith(".png"))
                 for f in files:
                     relative_path = f"sheets/{os.path.basename(job.image_folder)}/{thickness}/{f}"
-                    sheet_images.append( (relative_path, thickness) )
-        
-        # If no subfolders, fallback to flat folder: assume Unknown
+                    sheet_images.append((relative_path, thickness))
         if not found_any:
             files = sorted(f for f in os.listdir(job.image_folder) if f.endswith(".png"))
             for f in files:
                 relative_path = f"sheets/{os.path.basename(job.image_folder)}/{f}"
-                sheet_images.append( (relative_path, "Unknown") )
+                sheet_images.append((relative_path, "Unknown"))
 
+    # ✅ Uploaded images
     upload_dir = f"static/uploads/{job.id}"
     uploaded_images = []
     if os.path.exists(upload_dir):
         uploaded_images = [f"uploads/{job.id}/{f}" for f in os.listdir(upload_dir)]
 
     db.close()
-
-    if not job:
-        return "Job not found", 404
 
     return render_template(
         "job_details.html",
@@ -374,6 +392,74 @@ def save_estimate(job_id):
 
     db.close()
     return redirect(url_for("job_details", job_id=job_id))
+
+@app.route("/stocks")
+def view_stocks():
+    user = current_user()
+    if not user:
+        return redirect(url_for("login"))
+    db = SessionLocal()
+    stocks = db.query(Stock).order_by(Stock.created_at.desc()).all()
+    db.close()
+    return render_template("stocks.html", stocks=stocks, user=user)
+
+@app.route("/stocks/add", methods=["POST"])
+def add_stock():
+    user = current_user()
+    if not user:
+        return redirect(url_for("login"))
+
+    name = request.form.get("name")
+    description = request.form.get("description")
+    quantity = int(request.form.get("quantity") or 0)
+    unit = request.form.get("unit")
+
+    db = SessionLocal()
+    stock = Stock(name=name, description=description, quantity=quantity, unit=unit)
+    db.add(stock)
+    db.commit()
+    db.close()
+    flash("Stock item added.")
+    return redirect(url_for("view_stocks"))
+
+@app.route("/stocks/<int:stock_id>/update", methods=["POST"])
+def update_stock(stock_id):
+    user = current_user()
+    if not user:
+        return redirect(url_for("login"))
+
+    action = request.form.get("action")
+    db = SessionLocal()
+    stock = db.query(Stock).filter(Stock.id == stock_id).first()
+    if stock:
+        if action == "increase":
+            stock.quantity += 1
+        elif action == "decrease":
+            stock.quantity = max(0, stock.quantity - 1)
+        db.commit()
+    db.close()
+    return redirect(url_for("view_stocks"))
+
+
+# ✅ DELETE STOCK
+@app.route("/stocks/<int:stock_id>/delete", methods=["POST"])
+def delete_stock(stock_id):
+    user = current_user()
+    if not user:
+        return redirect(url_for("login"))
+
+    db = SessionLocal()
+    stock = db.query(Stock).filter(Stock.id == stock_id).first()
+    if stock:
+        db.delete(stock)
+        db.commit()
+        flash("Stock item deleted.")
+    db.close()
+    return redirect(url_for("view_stocks"))
+
+
+
+
 
 
 if __name__ == "__main__":

@@ -1,7 +1,7 @@
 {% extends "base.html" %} {% block title %}Job Details{% endblock %} {% block
 content %}
 
-<h1 class="mb-4 text-center">📐 Job Details</h1>
+<h1 class="mb-4 text-center">📀 Job Details</h1>
 
 <!-- ✅ Job Info & Actions -->
 <div class="card p-4 shadow mb-4">
@@ -12,6 +12,14 @@ content %}
     else %} N/A {% endif %}
   </p>
   <p><strong>Final Price:</strong> ${{ job.final_price or "N/A" }}</p>
+  <p>
+    <strong>Soft Deadline:</strong>
+    {{ job.soft_deadline.strftime('%Y-%m-%d') if job.soft_deadline else "N/A" }}
+  </p>
+  <p>
+    <strong>Hard Deadline:</strong>
+    {{ job.hard_deadline.strftime('%Y-%m-%d') if job.hard_deadline else "N/A" }}
+  </p>
 
   <!-- ✅ Update Final Price -->
   <form
@@ -33,9 +41,41 @@ content %}
     </div>
   </form>
 
-  <!-- ✅ Actions -->
+  <!-- ✅ Update Deadlines -->
+  <form method="POST" action="{{ url_for('job_details', job_id=job.id) }}">
+    <div class="row mb-2">
+      <div class="col-md-6">
+        <label for="soft_deadline" class="form-label"
+          ><strong>Soft Deadline</strong></label
+        >
+        <input
+          type="date"
+          class="form-control"
+          id="soft_deadline"
+          name="soft_deadline"
+          value="{{ job.soft_deadline.strftime('%Y-%m-%d') if job.soft_deadline else '' }}"
+        />
+      </div>
+      <div class="col-md-6">
+        <label for="hard_deadline" class="form-label"
+          ><strong>Hard Deadline</strong></label
+        >
+        <input
+          type="date"
+          class="form-control"
+          id="hard_deadline"
+          name="hard_deadline"
+          value="{{ job.hard_deadline.strftime('%Y-%m-%d') if job.hard_deadline else '' }}"
+        />
+      </div>
+    </div>
+    <button type="submit" class="btn btn-dark">💾 Save Deadlines</button>
+  </form>
+
+  <!-- ✅ Action Buttons -->
   <button
-    class="btn btn-success mb-2"
+    type="button"
+    class="btn btn-outline-primary mb-2"
     data-bs-toggle="modal"
     data-bs-target="#estimateModal"
   >
@@ -66,9 +106,8 @@ content %}
   <ul class="list-group">
     {% for part in parts %}
     <li class="list-group-item">
-      <strong>Part #{{ loop.index }}:</strong>
-      {{ part.width }} x {{ part.height }} inches —
-      <em>{{ part.thickness }} panel</em>
+      <strong>Part #{{ loop.index }}:</strong> {{ part.width }} x {{ part.height
+      }} inches — <em>{{ part.thickness }} panel</em>
     </li>
     {% endfor %}
   </ul>
@@ -144,150 +183,5 @@ content %}
   {% endif %}
 </div>
 
-<!-- ✅ Estimate Modal -->
-<div class="modal fade" id="estimateModal" tabindex="-1" aria-hidden="true">
-  <div class="modal-dialog modal-lg">
-    <div class="modal-content p-4">
-      <h3 class="mb-3">📐 Estimate Cost</h3>
-      <form
-        method="POST"
-        action="{{ url_for('save_estimate', job_id=job.id) }}"
-      >
-        <div class="row mb-2">
-          <div class="col">
-            <label>Linear ft total:</label>
-            <input
-              type="number"
-              step="0.1"
-              id="linearFt"
-              class="form-control"
-              required
-            />
-          </div>
-          <div class="col">
-            <label>Number of drawer slides:</label>
-            <input type="number" id="numSlides" class="form-control" required />
-            <select id="slideType" class="form-select mt-1">
-              <option value="5">Regular ($5)</option>
-              <option value="8">Soft Close ($8)</option>
-            </select>
-          </div>
-          <div class="col">
-            <label>Number of hinges:</label>
-            <input type="number" id="numHinges" class="form-control" required />
-            <select id="hingeType" class="form-select mt-1">
-              <option value="5">Regular ($5)</option>
-              <option value="8">Soft Close ($8)</option>
-            </select>
-          </div>
-        </div>
-        <div class="row mb-2">
-          <div class="col">
-            <label>Price per laminate sheet:</label>
-            <input
-              type="number"
-              step="0.1"
-              id="laminatePrice"
-              class="form-control"
-              required
-            />
-          </div>
-          <div class="col">
-            <label>Price for countertop laminate:</label>
-            <input
-              type="number"
-              step="0.1"
-              id="topLaminatePrice"
-              class="form-control"
-              required
-            />
-          </div>
-          <div class="col">
-            <label>Installation fee (if any):</label>
-            <input
-              type="number"
-              step="0.1"
-              id="installFee"
-              class="form-control"
-              value="0"
-            />
-          </div>
-        </div>
-        <input type="hidden" name="amount" id="estimateAmount" />
-        <button
-          class="btn btn-success mb-2"
-          data-bs-toggle="modal"
-          data-bs-target="#estimateModal"
-        >
-          💰 Estimate Cost
-        </button>
-
-        <button type="submit" class="btn btn-success">Save Estimate</button>
-      </form>
-      <hr />
-      <div id="estimateResult" class="mt-3"></div>
-    </div>
-  </div>
-</div>
-
-<script>
-  function calculateEstimate() {
-    const linearFt = parseFloat(document.getElementById("linearFt").value) || 0;
-    const slides = parseInt(document.getElementById("numSlides").value) || 0;
-    const slidePrice =
-      parseFloat(document.getElementById("slideType").value) || 0;
-    const hinges = parseInt(document.getElementById("numHinges").value) || 0;
-    const hingePrice =
-      parseFloat(document.getElementById("hingeType").value) || 0;
-    const laminateUnit =
-      parseFloat(document.getElementById("laminatePrice").value) || 0;
-    const topLaminate =
-      parseFloat(document.getElementById("topLaminatePrice").value) || 0;
-    const installFee =
-      parseFloat(document.getElementById("installFee").value) || 0;
-    const sheets = Number("{{ sheet_images|length if sheet_images else 0 }}");
-
-    let base = 50;
-    if (linearFt > 8 && linearFt <= 16) base = 100;
-    else if (linearFt > 16 && linearFt <= 20) base = 150;
-    else if (linearFt > 20) base = 200;
-
-    let fee = 500;
-    if (linearFt >= 8 && linearFt <= 15) fee = 800;
-    else if (linearFt >= 20) fee = linearFt * 50;
-
-    const slidesCost = slides * slidePrice;
-    const hingesCost = hinges * hingePrice;
-    const sheetsCost = sheets * 60;
-    const laminatesCost = (sheets + 2) * laminateUnit;
-
-    const total =
-      base +
-      slidesCost +
-      hingesCost +
-      sheetsCost +
-      laminatesCost +
-      topLaminate +
-      installFee +
-      fee;
-
-    const result = `
-      <h5>Estimate Breakdown</h5>
-      <ul>
-        <li>Base cost: $${base.toFixed(2)}</li>
-        <li>Drawer slides: $${slidesCost.toFixed(2)}</li>
-        <li>Hinges: $${hingesCost.toFixed(2)}</li>
-        <li>Sheets: $${sheetsCost.toFixed(2)}</li>
-        <li>Laminates: $${laminatesCost.toFixed(2)}</li>
-        <li>Countertop laminate: $${topLaminate.toFixed(2)}</li>
-        <li>Installation fee: $${installFee.toFixed(2)}</li>
-        <li>My fee: $${fee.toFixed(2)}</li>
-      </ul>
-      <h4>Total: <strong>$${total.toFixed(2)}</strong></h4>
-    `;
-    document.getElementById("estimateResult").innerHTML = result;
-    document.getElementById("estimateAmount").value = total.toFixed(2);
-  }
-</script>
-
-{% endblock %}
+<!-- ✅ Modal and Script come last -->
+{% include "partials/estimate_modal.html" %} {% endblock %}
