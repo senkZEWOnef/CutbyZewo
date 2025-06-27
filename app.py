@@ -10,23 +10,7 @@ from datetime import datetime
 # ✅ Auto-create tables
 Base.metadata.create_all(bind=engine)
 
-# ✅ Recreate known admin user on every run (optional)
-db = SessionLocal()
-existing = db.query(User).filter(User.email == "ralph.ulysse509@gmail.com").first()
-if not existing:
-    admin = User(
-        username="zewo",
-        email="ralph.ulysse509@gmail.com",
-        hashed_password=generate_password_hash("Poesie509$$$")
-    )
-    db.add(admin)
-    db.commit()
-    print("✅ Admin user created.")
-else:
-    print("✅ Admin user already exists.")
-db.close()
 
-print("✅ Admin user recreated.")
 
 app = Flask(__name__)
 app.secret_key = "Poesie509$$$"
