@@ -7,6 +7,9 @@ from werkzeug.security import generate_password_hash, check_password_hash
 from werkzeug.utils import secure_filename
 from datetime import datetime
 
+
+
+
 # ✅ Auto-create tables
 Base.metadata.create_all(bind=engine)
 
@@ -66,14 +69,21 @@ def login():
         user = db.query(User).filter(User.email == email).first()
         db.close()
 
+        if not user:
+            print("❌ User not found.")
+        else:
+            print("✅ User found:", user.email)
+            print("✅ Stored hash:", user.hashed_password)
+            print("✅ Password entered:", password)
+            print("✅ Password check:", check_password_hash(user.hashed_password, password))
+
         if user and check_password_hash(user.hashed_password, password):
             session["user_id"] = user.id
-            flash("Logged in successfully!")
-            return redirect(url_for("index"))
+            return redirect(url_for("dashboard"))
         else:
-            flash("Invalid credentials.")
-
+            flash("Invalid email or password.")
     return render_template("login.html")
+
 
 # ✅ LOGOUT
 @app.route("/logout")
@@ -424,8 +434,6 @@ def update_stock(stock_id):
     db.close()
     return redirect(url_for("view_stocks"))
 
-
-# ✅ DELETE STOCK
 @app.route("/stocks/<int:stock_id>/delete", methods=["POST"])
 def delete_stock(stock_id):
     user = current_user()

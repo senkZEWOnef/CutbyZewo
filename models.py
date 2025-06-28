@@ -1,5 +1,3 @@
-### ✅ 1. models.py — Updated with soft and hard deadline fields
-
 from sqlalchemy import Column, Integer, String, Float, DateTime, ForeignKey, Date, create_engine
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.sql import func
@@ -9,6 +7,7 @@ Base = declarative_base()
 DATABASE_URL = "sqlite:///byZewo.db"
 engine = create_engine(DATABASE_URL, echo=True)
 SessionLocal = sessionmaker(bind=engine)
+
 
 class User(Base):
     __tablename__ = "users"
@@ -59,10 +58,11 @@ class Estimate(Base):
 
 class Stock(Base):
     __tablename__ = "stocks"
-    id = Column(Integer, primary_key=True)
-    name = Column(String, nullable=False)           # e.g., 3/4 Panel, Hinge, etc.
-    description = Column(String)                    # e.g., Laminate 2112 White, Soft Close
+
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String, nullable=False)
+    description = Column(String)
     quantity = Column(Integer, default=0)
-    unit = Column(String, default="pcs")            # e.g., pcs, sheets, etc.
+    unit = Column(String)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 

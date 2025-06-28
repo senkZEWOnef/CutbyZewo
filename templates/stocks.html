@@ -1,83 +1,85 @@
-{% extends "base.html" %} {% block title %}📦 Stocks{% endblock %} {% block
+{% extends "base.html" %} {% block title %}📊 View Stocks{% endblock %} {% block
 content %}
+<h1 class="text-center mb-4">📊 Stock Inventory</h1>
 
-<h1 class="text-center mb-4">📦 Material Stocks</h1>
-
-<!-- ✅ Add New Material -->
-<div class="card p-4 mb-4 shadow-sm">
-  <h4>Add New Material</h4>
+<div class="card shadow-sm p-4 mb-4">
   <form method="POST" action="{{ url_for('add_stock') }}">
-    <div class="row">
-      <div class="col-md-3">
+    <div class="row mb-3">
+      <div class="col">
         <input
           name="name"
           class="form-control"
-          placeholder="Name (e.g., 3/4 Panel)"
+          placeholder="Material name"
           required
         />
       </div>
-      <div class="col-md-4">
+      <div class="col">
         <input
           name="description"
           class="form-control"
-          placeholder="Details (e.g., Laminate 2112 White)"
+          placeholder="Description (e.g., 3/4 White PVC)"
         />
       </div>
-      <div class="col-md-2">
+      <div class="col">
         <input
-          type="number"
           name="quantity"
+          type="number"
           class="form-control"
           placeholder="Qty"
-          required
         />
       </div>
-      <div class="col-md-2">
+      <div class="col">
         <input
           name="unit"
           class="form-control"
-          placeholder="Unit (e.g., pcs)"
+          placeholder="Unit (e.g., sheets)"
         />
       </div>
-      <div class="col-md-1">
-        <button type="submit" class="btn btn-dark">➕</button>
+      <div class="col">
+        <button class="btn btn-success w-100">Add</button>
       </div>
     </div>
   </form>
 </div>
 
-<!-- ✅ List All Materials -->
-{% for stock in stocks %}
+{% for s in stocks %}
 <div class="card p-3 mb-3 shadow-sm">
-  <div class="d-flex justify-content-between align-items-center">
-    <div>
-      <h5>
-        {{ stock.name }}
-        <small class="text-muted">({{ stock.unit or 'unit' }})</small>
-      </h5>
-      <p class="mb-0">{{ stock.description or '' }}</p>
-    </div>
-    <div>
-      <form
-        method="POST"
-        action="{{ url_for('update_stock', stock_id=stock.id) }}"
-        class="d-inline"
-      >
-        <input type="hidden" name="action" value="decrease" />
-        <button class="btn btn-outline-danger">➖</button>
-      </form>
-      <span class="mx-2">{{ stock.quantity }}</span>
-      <form
-        method="POST"
-        action="{{ url_for('update_stock', stock_id=stock.id) }}"
-        class="d-inline"
-      >
-        <input type="hidden" name="action" value="increase" />
-        <button class="btn btn-outline-success">➕</button>
-      </form>
-    </div>
-  </div>
+  <h5>
+    {{ s.name }}
+    <span
+      class="badge {% if 'Panel' in s.name and s.quantity < 2 %}bg-danger {% else %}bg-secondary{% endif %}"
+    >
+      {{ s.quantity }} {{ s.unit }}
+    </span>
+
+    {% if 'Panel' in s.name and s.quantity < 2 %}
+    <span class="text-danger fw-bold ms-2">⚠️ Low Stock!</span>
+    {% endif %}
+  </h5>
+
+  <p class="text-muted">{{ s.description }}</p>
+  <form
+    method="POST"
+    action="{{ url_for('update_stock', stock_id=s.id) }}"
+    class="d-inline"
+  >
+    <input type="hidden" name="action" value="increase" />
+    <button class="btn btn-sm btn-outline-success">+1</button>
+  </form>
+  <form
+    method="POST"
+    action="{{ url_for('update_stock', stock_id=s.id) }}"
+    class="d-inline"
+  >
+    <input type="hidden" name="action" value="decrease" />
+    <button class="btn btn-sm btn-outline-warning">-1</button>
+  </form>
+  <form
+    method="POST"
+    action="{{ url_for('delete_stock', stock_id=s.id) }}"
+    class="d-inline float-end"
+  >
+    <button class="btn btn-sm btn-outline-danger">🗑️ Delete</button>
+  </form>
 </div>
-{% else %}
-<p class="text-muted text-center">No stock items yet. Add one above!</p>
 {% endfor %} {% endblock %}
