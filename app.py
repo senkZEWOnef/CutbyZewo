@@ -23,19 +23,22 @@ os.makedirs("static/sheets", exist_ok=True)
 os.makedirs("static/uploads", exist_ok=True)
 
 
-@app.before_first_request
-def create_default_user():
+@app.before_request
+def create_default_user_once():
     db = SessionLocal()
-    if not db.query(User).filter_by(email="ralph.ulysse509@gmail.com").first():
+    existing = db.query(User).filter(User.email == "ralph.ulysse509@gmail.com").first()
+    if not existing:
         from werkzeug.security import generate_password_hash
-        user = User(
+        admin = User(
             username="ralph",
             email="ralph.ulysse509@gmail.com",
             hashed_password=generate_password_hash("Poesie509$$$")
         )
-        db.add(user)
+        db.add(admin)
         db.commit()
+        print("✅ Admin user created.")
     db.close()
+
 
 
 # ✅ Session helper
