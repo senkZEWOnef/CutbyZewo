@@ -116,6 +116,18 @@ content %}
   {% endif %}
 </div>
 
+<a
+  href="{{ url_for('export_pdf', job_id=job.id) }}"
+  class="btn btn-outline-dark mb-2"
+  >📄 Export as PDF</a
+>
+<a
+  href="{{ url_for('download_job_pdf', job_id=job.id) }}"
+  class="btn btn-outline-dark mb-2"
+>
+  🧾 Download PDF
+</a>
+
 <!-- ✅ Cut Sheets -->
 <div class="card p-4 shadow mb-4">
   <h4>Cut Sheets</h4>
