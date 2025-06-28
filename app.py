@@ -79,7 +79,7 @@ def login():
 
         if user and check_password_hash(user.hashed_password, password):
             session["user_id"] = user.id
-            return redirect(url_for("dashboard"))
+            return redirect(url_for("view_jobs"))
         else:
             flash("Invalid email or password.")
     return render_template("login.html")
