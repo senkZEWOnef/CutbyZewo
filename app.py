@@ -23,21 +23,6 @@ os.makedirs("static/sheets", exist_ok=True)
 os.makedirs("static/uploads", exist_ok=True)
 
 
-@app.before_request
-def create_default_user_once():
-    db = SessionLocal()
-    existing = db.query(User).filter(User.email == "ralph.ulysse509@gmail.com").first()
-    if not existing:
-        from werkzeug.security import generate_password_hash
-        admin = User(
-            username="ralph",
-            email="ralph.ulysse509@gmail.com",
-            hashed_password=generate_password_hash("Poesie509$$$")
-        )
-        db.add(admin)
-        db.commit()
-        print("✅ Admin user created.")
-    db.close()
 
 
 
@@ -98,7 +83,7 @@ def login():
 
         if user and check_password_hash(user.hashed_password, password):
             session["user_id"] = user.id
-            return redirect(url_for("view_jobs"))
+            return redirect(url_for("jobs"))
         else:
             flash("Invalid email or password.")
     return render_template("login.html")
