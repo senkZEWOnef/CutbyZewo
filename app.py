@@ -22,6 +22,22 @@ app.secret_key = "Poesie509$$$"
 os.makedirs("static/sheets", exist_ok=True)
 os.makedirs("static/uploads", exist_ok=True)
 
+
+@app.before_first_request
+def create_default_user():
+    db = SessionLocal()
+    if not db.query(User).filter_by(email="ralph.ulysse509@gmail.com").first():
+        from werkzeug.security import generate_password_hash
+        user = User(
+            username="ralph",
+            email="ralph.ulysse509@gmail.com",
+            hashed_password=generate_password_hash("Poesie509$$$")
+        )
+        db.add(user)
+        db.commit()
+    db.close()
+
+
 # ✅ Session helper
 def current_user():
     uid = session.get("user_id")
