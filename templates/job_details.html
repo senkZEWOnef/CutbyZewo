@@ -1,6 +1,5 @@
 {% extends "base.html" %} {% block title %}Job Details{% endblock %} {% block
 content %}
-
 <h1 class="mb-4 text-center">📀 Job Details</h1>
 
 <!-- ✅ Job Info & Actions -->
@@ -107,7 +106,7 @@ content %}
     {% for part in parts %}
     <li class="list-group-item">
       <strong>Part #{{ loop.index }}:</strong> {{ part.width }} x {{ part.height
-      }} inches — <em>{{ part.thickness }} panel</em>
+      }} inches — <em>{{ part.material }} panel</em>
     </li>
     {% endfor %}
   </ul>
@@ -116,6 +115,7 @@ content %}
   {% endif %}
 </div>
 
+<!-- ✅ PDF Buttons -->
 <a
   href="{{ url_for('export_pdf', job_id=job.id) }}"
   class="btn btn-outline-dark mb-2"
@@ -124,9 +124,8 @@ content %}
 <a
   href="{{ url_for('download_job_pdf', job_id=job.id) }}"
   class="btn btn-outline-dark mb-2"
+  >🧾 Download PDF</a
 >
-  🧾 Download PDF
-</a>
 
 <!-- ✅ Cut Sheets -->
 <div class="card p-4 shadow mb-4">
@@ -185,7 +184,8 @@ content %}
     >
       ${{ "%.2f"|format(est.amount) }}
       <small class="text-muted"
-        >{{ est.created_at.strftime('%Y-%m-%d %H:%M') }}</small
+        >{{ est.created_at[:16].replace("T", " ") if est.created_at else "N/A"
+        }}</small
       >
     </li>
     {% endfor %}
@@ -195,5 +195,5 @@ content %}
   {% endif %}
 </div>
 
-<!-- ✅ Modal and Script come last -->
+<!-- ✅ Estimate Modal -->
 {% include "partials/estimate_modal.html" %} {% endblock %}

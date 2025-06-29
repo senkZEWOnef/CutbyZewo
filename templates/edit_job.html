@@ -22,7 +22,7 @@ content %}
         type="date"
         name="soft_deadline"
         class="form-control"
-        value="{{ job.soft_deadline.strftime('%Y-%m-%d') if job.soft_deadline else '' }}"
+        value="{% if job.soft_deadline %}{{ job.soft_deadline.strftime('%Y-%m-%d') if job.soft_deadline.__class__.__name__ == 'datetime' else job.soft_deadline.split('T')[0] }}{% endif %}"
       />
     </div>
     <div class="col">
@@ -31,7 +31,7 @@ content %}
         type="date"
         name="hard_deadline"
         class="form-control"
-        value="{{ job.hard_deadline.strftime('%Y-%m-%d') if job.hard_deadline else '' }}"
+        value="{% if job.hard_deadline %}{{ job.hard_deadline.strftime('%Y-%m-%d') if job.hard_deadline.__class__.__name__ == 'datetime' else job.hard_deadline.split('T')[0] }}{% endif %}"
       />
     </div>
   </div>
@@ -41,7 +41,7 @@ content %}
     <input type="file" name="job_files" multiple class="form-control" />
   </div>
 
-  <h5 class="mt-4">➕ Add Parts</h5>
+  <h5 class="mt-4">➕ Add New Parts (optional)</h5>
   <div id="parts-list">
     <div class="row mb-2">
       <div class="col">
@@ -73,7 +73,8 @@ content %}
         />
       </div>
       <div class="col">
-        <select name="thicknesses" class="form-select" required>
+        <select name="thicknesses" class="form-select">
+          <option value="">Thickness</option>
           <option value="3/4">3/4</option>
           <option value="1/2">1/2</option>
           <option value="1/4">1/4</option>
@@ -109,7 +110,8 @@ content %}
         <input type="number" step="1" name="quantities" value="1" class="form-control" placeholder="Quantity">
       </div>
       <div class="col">
-        <select name="thicknesses" class="form-select" required>
+        <select name="thicknesses" class="form-select">
+          <option value="">Thickness</option>
           <option value="3/4">3/4</option>
           <option value="1/2">1/2</option>
           <option value="1/4">1/4</option>
