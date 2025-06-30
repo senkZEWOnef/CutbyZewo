@@ -23,4 +23,6 @@ typing_extensions==4.14.0
 Werkzeug==3.1.3
 Pillow
 python-dotenv
+supabase-py
+
 
