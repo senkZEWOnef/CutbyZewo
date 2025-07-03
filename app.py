@@ -142,6 +142,7 @@ def index():
         return redirect(url_for("login"))
 
     user_id = session["user_id"]
+    access_token = request.cookies.get("access_token")  # 🔑 Needed for RLS
 
     if request.method == "POST":
         client_name = request.form.get("client_name")
@@ -167,13 +168,13 @@ def index():
         output_dir = f"static/sheets/{job_uuid}"
         os.makedirs(output_dir, exist_ok=True)
 
-        # ✅ Insert job into Supabase
+        # ✅ Insert job into Supabase with auth
         try:
             job_resp = supabase.table("jobs").insert({
                 "id": job_uuid,
                 "client_name": client_name,
                 "user_id": user_id
-            }).execute()
+            }).with_auth(access_token).execute()
         except Exception as e:
             print("Supabase job insert error:", e)
             flash("Job creation failed. Try again.", "danger")
@@ -193,7 +194,7 @@ def index():
                 rel = f"sheets/{job_uuid}/{t}/sheet_{i+1}.png"
                 sheet_images.append((rel, t))
 
-            # ✅ Upload all parts
+            # ✅ Upload all parts with auth
             supabase.table("parts").insert([
                 {
                     "job_id": job_uuid,
@@ -202,17 +203,17 @@ def index():
                     "material": t
                 }
                 for w, h in parts
-            ]).execute()
+            ]).with_auth(access_token).execute()
 
-        # ✅ Save deadline if provided (serialize datetime!)
+        # ✅ Save deadlines with auth
         if soft_deadline or hard_deadline:
             supabase.table("deadlines").insert({
                 "job_id": job_uuid,
                 "soft_deadline": soft_deadline.isoformat() if soft_deadline else None,
                 "hard_deadline": hard_deadline.isoformat() if hard_deadline else None
-            }).execute()
+            }).with_auth(access_token).execute()
 
-        # ✅ Upload any job files
+        # ✅ Upload job files (local only, not Supabase Storage yet)
         upload_dir = f"static/uploads/{job_uuid}"
         os.makedirs(upload_dir, exist_ok=True)
         if 'job_files' in request.files:
@@ -232,6 +233,7 @@ def index():
 
 
 
+
 @app.route("/dashboard")
 def dashboard():
     return redirect(url_for("jobs"))  # Or your preferred default
@@ -243,8 +245,17 @@ def jobs():
         return redirect(url_for("login"))
 
     user_id = session["user_id"]
+    access_token = request.cookies.get("access_token")  # 🔑 Needed for RLS
+
     try:
-        jobs_resp = supabase.table("jobs").select("*").eq("user_id", user_id).execute()
+        jobs_resp = (
+            supabase
+            .table("jobs")
+            .select("*")
+            .eq("user_id", user_id)
+            .with_auth(access_token)  # 🔒 Pass token for RLS
+            .execute()
+        )
         job_data = jobs_resp.data or []
 
         # ✅ Convert 'created_at' to datetime objects
@@ -267,29 +278,38 @@ def jobs():
 
 
 
-# ✅ JOB DETAILS ROUTE
+
 @app.route("/jobs/<uuid:job_id>", methods=["GET", "POST"])
 def job_details(job_id):
     user = current_user()
     if not user:
         return redirect(url_for("login"))
 
+    access_token = request.cookies.get("access_token")
+
     # ✅ Fetch job
-    job_res = supabase.table("jobs").select("*").eq("id", str(job_id)).single().execute()
+    job_res = (
+        supabase
+        .table("jobs")
+        .select("*")
+        .eq("id", str(job_id))
+        .single()
+        .with_auth(access_token)
+        .execute()
+    )
     job = job_res.data
     if not job:
         return "Job not found", 404
 
     from datetime import datetime
 
-    # ✅ Convert job.created_at to datetime
     if isinstance(job.get("created_at"), str):
         try:
             job["created_at"] = datetime.fromisoformat(job["created_at"].replace("Z", "+00:00"))
         except Exception as e:
             print("⚠️ created_at parse error:", e)
 
-    # ✅ Handle POST (deadlines)
+    # ✅ Handle POST (save deadlines)
     if request.method == "POST":
         soft_deadline = request.form.get("soft_deadline")
         hard_deadline = request.form.get("hard_deadline")
@@ -304,16 +324,24 @@ def job_details(job_id):
             supabase.table("deadlines").upsert({
                 "job_id": str(job_id),
                 **update_data
-            }).execute()
+            }).with_auth(access_token).execute()
+
             flash("Deadlines updated.", "success")
             return redirect(url_for("job_details", job_id=job_id))
 
-    # ✅ Fetch deadlines safely (avoid crash if multiple rows)
-    deadlines_res = supabase.table("deadlines").select("*").eq("job_id", str(job_id)).limit(1).execute()
+    # ✅ Fetch deadlines (limit 1 to avoid crash)
+    deadlines_res = (
+        supabase
+        .table("deadlines")
+        .select("*")
+        .eq("job_id", str(job_id))
+        .limit(1)
+        .with_auth(access_token)
+        .execute()
+    )
     deadlines_list = deadlines_res.data or []
     deadlines = deadlines_list[0] if deadlines_list else {}
 
-    # ✅ Inject deadlines into job dict for template access
     job["soft_deadline"] = deadlines.get("soft_deadline")
     job["hard_deadline"] = deadlines.get("hard_deadline")
 
@@ -325,11 +353,26 @@ def job_details(job_id):
                 pass
 
     # ✅ Fetch parts
-    parts_res = supabase.table("parts").select("*").eq("job_id", str(job_id)).execute()
+    parts_res = (
+        supabase
+        .table("parts")
+        .select("*")
+        .eq("job_id", str(job_id))
+        .with_auth(access_token)
+        .execute()
+    )
     parts = parts_res.data or []
 
     # ✅ Fetch estimates
-    estimates_res = supabase.table("estimates").select("*").eq("job_id", str(job_id)).order("created_at", desc=True).execute()
+    estimates_res = (
+        supabase
+        .table("estimates")
+        .select("*")
+        .eq("job_id", str(job_id))
+        .order("created_at", desc=True)
+        .with_auth(access_token)
+        .execute()
+    )
     estimates = estimates_res.data or []
 
     # ✅ Sheet Images
@@ -374,15 +417,25 @@ def job_details(job_id):
 
 
 
-# ✅ EDIT JOB
-@app.route("/jobs/<uuid:job_id>/edit", methods=["GET", "POST"])
+
+#@app.route("/jobs/<uuid:job_id>/edit", methods=["GET", "POST"])
 def edit_job(job_id):
     user = current_user()
     if not user:
         return redirect(url_for("login"))
 
+    access_token = request.cookies.get("access_token")
+
     # ✅ Fetch job
-    job_res = supabase.table("jobs").select("*").eq("id", str(job_id)).single().execute()
+    job_res = (
+        supabase
+        .table("jobs")
+        .select("*")
+        .eq("id", str(job_id))
+        .single()
+        .with_auth(access_token)
+        .execute()
+    )
     job = job_res.data
     if not job:
         return "Job not found", 404
@@ -395,7 +448,14 @@ def edit_job(job_id):
 
         # ✅ Update job table
         update_data = {"client_name": client_name}
-        supabase.table("jobs").update(update_data).eq("id", str(job_id)).execute()
+        (
+            supabase
+            .table("jobs")
+            .update(update_data)
+            .eq("id", str(job_id))
+            .with_auth(access_token)
+            .execute()
+        )
 
         # ✅ Upsert deadline table
         if soft_deadline or hard_deadline:
@@ -404,7 +464,13 @@ def edit_job(job_id):
                 deadline_data["soft_deadline"] = soft_deadline
             if hard_deadline:
                 deadline_data["hard_deadline"] = hard_deadline
-            supabase.table("deadlines").upsert(deadline_data).execute()
+            (
+                supabase
+                .table("deadlines")
+                .upsert(deadline_data)
+                .with_auth(access_token)
+                .execute()
+            )
 
         # ✅ Handle file upload
         upload_dir = f"static/uploads/{job_id}"
@@ -428,7 +494,14 @@ def edit_job(job_id):
                 new_parts_by_thickness.setdefault(t, []).extend([(float(w), float(h))] * int(q))
 
         # ✅ Fetch existing parts
-        parts_res = supabase.table("parts").select("width, height, material").eq("job_id", str(job_id)).execute()
+        parts_res = (
+            supabase
+            .table("parts")
+            .select("width, height, material")
+            .eq("job_id", str(job_id))
+            .with_auth(access_token)
+            .execute()
+        )
         existing_parts = parts_res.data or []
 
         combined_parts = existing_parts[:]
@@ -438,18 +511,23 @@ def edit_job(job_id):
 
         # ✅ Insert new parts
         if new_parts_by_thickness:
-            supabase.table("parts").insert([
-                {"job_id": str(job_id), "width": w, "height": h, "material": t}
-                for t, partlist in new_parts_by_thickness.items()
-                for (w, h) in partlist
-            ]).execute()
+            (
+                supabase
+                .table("parts")
+                .insert([
+                    {"job_id": str(job_id), "width": w, "height": h, "material": t}
+                    for t, partlist in new_parts_by_thickness.items()
+                    for (w, h) in partlist
+                ])
+                .with_auth(access_token)
+                .execute()
+            )
 
         # ✅ Regenerate cut sheets
         panel_width = 96
         panel_height = 48
         output_dir = f"static/sheets/{job_id}"
 
-        # Clear existing sheet folders to prevent stale images
         for t in ["3/4", "1/2", "1/4"]:
             subfolder = os.path.join(output_dir, t)
             if os.path.exists(subfolder):
@@ -483,18 +561,25 @@ def edit_job(job_id):
 
 
 
-
-
-
-# ✅ DELETE JOB (Supabase)
 @app.route("/jobs/<uuid:job_id>/delete", methods=["POST"])
 def delete_job(job_id):
     user = current_user()
     if not user:
         return redirect(url_for("login"))
 
-    # ✅ Step 1: Fetch the job to confirm it's owned by the user
-    job_res = supabase.table("jobs").select("*").eq("id", str(job_id)).eq("user_id", user["id"]).single().execute()
+    access_token = request.cookies.get("access_token")
+
+    # ✅ Step 1: Fetch the job to confirm ownership
+    job_res = (
+        supabase
+        .table("jobs")
+        .select("*")
+        .eq("id", str(job_id))
+        .eq("user_id", user["id"])
+        .single()
+        .with_auth(access_token)
+        .execute()
+    )
     job = job_res.data
 
     if job:
@@ -507,8 +592,15 @@ def delete_job(job_id):
         if os.path.exists(upload_dir):
             shutil.rmtree(upload_dir)
 
-        # ✅ Step 4: Delete job in Supabase (cascade removes parts, deadlines, etc.)
-        supabase.table("jobs").delete().eq("id", str(job_id)).execute()
+        # ✅ Step 4: Delete from Supabase
+        (
+            supabase
+            .table("jobs")
+            .delete()
+            .eq("id", str(job_id))
+            .with_auth(access_token)
+            .execute()
+        )
 
         flash("Job deleted successfully.")
     else:
@@ -517,25 +609,43 @@ def delete_job(job_id):
     return redirect(url_for("jobs"))
 
 
-# ✅ SET FINAL PRICE (Supabase)
 @app.route("/jobs/<uuid:job_id>/set_price", methods=["POST"])
 def set_price(job_id):
     user = current_user()
     if not user:
         return redirect(url_for("login"))
 
+    access_token = request.cookies.get("access_token")
     new_price = request.form.get("final_price")
 
-    # ✅ Step 1: Make sure this job belongs to the current user
-    job_res = supabase.table("jobs").select("id").eq("id", str(job_id)).eq("user_id", user["id"]).single().execute()
+    # ✅ Step 1: Verify ownership of the job
+    job_res = (
+        supabase
+        .table("jobs")
+        .select("id")
+        .eq("id", str(job_id))
+        .eq("user_id", user["id"])
+        .single()
+        .with_auth(access_token)
+        .execute()
+    )
+
     if job_res.data:
         # ✅ Step 2: Update the price
-        supabase.table("jobs").update({"final_price": new_price}).eq("id", str(job_id)).execute()
+        (
+            supabase
+            .table("jobs")
+            .update({"final_price": new_price})
+            .eq("id", str(job_id))
+            .with_auth(access_token)
+            .execute()
+        )
         flash("Final price updated.")
     else:
         flash("Unauthorized or job not found.", "danger")
 
     return redirect(url_for("job_details", job_id=job_id))
+
 
 
 @app.route("/jobs/<uuid:job_id>/save_estimate", methods=["POST"])
@@ -544,25 +654,40 @@ def save_estimate(job_id):
     if not user:
         return redirect(url_for("login"))
 
+    access_token = request.cookies.get("access_token")
     amount = request.form.get("amount")
     if not amount:
         flash("No amount provided for the estimate.")
         return redirect(url_for("job_details", job_id=job_id))
 
     try:
-        # Check if job exists and belongs to user
-        job_res = supabase.table("jobs").select("id", "user_id").eq("id", str(job_id)).single().execute()
+        # ✅ Step 1: Check if job belongs to user (with auth)
+        job_res = (
+            supabase
+            .table("jobs")
+            .select("id", "user_id")
+            .eq("id", str(job_id))
+            .single()
+            .with_auth(access_token)
+            .execute()
+        )
         job = job_res.data
 
         if not job or job["user_id"] != user["id"]:
             flash("Job not found or unauthorized access.")
             return redirect(url_for("job_details", job_id=job_id))
 
-        # Save estimate
-        supabase.table("estimates").insert({
-            "job_id": str(job_id),
-            "amount": float(amount)
-        }).execute()
+        # ✅ Step 2: Save estimate (with auth)
+        (
+            supabase
+            .table("estimates")
+            .insert({
+                "job_id": str(job_id),
+                "amount": float(amount)
+            })
+            .with_auth(access_token)
+            .execute()
+        )
 
         flash("Estimate saved successfully.")
     except Exception as e:
@@ -570,17 +695,33 @@ def save_estimate(job_id):
 
     return redirect(url_for("job_details", job_id=job_id))
 
+
 @app.route("/stocks")
 def view_stocks():
     user_id = session.get("user_id")
-    if not user_id:
+    access_token = request.cookies.get("access_token")
+
+    if not user_id or not access_token:
         return redirect(url_for("login"))
 
-    # ✅ Fetch all stocks (shared across users)
-    response = supabase.table("stocks").select("*").order("created_at", desc=True).execute()
-    stocks = response.data if response.data else []
+    try:
+        # ✅ Fetch stocks with RLS compliance
+        response = (
+            supabase
+            .table("stocks")
+            .select("*")
+            .order("created_at", desc=True)
+            .with_auth(access_token)
+            .execute()
+        )
+        stocks = response.data if response.data else []
+    except Exception as e:
+        print("Error loading stocks:", e)
+        stocks = []
+        flash("Failed to load stock inventory.", "danger")
 
     return render_template("stocks.html", stocks=stocks, user={"id": user_id})
+
 
 
 @app.route("/stocks/add", methods=["POST"])
@@ -613,14 +754,29 @@ def add_stock():
 @app.route("/stocks/<stock_id>/update", methods=["POST"])
 def update_stock(stock_id):
     user_id = session.get("user_id")
-    if not user_id:
+    access_token = request.cookies.get("access_token")
+
+    if not user_id or not access_token:
         return redirect(url_for("login"))
 
     action = request.form.get("action")
 
-    # ✅ Fetch current quantity
-    response = supabase.table("stocks").select("quantity").eq("id", stock_id).single().execute()
-    data = response.data
+    try:
+        # ✅ Fetch current quantity securely
+        response = (
+            supabase
+            .table("stocks")
+            .select("quantity")
+            .eq("id", stock_id)
+            .single()
+            .with_auth(access_token)
+            .execute()
+        )
+        data = response.data
+    except Exception as e:
+        print("Error fetching stock:", e)
+        flash("Stock update failed.", "danger")
+        return redirect(url_for("view_stocks"))
 
     if data:
         current_qty = data["quantity"] or 0
@@ -629,84 +785,49 @@ def update_stock(stock_id):
         elif action == "decrease":
             new_qty = max(0, current_qty - 1)
         else:
-            new_qty = current_qty  # Unknown action fallback
+            new_qty = current_qty  # Fallback
 
-        # ✅ Update
-        supabase.table("stocks").update({"quantity": new_qty}).eq("id", stock_id).execute()
+        try:
+            # ✅ Update quantity with auth
+            supabase.table("stocks").update({"quantity": new_qty}).eq("id", stock_id).with_auth(access_token).execute()
+        except Exception as e:
+            print("Error updating stock:", e)
+            flash("Stock update failed.", "danger")
 
     return redirect(url_for("view_stocks"))
+
 
 
 @app.route("/stocks/<uuid:stock_id>/delete", methods=["POST"])
 def delete_stock(stock_id):
     user = current_user()
-    if not user:
+    access_token = request.cookies.get("access_token")
+
+    if not user or not access_token:
         return redirect(url_for("login"))
 
-    response = supabase.table("stocks").delete().eq("id", str(stock_id)).execute()
+    try:
+        response = (
+            supabase
+            .table("stocks")
+            .delete()
+            .eq("id", str(stock_id))
+            .with_auth(access_token)
+            .execute()
+        )
 
-    if response.data:  # deletion successful
-        flash("Stock deleted successfully.", "success")
-    else:
-        flash("Failed to delete stock. It may not exist.", "danger")
+        if response.data:
+            flash("Stock deleted successfully.", "success")
+        else:
+            flash("Failed to delete stock. It may not exist.", "danger")
+
+    except Exception as e:
+        print("Stock delete error:", e)
+        flash("Error deleting stock.", "danger")
 
     return redirect(url_for("view_stocks"))
 
 
-
-@app.route("/jobs/<uuid:job_id>/export_pdf")
-def export_pdf(job_id):
-    user = current_user()
-    if not user:
-        return redirect(url_for("login"))
-
-    # ✅ Fetch job data
-    job_res = supabase.table("jobs").select("*").eq("id", str(job_id)).single().execute()
-    job = job_res.data
-    if not job:
-        return "Job not found", 404
-
-    parts_res = supabase.table("parts").select("*").eq("job_id", str(job_id)).execute()
-    parts = parts_res.data or []
-
-    # ✅ Generate PDF
-    output_path = f"static/pdfs/{job_id}.pdf"
-    os.makedirs("static/pdfs", exist_ok=True)
-
-    c = canvas.Canvas(output_path, pagesize=letter)
-    width, height = letter
-    y = height - inch
-
-    c.setFont("Helvetica-Bold", 16)
-    c.drawString(inch, y, "Cut Planner Summary")
-    y -= inch
-
-    c.setFont("Helvetica", 12)
-    c.drawString(inch, y, f"Client: {job.get('client_name', 'N/A')}")
-    y -= 20
-    c.drawString(inch, y, f"Final Price: ${job.get('final_price', 'N/A')}")
-    y -= 20
-    c.drawString(inch, y, f"Soft Deadline: {job.get('soft_deadline', 'N/A')}")
-    y -= 20
-    c.drawString(inch, y, f"Hard Deadline: {job.get('hard_deadline', 'N/A')}")
-    y -= 30
-
-    c.setFont("Helvetica-Bold", 14)
-    c.drawString(inch, y, "Parts List")
-    y -= 20
-
-    c.setFont("Helvetica", 12)
-    for i, part in enumerate(parts):
-        line = f"{i+1}. {part['width']} x {part['height']} inches — {part['material']} panel"
-        c.drawString(inch, y, line)
-        y -= 15
-        if y < 100:
-            c.showPage()
-            y = height - inch
-
-    c.save()
-
-    return send_file(output_path, as_attachment=True)
 
 
 @app.route("/jobs/<uuid:job_id>/download", methods=["GET"])
@@ -715,10 +836,14 @@ def download_job_pdf(job_id):
     if not user:
         return redirect(url_for("login"))
 
+    access_token = request.cookies.get("access_token")
+    if not access_token:
+        return redirect(url_for("login"))
+
     # ✅ Fetch job data
-    job_res = supabase.table("jobs").select("*").eq("id", str(job_id)).single().execute()
-    parts_res = supabase.table("parts").select("*").eq("job_id", str(job_id)).execute()
-    estimates_res = supabase.table("estimates").select("*").eq("job_id", str(job_id)).order("created_at", desc=True).execute()
+    job_res = supabase.table("jobs").select("*").eq("id", str(job_id)).single().with_auth(access_token).execute()
+    parts_res = supabase.table("parts").select("*").eq("job_id", str(job_id)).with_auth(access_token).execute()
+    estimates_res = supabase.table("estimates").select("*").eq("job_id", str(job_id)).order("created_at", desc=True).with_auth(access_token).execute()
 
     job = job_res.data
     parts = parts_res.data or []
@@ -727,58 +852,94 @@ def download_job_pdf(job_id):
     if not job:
         return "Job not found", 404
 
+    # Format timestamps
+    def fmt(dt):
+        try:
+            return datetime.fromisoformat(dt.replace("Z", "+00:00")).strftime("%b %d, %Y")
+        except:
+            return dt
+
     buffer = BytesIO()
     pdf = canvas.Canvas(buffer, pagesize=letter)
     width, height = letter
-    y = height - 50
+    y = height - inch
+    page_number = 1
+
+    def draw_header(title="Job Report"):
+        nonlocal y
+        pdf.setFont("Helvetica-Bold", 16)
+        pdf.drawString(inch, y, f"📄 {title}")
+        y -= 30
 
     def draw_line(text, offset=20, bold=False):
         nonlocal y
+        if y < 100:
+            pdf.drawString(inch, 40, f"Page {page_number}")
+            pdf.showPage()
+            y = height - inch
+            draw_header()
         pdf.setFont("Helvetica-Bold" if bold else "Helvetica", 12)
-        pdf.drawString(50, y, text)
+        pdf.drawString(inch, y, text)
         y -= offset
 
-    draw_line(f"📄 Job Report — {job['client_name']}", bold=True)
-    draw_line(f"Job ID: {job['id']}")
-    draw_line(f"Created At: {job.get('created_at', '')}")
+    # ✅ Header
+    draw_header()
+    draw_line(f"Client: {job.get('client_name', 'N/A')}", bold=True)
+    draw_line(f"Job ID: {job.get('id')}")
+    draw_line(f"Created At: {fmt(job.get('created_at', ''))}")
     draw_line(f"Final Price: ${job.get('final_price', 'N/A')}")
-    draw_line(f"Soft Deadline: {job.get('soft_deadline', 'N/A')}")
-    draw_line(f"Hard Deadline: {job.get('hard_deadline', 'N/A')}")
+    draw_line(f"Soft Deadline: {fmt(job.get('soft_deadline', 'N/A'))}")
+    draw_line(f"Hard Deadline: {fmt(job.get('hard_deadline', 'N/A'))}")
     draw_line("")
 
+    # ✅ Parts grouped
     draw_line("Cut Parts:", bold=True)
     if parts:
+        grouped = {}
         for p in parts:
-            draw_line(f"- {p['width']} x {p['height']} inches ({p['material']})")
+            t = p["material"]
+            grouped.setdefault(t, []).append(p)
+
+        for material, group in grouped.items():
+            draw_line(f"{material} Panel — {len(group)} parts")
+            for p in group:
+                draw_line(f"  • {p['width']} x {p['height']} in")
     else:
         draw_line("No parts found.")
-
     draw_line("")
 
+    # ✅ Estimates
     draw_line("Past Estimates:", bold=True)
     if estimates:
         for e in estimates:
-            draw_line(f"- ${e['amount']} on {e['created_at']}")
+            draw_line(f"• ${e['amount']} on {fmt(e['created_at'])}")
     else:
         draw_line("No estimates found.")
+    draw_line("")
 
-    pdf.showPage()
-
-    # ✅ Cut Sheet Images
+    # ✅ Sheet Images
     sheet_path = os.path.join("static", "sheets", str(job_id))
     if os.path.exists(sheet_path):
         for img_path in glob.glob(f"{sheet_path}/**/*.png", recursive=True):
             try:
                 img = Image.open(img_path)
                 img_width, img_height = img.size
-                ratio = min(width / img_width, height / img_height)
-                resized_w = img_width * ratio * 0.9
-                resized_h = img_height * ratio * 0.9
+                ratio = min(width / img_width, height / img_height) * 0.9
+                resized_w = img_width * ratio
+                resized_h = img_height * ratio
+
+                if resized_h > height - 100:
+                    resized_h = height - 100
+                    resized_w = resized_h * (img_width / img_height)
 
                 pdf.drawImage(img_path, x=30, y=height - resized_h - 40, width=resized_w, height=resized_h)
+                pdf.drawString(inch, 40, f"Page {page_number}")
+                page_number += 1
                 pdf.showPage()
+                y = height - inch
+                draw_header("Sheet Images")
             except Exception as e:
-                print(f"Error loading sheet image: {img_path}, {e}")
+                print(f"Error loading image: {img_path}, {e}")
 
     # ✅ Uploaded Files
     upload_path = os.path.join("static", "uploads", str(job_id))
@@ -787,15 +948,25 @@ def download_job_pdf(job_id):
             try:
                 img = Image.open(img_path)
                 img_width, img_height = img.size
-                ratio = min(width / img_width, height / img_height)
-                resized_w = img_width * ratio * 0.9
-                resized_h = img_height * ratio * 0.9
+                ratio = min(width / img_width, height / img_height) * 0.9
+                resized_w = img_width * ratio
+                resized_h = img_height * ratio
+
+                if resized_h > height - 100:
+                    resized_h = height - 100
+                    resized_w = resized_h * (img_width / img_height)
 
                 pdf.drawImage(img_path, x=30, y=height - resized_h - 40, width=resized_w, height=resized_h)
+                pdf.drawString(inch, 40, f"Page {page_number}")
+                page_number += 1
                 pdf.showPage()
+                y = height - inch
+                draw_header("Uploaded Files")
             except Exception as e:
-                print(f"Error loading uploaded file: {img_path}, {e}")
+                print(f"Error loading uploaded image: {img_path}, {e}")
 
+    # ✅ Finalize
+    pdf.drawString(inch, 40, f"Page {page_number}")
     pdf.save()
     buffer.seek(0)
 
