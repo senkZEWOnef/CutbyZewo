@@ -59,7 +59,7 @@ def signup():
         password = request.form.get("password")
         username = request.form.get("username")
 
-        # Create user in Supabase Auth
+        # Step 1: Create user in Supabase Auth
         auth_res = supabase.auth.sign_up({
             "email": email,
             "password": password
@@ -67,14 +67,19 @@ def signup():
 
         if auth_res.user:
             user_id = auth_res.user.id
+            access_token = auth_res.session.access_token if auth_res.session else None
 
-            # Save additional info (like username) in your 'users' table
-            supabase.table("users").insert({
-                "id": user_id,
-                "email": email,
-                "username": username
-            }).execute()
+            # Step 2: Insert into `users` table with auth
+            if access_token:
+                supabase.table("users").insert({
+                    "id": user_id,
+                    "email": email,
+                    "username": username
+                }).with_auth(access_token).execute()
+            else:
+                print("Warning: No access token, skipping DB insert.")
 
+            # Step 3: Set session and redirect
             session["user_id"] = user_id
             return redirect(url_for("index"))
         else:
@@ -84,19 +89,18 @@ def signup():
 
 
 
-
-
 @app.route("/login", methods=["GET", "POST"])
 def login():
     if request.method == "POST":
         email = request.form.get("email")
         password = request.form.get("password")
+
         try:
             result = supabase.auth.sign_in_with_password({
                 "email": email,
                 "password": password
             })
-            session_obj = result.session  # rename to avoid shadowing Flask's session
+            session_obj = result.session
 
             if not session_obj:
                 flash("Login failed. Please check your credentials.", "danger")
@@ -104,35 +108,21 @@ def login():
 
             access_token = session_obj.access_token
             user_info = supabase.auth.get_user(access_token)
-            user_id = user_info.user
+            user_id = user_info.user.id
 
-            if user_id:
-                user_id = user_id.id
-
-                # ✅ Save user in DB if not already present
-                existing = supabase.table("users").select("id").eq("id", user_id).execute()
-                if not existing.data:
-                    supabase.table("users").insert({
-                        "id": user_id,
-                        "email": email
-                    }).execute()
-
-                # ✅ Save user_id to Flask session
-                session["user_id"] = user_id
-
-                # ✅ Save token and redirect
-                response = make_response(redirect(url_for("index")))
-                response.set_cookie("access_token", access_token)
-                return response
-            else:
-                flash("Login succeeded but user info not retrieved.", "danger")
-                return redirect(url_for("login"))
+            # ✅ Store session info only — no insert
+            session["user_id"] = user_id
+            response = make_response(redirect(url_for("index")))
+            response.set_cookie("access_token", access_token)
+            return response
 
         except Exception as e:
             print("Login error:", e)
             flash("Invalid credentials or Supabase error.", "danger")
             return redirect(url_for("login"))
+
     return render_template("login.html")
+
 
 
 
