@@ -75,7 +75,7 @@ def signup():
                     "id": user_id,
                     "email": email,
                     "username": username
-                }).with_auth(access_token).execute()
+                }).execute()
             else:
                 print("Warning: No access token, skipping DB insert.")
 
@@ -174,7 +174,7 @@ def index():
                 "id": job_uuid,
                 "client_name": client_name,
                 "user_id": user_id
-            }).with_auth(access_token).execute()
+            }).execute()
         except Exception as e:
             print("Supabase job insert error:", e)
             flash("Job creation failed. Try again.", "danger")
@@ -203,7 +203,7 @@ def index():
                     "material": t
                 }
                 for w, h in parts
-            ]).with_auth(access_token).execute()
+            ]).execute()
 
         # ✅ Save deadlines with auth
         if soft_deadline or hard_deadline:
@@ -211,7 +211,7 @@ def index():
                 "job_id": job_uuid,
                 "soft_deadline": soft_deadline.isoformat() if soft_deadline else None,
                 "hard_deadline": hard_deadline.isoformat() if hard_deadline else None
-            }).with_auth(access_token).execute()
+            }).execute()
 
         # ✅ Upload job files (local only, not Supabase Storage yet)
         upload_dir = f"static/uploads/{job_uuid}"
@@ -253,7 +253,6 @@ def jobs():
             .table("jobs")
             .select("*")
             .eq("user_id", user_id)
-            .with_auth(access_token)  # 🔒 Pass token for RLS
             .execute()
         )
         job_data = jobs_resp.data or []
@@ -294,7 +293,6 @@ def job_details(job_id):
         .select("*")
         .eq("id", str(job_id))
         .single()
-        .with_auth(access_token)
         .execute()
     )
     job = job_res.data
@@ -324,7 +322,7 @@ def job_details(job_id):
             supabase.table("deadlines").upsert({
                 "job_id": str(job_id),
                 **update_data
-            }).with_auth(access_token).execute()
+            }).execute()
 
             flash("Deadlines updated.", "success")
             return redirect(url_for("job_details", job_id=job_id))
@@ -336,7 +334,6 @@ def job_details(job_id):
         .select("*")
         .eq("job_id", str(job_id))
         .limit(1)
-        .with_auth(access_token)
         .execute()
     )
     deadlines_list = deadlines_res.data or []
@@ -358,7 +355,6 @@ def job_details(job_id):
         .table("parts")
         .select("*")
         .eq("job_id", str(job_id))
-        .with_auth(access_token)
         .execute()
     )
     parts = parts_res.data or []
@@ -370,7 +366,6 @@ def job_details(job_id):
         .select("*")
         .eq("job_id", str(job_id))
         .order("created_at", desc=True)
-        .with_auth(access_token)
         .execute()
     )
     estimates = estimates_res.data or []
@@ -433,7 +428,6 @@ def edit_job(job_id):
         .select("*")
         .eq("id", str(job_id))
         .single()
-        .with_auth(access_token)
         .execute()
     )
     job = job_res.data
@@ -453,7 +447,6 @@ def edit_job(job_id):
             .table("jobs")
             .update(update_data)
             .eq("id", str(job_id))
-            .with_auth(access_token)
             .execute()
         )
 
@@ -468,7 +461,6 @@ def edit_job(job_id):
                 supabase
                 .table("deadlines")
                 .upsert(deadline_data)
-                .with_auth(access_token)
                 .execute()
             )
 
@@ -499,7 +491,6 @@ def edit_job(job_id):
             .table("parts")
             .select("width, height, material")
             .eq("job_id", str(job_id))
-            .with_auth(access_token)
             .execute()
         )
         existing_parts = parts_res.data or []
@@ -519,7 +510,6 @@ def edit_job(job_id):
                     for t, partlist in new_parts_by_thickness.items()
                     for (w, h) in partlist
                 ])
-                .with_auth(access_token)
                 .execute()
             )
 
@@ -577,7 +567,6 @@ def delete_job(job_id):
         .eq("id", str(job_id))
         .eq("user_id", user["id"])
         .single()
-        .with_auth(access_token)
         .execute()
     )
     job = job_res.data
@@ -598,7 +587,6 @@ def delete_job(job_id):
             .table("jobs")
             .delete()
             .eq("id", str(job_id))
-            .with_auth(access_token)
             .execute()
         )
 
@@ -626,7 +614,6 @@ def set_price(job_id):
         .eq("id", str(job_id))
         .eq("user_id", user["id"])
         .single()
-        .with_auth(access_token)
         .execute()
     )
 
@@ -637,7 +624,6 @@ def set_price(job_id):
             .table("jobs")
             .update({"final_price": new_price})
             .eq("id", str(job_id))
-            .with_auth(access_token)
             .execute()
         )
         flash("Final price updated.")
@@ -668,7 +654,6 @@ def save_estimate(job_id):
             .select("id", "user_id")
             .eq("id", str(job_id))
             .single()
-            .with_auth(access_token)
             .execute()
         )
         job = job_res.data
@@ -685,7 +670,6 @@ def save_estimate(job_id):
                 "job_id": str(job_id),
                 "amount": float(amount)
             })
-            .with_auth(access_token)
             .execute()
         )
 
@@ -711,7 +695,6 @@ def view_stocks():
             .table("stocks")
             .select("*")
             .order("created_at", desc=True)
-            .with_auth(access_token)
             .execute()
         )
         stocks = response.data if response.data else []
@@ -769,7 +752,6 @@ def update_stock(stock_id):
             .select("quantity")
             .eq("id", stock_id)
             .single()
-            .with_auth(access_token)
             .execute()
         )
         data = response.data
@@ -789,7 +771,7 @@ def update_stock(stock_id):
 
         try:
             # ✅ Update quantity with auth
-            supabase.table("stocks").update({"quantity": new_qty}).eq("id", stock_id).with_auth(access_token).execute()
+            supabase.table("stocks").update({"quantity": new_qty}).eq("id", stock_id).execute()
         except Exception as e:
             print("Error updating stock:", e)
             flash("Stock update failed.", "danger")
@@ -812,7 +794,6 @@ def delete_stock(stock_id):
             .table("stocks")
             .delete()
             .eq("id", str(stock_id))
-            .with_auth(access_token)
             .execute()
         )
 
@@ -841,9 +822,9 @@ def download_job_pdf(job_id):
         return redirect(url_for("login"))
 
     # ✅ Fetch job data
-    job_res = supabase.table("jobs").select("*").eq("id", str(job_id)).single().with_auth(access_token).execute()
-    parts_res = supabase.table("parts").select("*").eq("job_id", str(job_id)).with_auth(access_token).execute()
-    estimates_res = supabase.table("estimates").select("*").eq("job_id", str(job_id)).order("created_at", desc=True).with_auth(access_token).execute()
+    job_res = supabase.table("jobs").select("*").eq("id", str(job_id)).single().execute()
+    parts_res = supabase.table("parts").select("*").eq("job_id", str(job_id)).execute()
+    estimates_res = supabase.table("estimates").select("*").eq("job_id", str(job_id)).order("created_at", desc=True).execute()
 
     job = job_res.data
     parts = parts_res.data or []
