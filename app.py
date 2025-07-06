@@ -106,7 +106,7 @@ def login():
 
             # ✅ Store session info only — no insert
             session["user_id"] = user_id
-            response = make_response(redirect(url_for("")))
+            response = make_response(redirect(url_for("home")))
             response.set_cookie("access_token", access_token)
             return response
 
