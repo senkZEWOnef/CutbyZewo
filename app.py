@@ -106,7 +106,7 @@ def login():
 
             # ✅ Store session info only — no insert
             session["user_id"] = user_id
-            response = make_response(redirect(url_for("index")))
+            response = make_response(redirect(url_for("")))
             response.set_cookie("access_token", access_token)
             return response
 
@@ -272,7 +272,7 @@ def jobs():
     except Exception as e:
         print("Error loading jobs:", e)
         flash("Could not load jobs.")
-        return redirect(url_for("index"))
+        return redirect(url_for("home"))
 
 
 
