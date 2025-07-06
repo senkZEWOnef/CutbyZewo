@@ -4,20 +4,24 @@ block content %}
   <h1 class="display-4 mb-3">Cabinet Cut Planner</h1>
   <h4 class="text-muted mb-5">by Zewo</h4>
   <div class="d-grid gap-3 col-md-4 mx-auto">
-    <a href="{{ url_for('create_job') }}" class="btn btn-dark btn-lg"
-      >➕ Create Job</a
-    >
+    <a href="{{ url_for('create_job') }}" class="btn btn-dark btn-lg">
+      ➕ Create Job
+    </a>
+    <a href="{{ url_for('jobs') }}" class="btn btn-outline-warning btn-lg">
+      📁 Saved Jobs
+    </a>
     <a
       href="{{ url_for('view_stocks') }}"
       class="btn btn-outline-primary btn-lg"
-      >📦 View Stocks</a
     >
-    <a href="{{ url_for('login') }}" class="btn btn-outline-secondary btn-lg"
-      >🔐 Log In</a
-    >
-    <a href="{{ url_for('signup') }}" class="btn btn-outline-success btn-lg"
-      >✍️ Sign Up</a
-    >
+      📦 View Stocks
+    </a>
+    <a href="{{ url_for('login') }}" class="btn btn-outline-secondary btn-lg">
+      🔐 Log In
+    </a>
+    <a href="{{ url_for('signup') }}" class="btn btn-outline-success btn-lg">
+      ✍️ Sign Up
+    </a>
   </div>
 </div>
 {% endblock %}
