@@ -1,37 +1,27 @@
 # ✅ Imports
-from flask import Flask, render_template, request, redirect, url_for, flash, session
-import os, uuid, shutil
-from datetime import datetime
+from flask import Flask, render_template, request, redirect, url_for, flash, session, send_file, make_response
 from werkzeug.utils import secure_filename
-from supabase_client import supabase
+from datetime import datetime
+import os, uuid, shutil, glob
+from io import BytesIO
+from PIL import Image
 
-from supabase import create_client, Client
-
-from flask import send_file
 from reportlab.pdfgen import canvas
 from reportlab.lib.pagesizes import letter
 from reportlab.lib.units import inch
-from reportlab.platypus import Image
-from io import BytesIO
-from PIL import Image
-import glob
-from flask import make_response
 
-
-
-
-
-# ✅ Optimization
+from supabase import create_client, Client
 from planner import optimize_cuts
 from visualizer import draw_sheets_to_files
 
 # ✅ Supabase Init
 SUPABASE_URL = os.environ.get("SUPABASE_URL")
 SUPABASE_KEY = os.environ.get("SUPABASE_KEY")
-supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
+supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 
+# ✅ Flask Init
 app = Flask(__name__)
-app.secret_key = "Poesie509$$$"
+app.secret_key = "Poesie509$$$"  # Consider moving to environment variable for production
 
 # ✅ Ensure folders exist
 os.makedirs("static/sheets", exist_ok=True)
@@ -52,6 +42,7 @@ def current_user():
     return users[0]
 
 
+#Signup route
 @app.route("/signup", methods=["GET", "POST"])
 def signup():
     if request.method == "POST":
@@ -87,8 +78,7 @@ def signup():
 
     return render_template("signup.html")
 
-
-
+#Login route
 @app.route("/login", methods=["GET", "POST"])
 def login():
     if request.method == "POST":
@@ -107,7 +97,11 @@ def login():
                 return redirect(url_for("login"))
 
             access_token = session_obj.access_token
-            user_info = supabase.auth.get_user(access_token)
+            refresh_token = session_obj.refresh_token
+
+            # ✅ Set session in Supabase client to access user
+            supabase.auth.set_session(access_token, refresh_token)
+            user_info = supabase.auth.get_user()
             user_id = user_info.user.id
 
             # ✅ Store session info only — no insert
@@ -125,9 +119,7 @@ def login():
 
 
 
-
-
-
+#Logout route
 @app.route("/logout")
 def logout():
     # If you want to clear Supabase session server-side later, you can store it in session and call sign_out here.
@@ -135,14 +127,17 @@ def logout():
     flash("Logged out.")
     return redirect(url_for("login"))
 
+@app.route("/", methods=["GET"])
+def home():
+    return render_template("landing.html")
 
-@app.route("/", methods=["GET", "POST"])
-def index():
+
+@app.route("/create-job", methods=["GET", "POST"])
+def create_job():
     if "user_id" not in session:
         return redirect(url_for("login"))
 
     user_id = session["user_id"]
-    access_token = request.cookies.get("access_token")  # 🔑 Needed for RLS
 
     if request.method == "POST":
         client_name = request.form.get("client_name")
@@ -168,9 +163,8 @@ def index():
         output_dir = f"static/sheets/{job_uuid}"
         os.makedirs(output_dir, exist_ok=True)
 
-        # ✅ Insert job into Supabase with auth
         try:
-            job_resp = supabase.table("jobs").insert({
+            supabase.table("jobs").insert({
                 "id": job_uuid,
                 "client_name": client_name,
                 "user_id": user_id
@@ -178,11 +172,9 @@ def index():
         except Exception as e:
             print("Supabase job insert error:", e)
             flash("Job creation failed. Try again.", "danger")
-            return redirect(url_for("index"))
+            return redirect(url_for("create_job"))
 
-        # ✅ Continue with optimization
         sheet_images = []
-
         for t, parts in parts_by_thickness.items():
             subfolder = os.path.join(output_dir, t)
             os.makedirs(subfolder, exist_ok=True)
@@ -194,26 +186,31 @@ def index():
                 rel = f"sheets/{job_uuid}/{t}/sheet_{i+1}.png"
                 sheet_images.append((rel, t))
 
-            # ✅ Upload all parts with auth
-            supabase.table("parts").insert([
-                {
-                    "job_id": job_uuid,
-                    "width": w,
-                    "height": h,
-                    "material": t
-                }
-                for w, h in parts
-            ]).execute()
+            try:
+                supabase.table("parts").insert([
+                    {
+                        "job_id": job_uuid,
+                        "width": w,
+                        "height": h,
+                        "material": t
+                    }
+                    for w, h in parts
+                ]).execute()
+            except Exception as e:
+                print("Parts insert error:", e)
+                flash("Failed to insert parts.", "warning")
 
-        # ✅ Save deadlines with auth
         if soft_deadline or hard_deadline:
-            supabase.table("deadlines").insert({
-                "job_id": job_uuid,
-                "soft_deadline": soft_deadline.isoformat() if soft_deadline else None,
-                "hard_deadline": hard_deadline.isoformat() if hard_deadline else None
-            }).execute()
+            try:
+                supabase.table("deadlines").insert({
+                    "job_id": job_uuid,
+                    "soft_deadline": soft_deadline.isoformat() if soft_deadline else None,
+                    "hard_deadline": hard_deadline.isoformat() if hard_deadline else None
+                }).execute()
+            except Exception as e:
+                print("Deadline insert error:", e)
+                flash("Failed to save deadlines.", "warning")
 
-        # ✅ Upload job files (local only, not Supabase Storage yet)
         upload_dir = f"static/uploads/{job_uuid}"
         os.makedirs(upload_dir, exist_ok=True)
         if 'job_files' in request.files:
@@ -234,9 +231,14 @@ def index():
 
 
 
+#Dashboard route
 @app.route("/dashboard")
 def dashboard():
     return redirect(url_for("jobs"))  # Or your preferred default
+
+
+
+
 
 
 @app.route("/jobs")
@@ -271,10 +273,6 @@ def jobs():
         print("Error loading jobs:", e)
         flash("Could not load jobs.")
         return redirect(url_for("index"))
-
-
-
-
 
 
 
@@ -327,7 +325,7 @@ def job_details(job_id):
             flash("Deadlines updated.", "success")
             return redirect(url_for("job_details", job_id=job_id))
 
-    # ✅ Fetch deadlines (limit 1 to avoid crash)
+    # ✅ Fetch deadlines
     deadlines_res = (
         supabase
         .table("deadlines")
@@ -411,9 +409,7 @@ def job_details(job_id):
 
 
 
-
-
-#@app.route("/jobs/<uuid:job_id>/edit", methods=["GET", "POST"])
+@app.route("/jobs/<uuid:job_id>/edit", methods=["GET", "POST"])
 def edit_job(job_id):
     user = current_user()
     if not user:
@@ -550,7 +546,7 @@ def edit_job(job_id):
 
 
 
-
+#Delete Job
 @app.route("/jobs/<uuid:job_id>/delete", methods=["POST"])
 def delete_job(job_id):
     user = current_user()
@@ -597,6 +593,10 @@ def delete_job(job_id):
     return redirect(url_for("jobs"))
 
 
+
+
+
+#Set price route
 @app.route("/jobs/<uuid:job_id>/set_price", methods=["POST"])
 def set_price(job_id):
     user = current_user()
@@ -634,6 +634,7 @@ def set_price(job_id):
 
 
 
+#Save Estimate route
 @app.route("/jobs/<uuid:job_id>/save_estimate", methods=["POST"])
 def save_estimate(job_id):
     user = current_user()
@@ -680,6 +681,8 @@ def save_estimate(job_id):
     return redirect(url_for("job_details", job_id=job_id))
 
 
+
+#View stocks route
 @app.route("/stocks")
 def view_stocks():
     user_id = session.get("user_id")
@@ -707,10 +710,13 @@ def view_stocks():
 
 
 
+#Add stock route
 @app.route("/stocks/add", methods=["POST"])
 def add_stock():
     user_id = session.get("user_id")
-    if not user_id:
+    access_token = request.cookies.get("access_token")
+
+    if not user_id or not access_token:
         return redirect(url_for("login"))
 
     name = request.form.get("name")
@@ -720,7 +726,7 @@ def add_stock():
     code = request.form.get("code") or None
     color = request.form.get("color") or None
 
-    # ✅ Insert into Supabase
+    # ✅ Insert with auth for RLS
     supabase.table("stocks").insert({
         "name": name,
         "category": category,
@@ -734,6 +740,8 @@ def add_stock():
     return redirect(url_for("view_stocks"))
 
 
+
+#Update Stock route
 @app.route("/stocks/<stock_id>/update", methods=["POST"])
 def update_stock(stock_id):
     user_id = session.get("user_id")
@@ -771,7 +779,13 @@ def update_stock(stock_id):
 
         try:
             # ✅ Update quantity with auth
-            supabase.table("stocks").update({"quantity": new_qty}).eq("id", stock_id).execute()
+            (
+                supabase
+                .table("stocks")
+                .update({"quantity": new_qty})
+                .eq("id", stock_id)
+                .execute()
+            )
         except Exception as e:
             print("Error updating stock:", e)
             flash("Stock update failed.", "danger")
@@ -779,7 +793,7 @@ def update_stock(stock_id):
     return redirect(url_for("view_stocks"))
 
 
-
+#Deletre stock route
 @app.route("/stocks/<uuid:stock_id>/delete", methods=["POST"])
 def delete_stock(stock_id):
     user = current_user()
@@ -809,8 +823,7 @@ def delete_stock(stock_id):
     return redirect(url_for("view_stocks"))
 
 
-
-
+#pdf routeßß
 @app.route("/jobs/<uuid:job_id>/download", methods=["GET"])
 def download_job_pdf(job_id):
     user = current_user()
@@ -821,10 +834,27 @@ def download_job_pdf(job_id):
     if not access_token:
         return redirect(url_for("login"))
 
-    # ✅ Fetch job data
-    job_res = supabase.table("jobs").select("*").eq("id", str(job_id)).single().execute()
-    parts_res = supabase.table("parts").select("*").eq("job_id", str(job_id)).execute()
-    estimates_res = supabase.table("estimates").select("*").eq("job_id", str(job_id)).order("created_at", desc=True).execute()
+    # ✅ Fetch job data (with RLS)
+    job_res = (
+        supabase.table("jobs")
+        .select("*")
+        .eq("id", str(job_id))
+        .single()
+        .execute()
+    )
+    parts_res = (
+        supabase.table("parts")
+        .select("*")
+        .eq("job_id", str(job_id))
+        .execute()
+    )
+    estimates_res = (
+        supabase.table("estimates")
+        .select("*")
+        .eq("job_id", str(job_id))
+        .order("created_at", desc=True)
+        .execute()
+    )
 
     job = job_res.data
     parts = parts_res.data or []
@@ -833,7 +863,6 @@ def download_job_pdf(job_id):
     if not job:
         return "Job not found", 404
 
-    # Format timestamps
     def fmt(dt):
         try:
             return datetime.fromisoformat(dt.replace("Z", "+00:00")).strftime("%b %d, %Y")
@@ -873,14 +902,13 @@ def download_job_pdf(job_id):
     draw_line(f"Hard Deadline: {fmt(job.get('hard_deadline', 'N/A'))}")
     draw_line("")
 
-    # ✅ Parts grouped
+    # ✅ Parts
     draw_line("Cut Parts:", bold=True)
     if parts:
         grouped = {}
         for p in parts:
             t = p["material"]
             grouped.setdefault(t, []).append(p)
-
         for material, group in grouped.items():
             draw_line(f"{material} Panel — {len(group)} parts")
             for p in group:
@@ -946,16 +974,11 @@ def download_job_pdf(job_id):
             except Exception as e:
                 print(f"Error loading uploaded image: {img_path}, {e}")
 
-    # ✅ Finalize
     pdf.drawString(inch, 40, f"Page {page_number}")
     pdf.save()
     buffer.seek(0)
 
     return send_file(buffer, as_attachment=True, download_name=f"job_{job_id}.pdf", mimetype='application/pdf')
-
-
-
-
 
 
 if __name__ == "__main__":

@@ -117,10 +117,12 @@ content %}
 
 <!-- ✅ PDF Buttons -->
 <a
-  href="{{ url_for('export_pdf', job_id=job.id) }}"
+  href="{{ url_for('download_job_pdf', job_id=job.id) }}"
   class="btn btn-outline-dark mb-2"
-  >📄 Export as PDF</a
 >
+  📄 Export as PDF
+</a>
+
 <a
   href="{{ url_for('download_job_pdf', job_id=job.id) }}"
   class="btn btn-outline-dark mb-2"
