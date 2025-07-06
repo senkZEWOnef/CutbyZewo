@@ -19,6 +19,7 @@ SUPABASE_URL = os.environ.get("SUPABASE_URL")
 SUPABASE_KEY = os.environ.get("SUPABASE_KEY")
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 
+
 # ✅ Flask Init
 app = Flask(__name__)
 app.secret_key = "Poesie509$$$"  # Consider moving to environment variable for production
@@ -139,6 +140,8 @@ def create_job():
         return redirect(url_for("login"))
 
     user_id = session["user_id"]
+    access_token = request.cookies.get("access_token")
+    
 
     if request.method == "POST":
         client_name = request.form.get("client_name")
@@ -163,9 +166,10 @@ def create_job():
         job_uuid = str(uuid.uuid4())
         output_dir = f"static/sheets/{job_uuid}"
         os.makedirs(output_dir, exist_ok=True)
+        
 
         try:
-            supabase.table("jobs").insert({
+            supabase.postgrest.auth(access_token).table("jobs").insert({
                 "id": job_uuid,
                 "client_name": client_name,
                 "user_id": user_id
@@ -174,6 +178,7 @@ def create_job():
             print("Supabase job insert error:", e)
             flash("Job creation failed. Try again.", "danger")
             return redirect(url_for("create_job"))
+        
 
         sheet_images = []
         for t, parts in parts_by_thickness.items():
