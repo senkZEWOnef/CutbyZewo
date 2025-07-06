@@ -72,7 +72,7 @@ def signup():
 
             # Step 3: Set session and redirect
             session["user_id"] = user_id
-            return redirect(url_for("index"))
+            return redirect(url_for("home"))
         else:
             return "Signup failed"
 
