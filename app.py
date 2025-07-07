@@ -42,8 +42,15 @@ def current_user():
 
     return users[0]
 
+#Supabase authentication
+def get_authenticated_supabase():
+    access_token = request.cookies.get("access_token")
+    if not access_token:
+        flash("Session expired. Please log in again.", "warning")
+        return None
+    return supabase.postgrest.auth(access_token)
 
-#Signup route
+
 @app.route("/signup", methods=["GET", "POST"])
 def signup():
     if request.method == "POST":
@@ -51,35 +58,46 @@ def signup():
         password = request.form.get("password")
         username = request.form.get("username")
 
-        # Step 1: Create user in Supabase Auth
-        auth_res = supabase.auth.sign_up({
-            "email": email,
-            "password": password
-        })
+        try:
+            # Step 1: Sign up with Supabase Auth
+            auth_res = supabase.auth.sign_up({
+                "email": email,
+                "password": password
+            })
 
-        if auth_res.user:
+            if auth_res.user is None:
+                flash("Signup failed. No user returned.", "danger")
+                return redirect(url_for("signup"))
+
             user_id = auth_res.user.id
             access_token = auth_res.session.access_token if auth_res.session else None
 
-            # Step 2: Insert into `users` table with auth
-            if access_token:
-                supabase.table("users").insert({
-                    "id": user_id,
-                    "email": email,
-                    "username": username
-                }).execute()
-            else:
-                print("Warning: No access token, skipping DB insert.")
+            if not access_token:
+                flash("Signup succeeded but session is missing. Please log in.", "warning")
+                return redirect(url_for("login"))
 
-            # Step 3: Set session and redirect
+            # Step 2: Insert user into users table using auth
+            supa_auth = get_authenticated_supabase(access_token)
+            supa_auth.table("users").insert({
+                "id": user_id,
+                "email": email,
+                "username": username
+            }).execute()
+
+            # Step 3: Store session and cookie
             session["user_id"] = user_id
-            return redirect(url_for("home"))
-        else:
-            return "Signup failed"
+            response = make_response(redirect(url_for("home")))
+            response.set_cookie("access_token", access_token)
+            return response
+
+        except Exception as e:
+            print("Signup error:", e)
+            flash("An error occurred during signup. Please try again.", "danger")
+            return redirect(url_for("signup"))
 
     return render_template("signup.html")
 
-#Login route
+
 @app.route("/login", methods=["GET", "POST"])
 def login():
     if request.method == "POST":
@@ -91,25 +109,25 @@ def login():
                 "email": email,
                 "password": password
             })
-            session_obj = result.session
 
+
+            session_obj = result.session
             if not session_obj:
                 flash("Login failed. Please check your credentials.", "danger")
                 return redirect(url_for("login"))
 
             access_token = session_obj.access_token
-            refresh_token = session_obj.refresh_token
+            user_id = result.user.id if result.user else None
 
-            # ✅ Set session in Supabase client to access user
-            supabase.auth.set_session(access_token, refresh_token)
-            user_info = supabase.auth.get_user()
-            user_id = user_info.user.id
+            if not user_id:
+                flash("Login succeeded but user data is missing.", "warning")
+                return redirect(url_for("login"))
 
-            # ✅ Store session info only — no insert
+            # ✅ Store user_id in session and set access token cookie
             session["user_id"] = user_id
             response = make_response(redirect(url_for("home")))
             response.set_cookie("access_token", access_token)
-        
+
             return response
 
         except Exception as e:
@@ -119,29 +137,43 @@ def login():
 
     return render_template("login.html")
 
-
-
-#Logout route
 @app.route("/logout")
+
 def logout():
-    # If you want to clear Supabase session server-side later, you can store it in session and call sign_out here.
     session.pop("user_id", None)
+    
+    # Remove token cookie
+    response = make_response(redirect(url_for("login")))
+    response.set_cookie("access_token", "", expires=0)
+    
     flash("Logged out.")
-    return redirect(url_for("login"))
+    return response
+
 
 @app.route("/", methods=["GET"])
 def home():
+    access_token = request.cookies.get("access_token")
+    
+    if "user_id" in session and access_token:
+        # User is logged in, can choose to redirect or show custom content
+        return render_template("landing.html")  # or redirect(url_for("jobs"))
+
     return render_template("landing.html")
+
 
 
 @app.route("/create-job", methods=["GET", "POST"])
 def create_job():
     if "user_id" not in session:
+        flash("Please log in to create a job.", "warning")
         return redirect(url_for("login"))
 
     user_id = session["user_id"]
     access_token = request.cookies.get("access_token")
-    
+
+    if not access_token:
+        flash("Session expired. Please log in again.", "danger")
+        return redirect(url_for("logout"))
 
     if request.method == "POST":
         client_name = request.form.get("client_name")
@@ -166,7 +198,6 @@ def create_job():
         job_uuid = str(uuid.uuid4())
         output_dir = f"static/sheets/{job_uuid}"
         os.makedirs(output_dir, exist_ok=True)
-        
 
         try:
             supabase.postgrest.auth(access_token).table("jobs").insert({
@@ -178,7 +209,6 @@ def create_job():
             print("Supabase job insert error:", e)
             flash("Job creation failed. Try again.", "danger")
             return redirect(url_for("create_job"))
-        
 
         sheet_images = []
         for t, parts in parts_by_thickness.items():
@@ -235,17 +265,13 @@ def create_job():
     return render_template("index.html")
 
 
-
-
-#Dashboard route
 @app.route("/dashboard")
 def dashboard():
-    return redirect(url_for("jobs"))  # Or your preferred default
+    if "user_id" not in session:
+        flash("Please log in to view your dashboard.", "warning")
+        return redirect(url_for("login"))
 
-
-
-
-
+    return render_template("dashboard.html")
 
 @app.route("/jobs")
 def jobs():
@@ -253,11 +279,12 @@ def jobs():
         return redirect(url_for("login"))
 
     user_id = session["user_id"]
-    access_token = request.cookies.get("access_token")  # 🔑 Needed for RLS
+    access_token = request.cookies.get("access_token")  # 🔑 Needed for Supabase RLS
 
     try:
         jobs_resp = (
             supabase
+            .postgrest.auth(access_token)
             .table("jobs")
             .select("*")
             .eq("user_id", user_id)
@@ -277,8 +304,8 @@ def jobs():
 
     except Exception as e:
         print("Error loading jobs:", e)
-        flash("Could not load jobs.")
-        return redirect(url_for("home"))
+        flash("Could not load jobs. Please try again later.", "danger")
+        return redirect(url_for("dashboard"))
 
 
 
@@ -289,10 +316,11 @@ def job_details(job_id):
         return redirect(url_for("login"))
 
     access_token = request.cookies.get("access_token")
+    authed = supabase.postgrest.auth(access_token)
 
     # ✅ Fetch job
     job_res = (
-        supabase
+        authed
         .table("jobs")
         .select("*")
         .eq("id", str(job_id))
@@ -302,8 +330,6 @@ def job_details(job_id):
     job = job_res.data
     if not job:
         return "Job not found", 404
-
-    from datetime import datetime
 
     if isinstance(job.get("created_at"), str):
         try:
@@ -323,7 +349,7 @@ def job_details(job_id):
             update_data["hard_deadline"] = hard_deadline
 
         if update_data:
-            supabase.table("deadlines").upsert({
+            authed.table("deadlines").upsert({
                 "job_id": str(job_id),
                 **update_data
             }).execute()
@@ -333,7 +359,7 @@ def job_details(job_id):
 
     # ✅ Fetch deadlines
     deadlines_res = (
-        supabase
+        authed
         .table("deadlines")
         .select("*")
         .eq("job_id", str(job_id))
@@ -355,7 +381,7 @@ def job_details(job_id):
 
     # ✅ Fetch parts
     parts_res = (
-        supabase
+        authed
         .table("parts")
         .select("*")
         .eq("job_id", str(job_id))
@@ -365,7 +391,7 @@ def job_details(job_id):
 
     # ✅ Fetch estimates
     estimates_res = (
-        supabase
+        authed
         .table("estimates")
         .select("*")
         .eq("job_id", str(job_id))
@@ -415,6 +441,7 @@ def job_details(job_id):
 
 
 
+
 @app.route("/jobs/<uuid:job_id>/edit", methods=["GET", "POST"])
 def edit_job(job_id):
     user = current_user()
@@ -423,9 +450,10 @@ def edit_job(job_id):
 
     access_token = request.cookies.get("access_token")
 
-    # ✅ Fetch job
+    # ✅ Fetch job (auth required)
     job_res = (
         supabase
+        .postgrest.auth(access_token)
         .table("jobs")
         .select("*")
         .eq("id", str(job_id))
@@ -436,47 +464,34 @@ def edit_job(job_id):
     if not job:
         return "Job not found", 404
 
-    # ✅ Handle POST (update job)
     if request.method == "POST":
         client_name = request.form.get("client_name")
         soft_deadline = request.form.get("soft_deadline") or None
         hard_deadline = request.form.get("hard_deadline") or None
 
-        # ✅ Update job table
+        # ✅ Update job
         update_data = {"client_name": client_name}
-        (
-            supabase
-            .table("jobs")
-            .update(update_data)
-            .eq("id", str(job_id))
-            .execute()
-        )
+        supabase.postgrest.auth(access_token).table("jobs").update(update_data).eq("id", str(job_id)).execute()
 
-        # ✅ Upsert deadline table
+        # ✅ Upsert deadlines
         if soft_deadline or hard_deadline:
             deadline_data = {"job_id": str(job_id)}
             if soft_deadline:
                 deadline_data["soft_deadline"] = soft_deadline
             if hard_deadline:
                 deadline_data["hard_deadline"] = hard_deadline
-            (
-                supabase
-                .table("deadlines")
-                .upsert(deadline_data)
-                .execute()
-            )
 
-        # ✅ Handle file upload
+            supabase.postgrest.auth(access_token).table("deadlines").upsert(deadline_data).execute()
+
+        # ✅ Handle uploads
         upload_dir = f"static/uploads/{job_id}"
         os.makedirs(upload_dir, exist_ok=True)
         if 'job_files' in request.files:
-            files = request.files.getlist('job_files')
-            for f in files:
+            for f in request.files.getlist('job_files'):
                 if f.filename:
-                    filename = secure_filename(f.filename)
-                    f.save(os.path.join(upload_dir, filename))
+                    f.save(os.path.join(upload_dir, secure_filename(f.filename)))
 
-        # ✅ Handle new parts
+        # ✅ New parts
         widths = request.form.getlist("widths")
         heights = request.form.getlist("heights")
         quantities = request.form.getlist("quantities")
@@ -490,6 +505,7 @@ def edit_job(job_id):
         # ✅ Fetch existing parts
         parts_res = (
             supabase
+            .postgrest.auth(access_token)
             .table("parts")
             .select("width, height, material")
             .eq("job_id", str(job_id))
@@ -504,18 +520,13 @@ def edit_job(job_id):
 
         # ✅ Insert new parts
         if new_parts_by_thickness:
-            (
-                supabase
-                .table("parts")
-                .insert([
-                    {"job_id": str(job_id), "width": w, "height": h, "material": t}
-                    for t, partlist in new_parts_by_thickness.items()
-                    for (w, h) in partlist
-                ])
-                .execute()
-            )
+            supabase.postgrest.auth(access_token).table("parts").insert([
+                {"job_id": str(job_id), "width": w, "height": h, "material": t}
+                for t, plist in new_parts_by_thickness.items()
+                for (w, h) in plist
+            ]).execute()
 
-        # ✅ Regenerate cut sheets
+        # ✅ Regenerate sheets
         panel_width = 96
         panel_height = 48
         output_dir = f"static/sheets/{job_id}"
@@ -539,7 +550,7 @@ def edit_job(job_id):
 
         return redirect(url_for("job_details", job_id=job_id))
 
-    # ✅ Convert datetime
+    # ✅ Parse date
     from datetime import datetime
     for key in ["soft_deadline", "hard_deadline"]:
         if isinstance(job.get(key), str):
@@ -552,7 +563,7 @@ def edit_job(job_id):
 
 
 
-#Delete Job
+
 @app.route("/jobs/<uuid:job_id>/delete", methods=["POST"])
 def delete_job(job_id):
     user = current_user()
@@ -561,9 +572,10 @@ def delete_job(job_id):
 
     access_token = request.cookies.get("access_token")
 
-    # ✅ Step 1: Fetch the job to confirm ownership
+    # ✅ Step 1: Fetch job with access token
     job_res = (
         supabase
+        .postgrest.auth(access_token)
         .table("jobs")
         .select("*")
         .eq("id", str(job_id))
@@ -574,31 +586,27 @@ def delete_job(job_id):
     job = job_res.data
 
     if job:
-        # ✅ Step 2: Delete local image folder
-        if job.get("image_folder") and os.path.exists(job["image_folder"]):
-            shutil.rmtree(job["image_folder"])
+        # ✅ Step 2: Delete local sheet images
+        image_folder = f"static/sheets/{job_id}"
+        if os.path.exists(image_folder):
+            shutil.rmtree(image_folder)
 
         # ✅ Step 3: Delete uploaded files
         upload_dir = f"static/uploads/{job_id}"
         if os.path.exists(upload_dir):
             shutil.rmtree(upload_dir)
 
-        # ✅ Step 4: Delete from Supabase
-        (
-            supabase
-            .table("jobs")
-            .delete()
-            .eq("id", str(job_id))
-            .execute()
-        )
+        # ✅ Step 4: Delete from Supabase (jobs, parts, deadlines, estimates)
+        supabase.postgrest.auth(access_token).table("parts").delete().eq("job_id", str(job_id)).execute()
+        supabase.postgrest.auth(access_token).table("deadlines").delete().eq("job_id", str(job_id)).execute()
+        supabase.postgrest.auth(access_token).table("estimates").delete().eq("job_id", str(job_id)).execute()
+        supabase.postgrest.auth(access_token).table("jobs").delete().eq("id", str(job_id)).execute()
 
         flash("Job deleted successfully.")
     else:
         flash("Job not found or unauthorized.", "danger")
 
     return redirect(url_for("jobs"))
-
-
 
 
 
@@ -612,9 +620,10 @@ def set_price(job_id):
     access_token = request.cookies.get("access_token")
     new_price = request.form.get("final_price")
 
-    # ✅ Step 1: Verify ownership of the job
+    # ✅ Step 1: Verify ownership using RLS-authenticated query
     job_res = (
         supabase
+        .postgrest.auth(access_token)
         .table("jobs")
         .select("id")
         .eq("id", str(job_id))
@@ -624,9 +633,10 @@ def set_price(job_id):
     )
 
     if job_res.data:
-        # ✅ Step 2: Update the price
+        # ✅ Step 2: Update the final_price with token
         (
             supabase
+            .postgrest.auth(access_token)
             .table("jobs")
             .update({"final_price": new_price})
             .eq("id", str(job_id))
@@ -637,6 +647,7 @@ def set_price(job_id):
         flash("Unauthorized or job not found.", "danger")
 
     return redirect(url_for("job_details", job_id=job_id))
+
 
 
 
@@ -654,9 +665,10 @@ def save_estimate(job_id):
         return redirect(url_for("job_details", job_id=job_id))
 
     try:
-        # ✅ Step 1: Check if job belongs to user (with auth)
+        # ✅ Step 1: Check if job belongs to user (with token for RLS)
         job_res = (
             supabase
+            .postgrest.auth(access_token)
             .table("jobs")
             .select("id", "user_id")
             .eq("id", str(job_id))
@@ -672,6 +684,7 @@ def save_estimate(job_id):
         # ✅ Step 2: Save estimate (with auth)
         (
             supabase
+            .postgrest.auth(access_token)
             .table("estimates")
             .insert({
                 "job_id": str(job_id),
@@ -688,9 +701,11 @@ def save_estimate(job_id):
 
 
 
-#View stocks route
-@app.route("/stocks")
+
+#View stocks route@app.route("/stocks")
+@app.route("/stocks", endpoint="view_stocks")
 def view_stocks():
+
     user_id = session.get("user_id")
     access_token = request.cookies.get("access_token")
 
@@ -698,9 +713,10 @@ def view_stocks():
         return redirect(url_for("login"))
 
     try:
-        # ✅ Fetch stocks with RLS compliance
+        # ✅ Fetch stocks with access_token for RLS
         response = (
             supabase
+            .postgrest.auth(access_token)
             .table("stocks")
             .select("*")
             .order("created_at", desc=True)
@@ -713,6 +729,7 @@ def view_stocks():
         flash("Failed to load stock inventory.", "danger")
 
     return render_template("stocks.html", stocks=stocks, user={"id": user_id})
+
 
 
 
@@ -732,18 +749,23 @@ def add_stock():
     code = request.form.get("code") or None
     color = request.form.get("color") or None
 
-    # ✅ Insert with auth for RLS
-    supabase.table("stocks").insert({
-        "name": name,
-        "category": category,
-        "quantity": quantity,
-        "unit": unit,
-        "code": code,
-        "color": color
-    }).execute()
+    try:
+        supabase.postgrest.auth(access_token).table("stocks").insert({
+            "user_id": user_id,  # ✅ Required for RLS
+            "name": name,
+            "category": category,
+            "quantity": quantity,
+            "unit": unit,
+            "code": code,
+            "color": color
+        }).execute()
+        flash("Stock item added.")
+    except Exception as e:
+        print("Error adding stock:", e)
+        flash("Failed to add stock item.", "danger")
 
-    flash("Stock item added.")
     return redirect(url_for("view_stocks"))
+
 
 
 
@@ -759,9 +781,11 @@ def update_stock(stock_id):
     action = request.form.get("action")
 
     try:
-        # ✅ Fetch current quantity securely
+        # ✅ Fetch current quantity securely with auth
         response = (
             supabase
+            .postgrest
+            .auth(access_token)
             .table("stocks")
             .select("quantity")
             .eq("id", stock_id)
@@ -776,27 +800,30 @@ def update_stock(stock_id):
 
     if data:
         current_qty = data["quantity"] or 0
+        new_qty = current_qty
         if action == "increase":
-            new_qty = current_qty + 1
+            new_qty += 1
         elif action == "decrease":
             new_qty = max(0, current_qty - 1)
-        else:
-            new_qty = current_qty  # Fallback
 
         try:
-            # ✅ Update quantity with auth
+            # ✅ Update with auth
             (
                 supabase
+                .postgrest
+                .auth(access_token)
                 .table("stocks")
                 .update({"quantity": new_qty})
                 .eq("id", stock_id)
                 .execute()
             )
+            flash("Stock updated.")
         except Exception as e:
             print("Error updating stock:", e)
             flash("Stock update failed.", "danger")
 
     return redirect(url_for("view_stocks"))
+
 
 
 #Deletre stock route
@@ -811,6 +838,8 @@ def delete_stock(stock_id):
     try:
         response = (
             supabase
+            .postgrest
+            .auth(access_token)
             .table("stocks")
             .delete()
             .eq("id", str(stock_id))
@@ -820,13 +849,14 @@ def delete_stock(stock_id):
         if response.data:
             flash("Stock deleted successfully.", "success")
         else:
-            flash("Failed to delete stock. It may not exist.", "danger")
+            flash("Failed to delete stock. It may not exist or be unauthorized.", "danger")
 
     except Exception as e:
         print("Stock delete error:", e)
         flash("Error deleting stock.", "danger")
 
     return redirect(url_for("view_stocks"))
+
 
 
 #pdf routeßß
@@ -839,23 +869,27 @@ def download_job_pdf(job_id):
     access_token = request.cookies.get("access_token")
     if not access_token:
         return redirect(url_for("login"))
-
-    # ✅ Fetch job data (with RLS)
+    
     job_res = (
-        supabase.table("jobs")
+        supabase.postgrest.auth(access_token)
+        .table("jobs")
         .select("*")
         .eq("id", str(job_id))
         .single()
         .execute()
     )
+
     parts_res = (
-        supabase.table("parts")
+        supabase.postgrest.auth(access_token)
+        .table("parts")
         .select("*")
         .eq("job_id", str(job_id))
         .execute()
     )
+
     estimates_res = (
-        supabase.table("estimates")
+        supabase.postgrest.auth(access_token)
+        .table("estimates")
         .select("*")
         .eq("job_id", str(job_id))
         .order("created_at", desc=True)

@@ -1,0 +1,22 @@
+{% extends "base.html" %} {% block title %}Dashboard{% endblock %} {% block
+content %}
+<div class="container mt-5 text-center">
+  <h1 class="mb-4">Welcome to your Dashboard</h1>
+  <div class="d-grid gap-3 col-md-4 mx-auto">
+    <a href="{{ url_for('jobs') }}" class="btn btn-dark btn-lg"
+      >📁 View My Jobs</a
+    >
+    <a href="{{ url_for('create_job') }}" class="btn btn-outline-success btn-lg"
+      >➕ Create New Job</a
+    >
+    <a
+      href="{{ url_for('view_stocks') }}"
+      class="btn btn-outline-primary btn-lg"
+      >📦 View Stocks</a
+    >
+    <a href="{{ url_for('logout') }}" class="btn btn-outline-danger btn-lg"
+      >🚪 Logout</a
+    >
+  </div>
+</div>
+{% endblock %}
