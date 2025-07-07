@@ -51,6 +51,12 @@ def get_authenticated_supabase():
     return supabase.postgrest.auth(access_token)
 
 
+@app.context_processor
+def inject_user():
+    return {"user": current_user()}
+
+
+
 @app.route("/signup", methods=["GET", "POST"])
 def signup():
     if request.method == "POST":
@@ -719,6 +725,7 @@ def view_stocks():
             .postgrest.auth(access_token)
             .table("stocks")
             .select("*")
+            .eq("user_id", user_id)
             .order("created_at", desc=True)
             .execute()
         )
@@ -728,7 +735,7 @@ def view_stocks():
         stocks = []
         flash("Failed to load stock inventory.", "danger")
 
-    return render_template("stocks.html", stocks=stocks, user={"id": user_id})
+    return render_template("stocks.html", stocks=stocks, user={"id": user_id}, )
 
 
 
@@ -788,6 +795,7 @@ def update_stock(stock_id):
             .auth(access_token)
             .table("stocks")
             .select("quantity")
+            .eq("user_id", user_id) 
             .eq("id", stock_id)
             .single()
             .execute()
