@@ -31,16 +31,27 @@ os.makedirs("static/uploads", exist_ok=True)
 # ✅ Session helper (Supabase-only)
 def current_user():
     uid = session.get("user_id")
-    if not uid:
+    token = request.cookies.get("access_token")
+
+    if not uid or not token:
         return None
 
-    response = supabase.table("users").select("*").eq("id", uid).execute()
-    users = response.data
-
-    if not users:
+    try:
+        response = (
+            supabase
+            .postgrest
+            .auth(token)
+            .table("users")
+            .select("*")
+            .eq("id", uid)
+            .single()
+            .execute()
+        )
+        return response.data
+    except Exception as e:
+        print("JWT likely expired:", e)
         return None
 
-    return users[0]
 
 #Supabase authentication
 def get_authenticated_supabase():
@@ -54,6 +65,7 @@ def get_authenticated_supabase():
 @app.context_processor
 def inject_user():
     return {"user": current_user()}
+
 
 
 
@@ -155,16 +167,53 @@ def logout():
     flash("Logged out.")
     return response
 
-
 @app.route("/", methods=["GET"])
 def home():
     access_token = request.cookies.get("access_token")
-    
-    if "user_id" in session and access_token:
-        # User is logged in, can choose to redirect or show custom content
-        return render_template("landing.html")  # or redirect(url_for("jobs"))
+    user_id = session.get("user_id")
 
-    return render_template("landing.html")
+    jobs = []
+    user = None
+
+    if user_id and access_token:
+        try:
+            # ✅ Load deadlines from deadlines table with job name via join
+            response = (
+                supabase
+                .postgrest.auth(access_token)
+                .table("deadlines")
+                .select("job_id, hard_deadline, jobs(client_name)")
+                .eq("user_id", user_id)
+                .not_("hard_deadline", "is", None)
+                .order("hard_deadline", desc=True)
+                .execute()
+            )
+            jobs = response.data or []
+
+            # ✅ Get user for navbar greeting
+            user_response = (
+                supabase
+                .postgrest.auth(access_token)
+                .table("users")
+                .select("id, username")
+                .eq("id", user_id)
+                .single()
+                .execute()
+            )
+            user = user_response.data
+
+        except Exception as e:
+            if "JWT expired" in str(e):
+                session.pop("user_id", None)
+                flash("Session expired. Please log in again.", "warning")
+            print("Error loading home page:", e)
+
+            print("JOBS FOR CALENDAR:", jobs) 
+
+    jobs = [j for j in jobs if j.get("hard_deadline") and j.get("jobs")]
+
+
+    return render_template("landing.html", jobs=jobs, user=user)
 
 
 
@@ -312,6 +361,13 @@ def jobs():
         print("Error loading jobs:", e)
         flash("Could not load jobs. Please try again later.", "danger")
         return redirect(url_for("dashboard"))
+    
+
+
+@app.route("/help")
+def help():
+    return render_template("help.html")
+
 
 
 
@@ -708,10 +764,8 @@ def save_estimate(job_id):
 
 
 
-#View stocks route@app.route("/stocks")
 @app.route("/stocks", endpoint="view_stocks")
 def view_stocks():
-
     user_id = session.get("user_id")
     access_token = request.cookies.get("access_token")
 
@@ -719,7 +773,6 @@ def view_stocks():
         return redirect(url_for("login"))
 
     try:
-        # ✅ Fetch stocks with access_token for RLS
         response = (
             supabase
             .postgrest.auth(access_token)
@@ -735,7 +788,8 @@ def view_stocks():
         stocks = []
         flash("Failed to load stock inventory.", "danger")
 
-    return render_template("stocks.html", stocks=stocks, user={"id": user_id}, )
+    return render_template("stocks.html", stocks=stocks)
+
 
 
 
