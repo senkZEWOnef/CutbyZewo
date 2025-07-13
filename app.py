@@ -13,6 +13,8 @@ from reportlab.lib.units import inch
 from supabase import create_client, Client
 from planner import optimize_cuts
 from visualizer import draw_sheets_to_files
+from flask import jsonify
+
 
 # ✅ Supabase Init
 SUPABASE_URL = os.environ.get("SUPABASE_URL")
@@ -116,6 +118,42 @@ def signup():
     return render_template("signup.html")
 
 
+@app.route('/api/deadlines')
+def get_deadlines():
+    if "user_id" not in session:
+        return jsonify([])
+
+    user_id = session["user_id"]
+    access_token = request.cookies.get("access_token")
+
+    try:
+        response = (
+            supabase
+            .postgrest.auth(access_token)
+            .table("deadlines")
+            .select("*")
+            .eq("user_id", user_id)
+            .execute()
+        )
+
+        print("JOBS FOR CALENDAR:", response.data)
+
+        deadlines = []
+        for d in response.data:
+            if d.get("hard_deadline"):
+                deadlines.append({
+                    "title": d.get("job_name", "Unnamed Job"),
+                    "start": d.get("hard_deadline")  # ISO format
+                })
+
+        return jsonify(deadlines)
+
+    except Exception as e:
+        print("Error fetching deadlines:", e)
+        return jsonify([])
+
+
+
 @app.route("/login", methods=["GET", "POST"])
 def login():
     if request.method == "POST":
@@ -166,6 +204,76 @@ def logout():
     
     flash("Logged out.")
     return response
+
+
+
+@app.route("/calendar")
+def calendar():
+    if "user_id" not in session:
+        return redirect(url_for("login"))
+
+    user_id = session["user_id"]
+    access_token = request.cookies.get("access_token")
+
+    try:
+        # 🔹 Get this user's jobs (include names!)
+        jobs_resp = (
+            supabase
+            .postgrest.auth(access_token)
+            .table("jobs")
+            .select("id, client_name")
+            .eq("user_id", user_id)
+            .execute()
+        )
+        job_data = jobs_resp.data or []
+        job_ids = [j["id"] for j in job_data]
+
+        # 🔹 Map job_id to client_name
+        job_name_map = {j["id"]: j["client_name"] or "Unnamed Job" for j in job_data}
+
+        # 🔹 Get all deadlines for those jobs
+        deadline_resp = (
+            supabase
+            .postgrest.auth(access_token)
+            .table("deadlines")
+            .select("*")
+            .in_("job_id", job_ids)
+            .execute()
+        )
+        deadlines = deadline_resp.data or []
+
+        # 🔹 Build calendar events
+        events = []
+        for d in deadlines:
+            job_id = d["job_id"]
+            if job_id not in job_ids:
+                continue
+
+            job_name = job_name_map.get(job_id, "Unnamed Job")
+
+            if d.get("soft_deadline"):
+                events.append({
+                    "title": f"🟡 {job_name} (Soft)",
+                    "start": d["soft_deadline"],
+                    "color": "#ffc107",
+                })
+
+            if d.get("hard_deadline"):
+                events.append({
+                    "title": f"🔴 {job_name} (Hard)",
+                    "start": d["hard_deadline"],
+                    "color": "#dc3545",
+                })
+
+        return render_template("calendar.html", calendar_events=events)
+
+    except Exception as e:
+        print("Error loading calendar:", e)
+        flash("Could not load calendar.", "warning")
+        return redirect(url_for("home"))
+
+
+
 
 @app.route("/", methods=["GET"])
 def home():
