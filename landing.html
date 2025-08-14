@@ -2,7 +2,11 @@
 %}
 <h1 class="mb-4">Upcoming Hard Deadlines</h1>
 
-{% if jobs and jobs|length > 0 %}
+{% if 'view_stocks' in current_app.view_functions %}
+<a href="{{ url_for('view_stocks') }}" class="btn btn-outline-info mb-3">
+  📊 View Stocks
+</a>
+{% endif %} {% if jobs and jobs|length > 0 %}
 <ul class="list-group">
   {% for row in jobs %}
   <li class="list-group-item d-flex justify-content-between align-items-center">

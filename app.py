@@ -1062,6 +1062,34 @@ def delete_stock(stock_id):
     return redirect(url_for("view_stocks"))
 
 
+@app.route("/stocks", endpoint="view_stocks")
+def view_stocks():
+    user_id = session.get("user_id")
+    access_token = request.cookies.get("access_token")
+
+    if not user_id or not access_token:
+        return redirect(url_for("login"))
+
+    try:
+        response = (
+            supabase
+            .postgrest.auth(access_token)
+            .table("stocks")
+            .select("*")
+            .eq("user_id", user_id)
+            .order("created_at", desc=True)
+            .execute()
+        )
+        stocks = response.data if response.data else []
+    except Exception as e:
+        print("Error loading stocks:", e)
+        stocks = []
+        flash("Failed to load stock inventory.", "danger")
+
+    return render_template("stocks.html", stocks=stocks)
+
+
+
 
 #pdf routeßß
 @app.route("/jobs/<uuid:job_id>/download", methods=["GET"])
