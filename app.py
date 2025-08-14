@@ -296,9 +296,10 @@ def home():
                 supabase
                 .postgrest.auth(access_token)
                 .table("deadlines")
-                .select("job_id, hard_deadline, jobs(client_name)")
+                .select("job_id, hard_deadline, jobs!deadlines_job_id_fkey(client_name)")
                 .eq("user_id", user_id)
-                .order("hard_deadline")   # asc
+                .not_("hard_deadline", "is", None)
+                .order("hard_deadline", desc=True)
                 .execute()
             )
             all_rows = resp.data or []
