@@ -12,41 +12,56 @@ block content %}
     <a href="{{ url_for('jobs') }}" class="btn btn-outline-warning btn-lg"
       >📁 Saved Jobs</a
     >
+
+    {# Only render if the endpoint exists on this deploy #} {% if
+    has_endpoint('view_stocks') %}
     <a
       href="{{ url_for('view_stocks') }}"
       class="btn btn-outline-primary btn-lg"
       >📦 View Stocks</a
     >
+    {% endif %}
+
     <a href="{{ url_for('calendar') }}" class="btn btn-outline-secondary btn-lg"
       >📅 View Calendar</a
     >
-
     <a href="{{ url_for('help') }}" class="btn btn-outline-info btn-lg"
       >❓ Help & FAQs</a
     >
   </div>
 </div>
 
-{% if jobs %}
+{% if jobs and jobs|length > 0 %}
 <div class="card shadow p-4 mb-5">
   <h3 class="text-center mb-4">📅 Deadline Calendar</h3>
   <div id="calendar"></div>
 </div>
 {% endif %}
 
-<!-- ✅ FullCalendar CSS (goes in <head> of base.html ideally) -->
 <link
   href="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.8/main.min.css"
   rel="stylesheet"
 />
-
-<!-- ✅ FullCalendar JS -->
 <script src="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.8/main.min.js"></script>
 
 <script>
   document.addEventListener("DOMContentLoaded", function () {
     const calendarEl = document.getElementById("calendar");
     if (!calendarEl) return;
+
+    const events = [
+      {% for job in jobs %}
+        {% set name = (job.jobs.client_name if job.jobs is not none else 'Job') %}
+        {% set start = (job.hard_deadline or '')[:10] %}
+        {% if start %}
+        {
+          title: {{ name|tojson }},
+          start: {{ start|tojson }},
+          url: "{{ url_for('job_details', job_id=job.job_id) }}"
+        }{% if not loop.last %},{% endif %}
+        {% endif %}
+      {% endfor %}
+    ];
 
     const calendar = new FullCalendar.Calendar(calendarEl, {
       initialView: "dayGridMonth",
@@ -55,19 +70,7 @@ block content %}
         center: "title",
         right: "dayGridMonth,timeGridWeek,listWeek"
       },
-
-      events: [
-        {% for job in jobs %}
-        {
-          title: "{{ job['jobs']['client_name'] }}",
-          start: "{{ job['hard_deadline'].split('T')[0] }}",
-          url: "{{ url_for('job_details', job_id=job['job_id']) }}"
-        }{% if not loop.last %},{% endif %}
-        {% endfor %}
-      ]
-
-
-
+      events
     });
 
     calendar.render();

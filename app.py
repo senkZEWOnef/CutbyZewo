@@ -291,19 +291,22 @@ def home():
 
     if user_id and access_token:
         try:
-            response = (
+            # Get hard deadlines + joined job names (no tricky .not_() filter)
+            resp = (
                 supabase
                 .postgrest.auth(access_token)
                 .table("deadlines")
                 .select("job_id, hard_deadline, jobs(client_name)")
                 .eq("user_id", user_id)
-                .not_("hard_deadline", "is", None)
-                .order("hard_deadline", desc=True)
+                .order("hard_deadline")   # asc
                 .execute()
             )
-            jobs = response.data or []
+            all_rows = resp.data or []
+            # Filter None in Python (avoids the API edge case)
+            jobs = [r for r in all_rows if r.get("hard_deadline") and r.get("jobs")]
 
-            user_response = (
+            # Get user for navbar greeting
+            user_resp = (
                 supabase
                 .postgrest.auth(access_token)
                 .table("users")
@@ -312,17 +315,17 @@ def home():
                 .single()
                 .execute()
             )
-            user = user_response.data
+            user = user_resp.data
+
         except Exception as e:
+            # If token is expired, clear session; still render page
             if "JWT expired" in str(e):
                 session.pop("user_id", None)
                 flash("Session expired. Please log in again.", "warning")
             print("Error loading home page:", e)
 
-    jobs = [j for j in jobs if j.get("hard_deadline") and j.get("jobs")]
+    return render_template("landing.html", jobs=jobs, user=user)
 
-    has_view_stocks = "view_stocks" in current_app.view_functions
-    return render_template("landing.html", jobs=jobs, user=user, has_view_stocks=has_view_stocks)
 
 
 
@@ -1088,6 +1091,11 @@ def view_stocks():
     return render_template("stocks.html", stocks=stocks)
 
 
+# Makes has_endpoint('route_name') available in templates
+@app.context_processor
+def expose_helpers():
+    # lets Jinja do: {% if has_endpoint('view_stocks') %} ... {% endif %}
+    return {"has_endpoint": lambda name: name in app.view_functions}
 
 
 #pdf routeßß
