@@ -14,6 +14,11 @@ from supabase import create_client, Client
 from planner import optimize_cuts
 from visualizer import draw_sheets_to_files
 from flask import jsonify
+from collections import defaultdict
+from dotenv import load_dotenv
+
+load_dotenv()
+
 
 
 # ✅ Supabase Init
@@ -56,12 +61,13 @@ def current_user():
 
 
 #Supabase authentication
-def get_authenticated_supabase():
-    access_token = request.cookies.get("access_token")
+def get_authenticated_supabase(token: str | None = None):
+    access_token = token or request.cookies.get("access_token")
     if not access_token:
         flash("Session expired. Please log in again.", "warning")
         return None
     return supabase.postgrest.auth(access_token)
+
 
 
 @app.context_processor
@@ -285,21 +291,20 @@ def home():
 
     if user_id and access_token:
         try:
-            # ✅ Load deadlines from deadlines table with job name via join
-            response = (
+            # join deadlines -> jobs and filter by jobs.user_id
+            resp = (
                 supabase
                 .postgrest.auth(access_token)
                 .table("deadlines")
-                .select("job_id, hard_deadline, jobs(client_name)")
-                .eq("user_id", user_id)
+                .select("job_id, hard_deadline, jobs!inner(client_name,user_id)")
+                .eq("jobs.user_id", user_id)
                 .not_("hard_deadline", "is", None)
                 .order("hard_deadline", desc=True)
                 .execute()
             )
-            jobs = response.data or []
+            jobs = resp.data or []
 
-            # ✅ Get user for navbar greeting
-            user_response = (
+            user_resp = (
                 supabase
                 .postgrest.auth(access_token)
                 .table("users")
@@ -308,7 +313,7 @@ def home():
                 .single()
                 .execute()
             )
-            user = user_response.data
+            user = user_resp.data
 
         except Exception as e:
             if "JWT expired" in str(e):
@@ -316,12 +321,10 @@ def home():
                 flash("Session expired. Please log in again.", "warning")
             print("Error loading home page:", e)
 
-            print("JOBS FOR CALENDAR:", jobs) 
-
+    # keep only rows that actually have the joined job (defensive)
     jobs = [j for j in jobs if j.get("hard_deadline") and j.get("jobs")]
-
-
     return render_template("landing.html", jobs=jobs, user=user)
+
 
 
 
@@ -442,26 +445,49 @@ def jobs():
         return redirect(url_for("login"))
 
     user_id = session["user_id"]
-    access_token = request.cookies.get("access_token")  # 🔑 Needed for Supabase RLS
+    access_token = request.cookies.get("access_token")
+    authed = supabase.postgrest.auth(access_token)
 
     try:
+        # Jobs for this user
         jobs_resp = (
-            supabase
-            .postgrest.auth(access_token)
-            .table("jobs")
+            authed.table("jobs")
             .select("*")
             .eq("user_id", user_id)
+            .order("created_at", desc=True)
             .execute()
         )
         job_data = jobs_resp.data or []
+        job_ids = [j["id"] for j in job_data]
 
-        # ✅ Convert 'created_at' to datetime objects
-        for job in job_data:
-            if job.get("created_at"):
+        # Parse created_at for display
+        for j in job_data:
+            if j.get("created_at"):
                 try:
-                    job["created_at"] = datetime.fromisoformat(job["created_at"].replace("Z", "+00:00"))
-                except Exception as e:
-                    print("Invalid date format:", job["created_at"], e)
+                    j["created_at"] = datetime.fromisoformat(j["created_at"].replace("Z", "+00:00"))
+                except Exception:
+                    pass
+
+        # Parts aggregation
+        counts = {jid: {"3/4": 0, "1/2": 0, "1/4": 0, "Other": 0, "total": 0} for jid in job_ids}
+        if job_ids:
+            parts_resp = (
+                authed.table("parts")
+                .select("job_id, material")
+                .in_("job_id", job_ids)
+                .execute()
+            )
+            for p in parts_resp.data or []:
+                jid = p.get("job_id")
+                mat = (p.get("material") or "").strip()
+                key = mat if mat in ("3/4", "1/2", "1/4") else "Other"
+                if jid in counts:
+                    counts[jid][key] += 1
+                    counts[jid]["total"] += 1
+
+        # Attach counts to each job
+        for j in job_data:
+            j["part_counts"] = counts.get(j["id"], {"3/4": 0, "1/2": 0, "1/4": 0, "Other": 0, "total": 0})
 
         return render_template("jobs.html", jobs=job_data)
 
@@ -469,6 +495,7 @@ def jobs():
         print("Error loading jobs:", e)
         flash("Could not load jobs. Please try again later.", "danger")
         return redirect(url_for("dashboard"))
+
     
 
 
@@ -488,10 +515,9 @@ def job_details(job_id):
     access_token = request.cookies.get("access_token")
     authed = supabase.postgrest.auth(access_token)
 
-    # ✅ Fetch job
+    # Fetch job
     job_res = (
-        authed
-        .table("jobs")
+        authed.table("jobs")
         .select("*")
         .eq("id", str(job_id))
         .single()
@@ -505,32 +531,25 @@ def job_details(job_id):
         try:
             job["created_at"] = datetime.fromisoformat(job["created_at"].replace("Z", "+00:00"))
         except Exception as e:
-            print("⚠️ created_at parse error:", e)
+            print("created_at parse error:", e)
 
-    # ✅ Handle POST (save deadlines)
+    # Save deadlines
     if request.method == "POST":
         soft_deadline = request.form.get("soft_deadline")
         hard_deadline = request.form.get("hard_deadline")
-
         update_data = {}
         if soft_deadline:
             update_data["soft_deadline"] = soft_deadline
         if hard_deadline:
             update_data["hard_deadline"] = hard_deadline
-
         if update_data:
-            authed.table("deadlines").upsert({
-                "job_id": str(job_id),
-                **update_data
-            }).execute()
-
+            authed.table("deadlines").upsert({"job_id": str(job_id), **update_data}).execute()
             flash("Deadlines updated.", "success")
             return redirect(url_for("job_details", job_id=job_id))
 
-    # ✅ Fetch deadlines
+    # Deadlines
     deadlines_res = (
-        authed
-        .table("deadlines")
+        authed.table("deadlines")
         .select("*")
         .eq("job_id", str(job_id))
         .limit(1)
@@ -538,31 +557,45 @@ def job_details(job_id):
     )
     deadlines_list = deadlines_res.data or []
     deadlines = deadlines_list[0] if deadlines_list else {}
-
     job["soft_deadline"] = deadlines.get("soft_deadline")
     job["hard_deadline"] = deadlines.get("hard_deadline")
-
     for key in ["soft_deadline", "hard_deadline"]:
         if isinstance(job.get(key), str):
             try:
                 job[key] = datetime.fromisoformat(job[key].replace("Z", "+00:00"))
-            except:
+            except Exception:
                 pass
 
-    # ✅ Fetch parts
+    # Parts
     parts_res = (
-        authed
-        .table("parts")
+        authed.table("parts")
         .select("*")
         .eq("job_id", str(job_id))
         .execute()
     )
     parts = parts_res.data or []
 
-    # ✅ Fetch estimates
+    # --- Grouped parts (by material, width, height)
+    from collections import defaultdict
+    grouped = defaultdict(int)
+    for p in parts:
+        mat = (p.get("material") or "Unknown").strip()
+        try:
+            w = float(p.get("width") or 0)
+            h = float(p.get("height") or 0)
+        except Exception:
+            continue
+        grouped[(mat, w, h)] += 1
+
+    grouped_parts = [
+        {"material": m, "width": w, "height": h, "quantity": q}
+        for (m, w, h), q in sorted(grouped.items(), key=lambda x: (x[0][0], x[0][1], x[0][2]))
+    ]
+    # ---
+
+    # Estimates
     estimates_res = (
-        authed
-        .table("estimates")
+        authed.table("estimates")
         .select("*")
         .eq("job_id", str(job_id))
         .order("created_at", desc=True)
@@ -570,26 +603,50 @@ def job_details(job_id):
     )
     estimates = estimates_res.data or []
 
-    # ✅ Sheet Images
+    # Sheet images
+    # ✅ Sheet images (robust & path-safe)
+    # ---- SHEET IMAGES (robust + legacy migration) -----------------------
     sheet_images = []
-    sheet_dir = os.path.join("static", "sheets", str(job_id))
-    if os.path.exists(sheet_dir):
-        found_any = False
-        for thickness in ["3/4", "1/2", "1/4"]:
-            subfolder = os.path.join(sheet_dir, thickness)
-            if os.path.exists(subfolder):
-                found_any = True
-                for f in sorted(os.listdir(subfolder)):
-                    if f.endswith(".png"):
-                        relative_path = f"sheets/{job_id}/{thickness}/{f}"
-                        sheet_images.append((relative_path, thickness))
-        if not found_any:
-            for f in sorted(os.listdir(sheet_dir)):
-                if f.endswith(".png"):
-                    relative_path = f"sheets/{job_id}/{f}"
-                    sheet_images.append((relative_path, "Unknown"))
+    job_str = str(job_id)
 
-    # ✅ Uploaded images
+    static_dir = os.path.join("static", "sheets", job_str)
+    legacy_dir = os.path.join("sheets", job_str)  # old location some runs used
+
+    # If we have legacy images, copy them once into static so the template can serve them
+    if os.path.isdir(legacy_dir):
+        os.makedirs(static_dir, exist_ok=True)
+        for src in glob.glob(os.path.join(legacy_dir, "**", "*.png"), recursive=True):
+            rel = os.path.relpath(src, legacy_dir)               # e.g. "3/4/sheet_1.png"
+            dst = os.path.join(static_dir, rel)
+            os.makedirs(os.path.dirname(dst), exist_ok=True)
+            if not os.path.exists(dst):
+                try:
+                    shutil.copy2(src, dst)
+                except Exception as e:
+                    print("⚠️ copy legacy sheet failed:", src, "->", dst, e)
+
+    # Collect every PNG under static/sheets/<job_id> recursively
+    for path in sorted(glob.glob(os.path.join(static_dir, "**", "*.png"), recursive=True)):
+        # convert to /static URL path
+        rel_from_static = os.path.relpath(path, "static")                # e.g. "sheets/<id>/3/4/sheet_1.png"
+        web_path = rel_from_static.replace(os.sep, "/")
+
+        # Try to infer thickness label from the path
+        low = web_path.lower()
+        label = "Unknown"
+        if "/3/4/" in low:
+            label = "3/4"
+        elif "/1/2/" in low:
+            label = "1/2"
+        elif "/1/4/" in low:
+            label = "1/4"
+
+        sheet_images.append({"src": web_path, "label": label})
+    # ---------------------------------------------------------------------
+
+
+
+    # Uploaded images
     upload_dir = f"static/uploads/{job_id}"
     uploaded_images = []
     if os.path.exists(upload_dir):
@@ -604,10 +661,13 @@ def job_details(job_id):
         job=job,
         estimates=estimates,
         parts=parts,
+        grouped_parts=grouped_parts,  # 👈 pass to template
         sheet_images=sheet_images,
         uploaded_images=uploaded_images,
-        user=user
+        user=user,
     )
+
+
 
 
 
@@ -835,10 +895,9 @@ def save_estimate(job_id):
         return redirect(url_for("job_details", job_id=job_id))
 
     try:
-        # ✅ Step 1: Check if job belongs to user (with token for RLS)
+        # Ownership check (unchanged)
         job_res = (
-            supabase
-            .postgrest.auth(access_token)
+            supabase.postgrest.auth(access_token)
             .table("jobs")
             .select("id", "user_id")
             .eq("id", str(job_id))
@@ -846,22 +905,25 @@ def save_estimate(job_id):
             .execute()
         )
         job = job_res.data
-
         if not job or job["user_id"] != user["id"]:
             flash("Job not found or unauthorized access.")
             return redirect(url_for("job_details", job_id=job_id))
 
-        # ✅ Step 2: Save estimate (with auth)
-        (
-            supabase
-            .postgrest.auth(access_token)
-            .table("estimates")
-            .insert({
-                "job_id": str(job_id),
-                "amount": float(amount)
-            })
-            .execute()
-        )
+        # Save estimate (unchanged)
+        supabase.postgrest.auth(access_token).table("estimates").insert({
+            "job_id": str(job_id),
+            "amount": float(amount)
+        }).execute()
+
+        # NEW: save any accessory images (optional)
+        if 'acc_image[]' in request.files:
+            files = request.files.getlist('acc_image[]')
+            save_dir = os.path.join("static", "uploads", str(job_id), "accessories")
+            os.makedirs(save_dir, exist_ok=True)
+            for f in files:
+                if f and f.filename:
+                    fname = secure_filename(f.filename)
+                    f.save(os.path.join(save_dir, fname))
 
         flash("Estimate saved successfully.")
     except Exception as e:
@@ -869,34 +931,6 @@ def save_estimate(job_id):
 
     return redirect(url_for("job_details", job_id=job_id))
 
-
-
-
-@app.route("/stocks", endpoint="view_stocks")
-def view_stocks():
-    user_id = session.get("user_id")
-    access_token = request.cookies.get("access_token")
-
-    if not user_id or not access_token:
-        return redirect(url_for("login"))
-
-    try:
-        response = (
-            supabase
-            .postgrest.auth(access_token)
-            .table("stocks")
-            .select("*")
-            .eq("user_id", user_id)
-            .order("created_at", desc=True)
-            .execute()
-        )
-        stocks = response.data if response.data else []
-    except Exception as e:
-        print("Error loading stocks:", e)
-        stocks = []
-        flash("Failed to load stock inventory.", "danger")
-
-    return render_template("stocks.html", stocks=stocks)
 
 
 
@@ -1068,6 +1102,7 @@ def download_job_pdf(job_id):
 
     job = job_res.data
     parts = parts_res.data or []
+    
     estimates = estimates_res.data or []
 
     if not job:

@@ -98,6 +98,28 @@ content %}
   >
 </div>
 
+<!-- ✅ Grouped Cut Parts -->
+<div class="card p-4 shadow mb-4">
+  <h4>Cut Parts (Grouped)</h4>
+  {% if grouped_parts %}
+  <ul class="list-group">
+    {% for g in grouped_parts %}
+    <li
+      class="list-group-item d-flex justify-content-between align-items-center"
+    >
+      <div>
+        <strong>{{ g.width }} x {{ g.height }} in</strong>
+        <span class="text-muted">— {{ g.material }} panel</span>
+      </div>
+      <span class="badge bg-dark rounded-pill">{{ g.quantity }}</span>
+    </li>
+    {% endfor %}
+  </ul>
+  {% else %}
+  <p>No parts found for this job.</p>
+  {% endif %}
+</div>
+
 <!-- ✅ Cut Parts -->
 <div class="card p-4 shadow mb-4">
   <h4>Cut Parts List</h4>
@@ -138,13 +160,13 @@ content %}
     <div class="col-md-6 col-lg-4">
       <div class="card border-0 shadow-sm">
         <img
-          src="{{ url_for('static', filename=img[0]) }}"
+          src="{{ url_for('static', filename=img.src) }}"
           class="card-img-top"
-          alt="Sheet {{ loop.index }}"
+          alt="Cut Sheet {{ loop.index }}"
         />
         <div class="card-body p-2 text-center">
           Sheet {{ loop.index }}<br />
-          <small class="text-muted">{{ img[1] }} panel</small>
+          <small class="text-muted">{{ img.label }} panel</small>
         </div>
       </div>
     </div>
