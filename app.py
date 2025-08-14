@@ -1065,6 +1065,12 @@ def delete_stock(stock_id):
     return redirect(url_for("view_stocks"))
 
 
+@app.route("/robots.txt")
+def robots_txt():
+    return app.send_static_file("robots.txt")
+
+
+
 @app.route("/stocks", endpoint="view_stocks")
 def view_stocks():
     user_id = session.get("user_id")
