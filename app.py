@@ -1,5 +1,5 @@
 # ✅ Imports
-from flask import Flask, render_template, request, redirect, url_for, flash, session, send_file, make_response
+from flask import Flask, render_template, request, redirect, url_for, flash, session, send_file, make_response, current_app 
 from werkzeug.utils import secure_filename
 from datetime import datetime
 import os, uuid, shutil, glob
@@ -291,20 +291,19 @@ def home():
 
     if user_id and access_token:
         try:
-            # join deadlines -> jobs and filter by jobs.user_id
-            resp = (
+            response = (
                 supabase
                 .postgrest.auth(access_token)
                 .table("deadlines")
-                .select("job_id, hard_deadline, jobs!inner(client_name,user_id)")
-                .eq("jobs.user_id", user_id)
+                .select("job_id, hard_deadline, jobs(client_name)")
+                .eq("user_id", user_id)
                 .not_("hard_deadline", "is", None)
                 .order("hard_deadline", desc=True)
                 .execute()
             )
-            jobs = resp.data or []
+            jobs = response.data or []
 
-            user_resp = (
+            user_response = (
                 supabase
                 .postgrest.auth(access_token)
                 .table("users")
@@ -313,17 +312,17 @@ def home():
                 .single()
                 .execute()
             )
-            user = user_resp.data
-
+            user = user_response.data
         except Exception as e:
             if "JWT expired" in str(e):
                 session.pop("user_id", None)
                 flash("Session expired. Please log in again.", "warning")
             print("Error loading home page:", e)
 
-    # keep only rows that actually have the joined job (defensive)
     jobs = [j for j in jobs if j.get("hard_deadline") and j.get("jobs")]
-    return render_template("landing.html", jobs=jobs, user=user)
+
+    has_view_stocks = "view_stocks" in current_app.view_functions
+    return render_template("landing.html", jobs=jobs, user=user, has_view_stocks=has_view_stocks)
 
 
 
