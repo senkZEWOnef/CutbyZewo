@@ -1,0 +1,24 @@
+{% extends "base.html" %} {% block title %}Job Gallery{% endblock %} {% block
+content %}
+<h1 class="mb-4 text-center">🖼️ Gallery — {{ job.client_name }}</h1>
+
+{% if uploaded_images %}
+<div class="row">
+  {% for img in uploaded_images %}
+  <div class="col-md-4 mb-3">
+    <img
+      src="{{ url_for('static', filename=img) }}"
+      class="img-fluid border rounded"
+      alt="Job Image"
+    />
+  </div>
+  {% endfor %}
+</div>
+{% else %}
+<div class="alert alert-info text-center">No images uploaded for this job.</div>
+{% endif %}
+
+<a href="{{ url_for('jobs') }}" class="btn btn-secondary mt-3"
+  >⬅ Back to Saved Jobs</a
+>
+{% endblock %}

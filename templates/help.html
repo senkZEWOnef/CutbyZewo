@@ -1,159 +1,179 @@
 {% extends "base.html" %} {% block title %}Help & FAQs{% endblock %} {% block
 content %}
+<h1 class="mb-4 text-center">❓ Help & Frequently Asked Questions</h1>
 
-<div class="container my-5">
-  <h1 class="text-center mb-4">❓ Help & Frequently Asked Questions</h1>
-
-  <div class="accordion" id="faqAccordion">
-    <!-- Q1 -->
-    <div class="accordion-item">
-      <h2 class="accordion-header" id="headingOne">
-        <button
-          class="accordion-button"
-          type="button"
-          data-bs-toggle="collapse"
-          data-bs-target="#collapseOne"
-          aria-expanded="true"
-          aria-controls="collapseOne"
-        >
-          How do I create a new cabinet job?
-        </button>
-      </h2>
-      <div
-        id="collapseOne"
-        class="accordion-collapse collapse show"
-        aria-labelledby="headingOne"
-        data-bs-parent="#faqAccordion"
+<div class="accordion mb-5" id="faqAccordion">
+  <!-- Account -->
+  <div class="accordion-item">
+    <h2 class="accordion-header" id="headingAccount">
+      <button
+        class="accordion-button"
+        type="button"
+        data-bs-toggle="collapse"
+        data-bs-target="#collapseAccount"
       >
-        <div class="accordion-body">
-          Click <strong>"Create Job"</strong> on the home page or in the top
-          menu, then enter the client name, panel dimensions, and the list of
-          cut parts. You can also set optional deadlines.
-        </div>
-      </div>
-    </div>
-
-    <!-- Q2 -->
-    <div class="accordion-item">
-      <h2 class="accordion-header" id="headingTwo">
-        <button
-          class="accordion-button collapsed"
-          type="button"
-          data-bs-toggle="collapse"
-          data-bs-target="#collapseTwo"
-          aria-expanded="false"
-          aria-controls="collapseTwo"
-        >
-          How do I update or delete a job?
-        </button>
-      </h2>
-      <div
-        id="collapseTwo"
-        class="accordion-collapse collapse"
-        aria-labelledby="headingTwo"
-        data-bs-parent="#faqAccordion"
-      >
-        <div class="accordion-body">
-          From the <strong>Saved Jobs</strong> page, click on any job to view
-          details. There, you'll see options to <em>Edit</em>,
-          <em>Update Price</em>, <em>Set Deadlines</em>, or <em>Delete</em> the
-          job.
-        </div>
-      </div>
-    </div>
-
-    <!-- Q3 -->
-    <div class="accordion-item">
-      <h2 class="accordion-header" id="headingThree">
-        <button
-          class="accordion-button collapsed"
-          type="button"
-          data-bs-toggle="collapse"
-          data-bs-target="#collapseThree"
-          aria-expanded="false"
-          aria-controls="collapseThree"
-        >
-          What is the purpose of the Stocks section?
-        </button>
-      </h2>
-      <div
-        id="collapseThree"
-        class="accordion-collapse collapse"
-        aria-labelledby="headingThree"
-        data-bs-parent="#faqAccordion"
-      >
-        <div class="accordion-body">
-          The <strong>Stocks</strong> page allows you to track materials in your
-          workshop — including panels, laminates, screws, hinges, slides, and
-          more. You can add, increase, decrease, or delete items as your
-          inventory changes.
-        </div>
-      </div>
-    </div>
-
-    <!-- Q4 -->
-    <div class="accordion-item">
-      <h2 class="accordion-header" id="headingFour">
-        <button
-          class="accordion-button collapsed"
-          type="button"
-          data-bs-toggle="collapse"
-          data-bs-target="#collapseFour"
-          aria-expanded="false"
-          aria-controls="collapseFour"
-        >
-          How does the calendar view work?
-        </button>
-      </h2>
-      <div
-        id="collapseFour"
-        class="accordion-collapse collapse"
-        aria-labelledby="headingFour"
-        data-bs-parent="#faqAccordion"
-      >
-        <div class="accordion-body">
-          The calendar shows all <strong>hard deadlines</strong> for your jobs.
-          You can click a date to view what’s due that day or week. It helps you
-          plan production and deliveries.
-        </div>
-      </div>
-    </div>
-
-    <!-- Q5 -->
-    <div class="accordion-item">
-      <h2 class="accordion-header" id="headingFive">
-        <button
-          class="accordion-button collapsed"
-          type="button"
-          data-bs-toggle="collapse"
-          data-bs-target="#collapseFive"
-          aria-expanded="false"
-          aria-controls="collapseFive"
-        >
-          Can I download a job report or cut plan?
-        </button>
-      </h2>
-      <div
-        id="collapseFive"
-        class="accordion-collapse collapse"
-        aria-labelledby="headingFive"
-        data-bs-parent="#faqAccordion"
-      >
-        <div class="accordion-body">
-          Yes! On the Job Details page, click
-          <strong>“Export as PDF”</strong> to download a full report of the job
-          — including cut parts, deadlines, sheet images, and any uploaded
-          files.
-        </div>
+        🔐 How do I create an account or reset my password?
+      </button>
+    </h2>
+    <div
+      id="collapseAccount"
+      class="accordion-collapse collapse"
+      data-bs-parent="#faqAccordion"
+    >
+      <div class="accordion-body">
+        Click “Sign Up” in the top right corner. To reset your password, log out
+        and click “Forgot Password?” on the login screen.
       </div>
     </div>
   </div>
 
-  <div class="text-center mt-5">
-    <a href="{{ url_for('home') }}" class="btn btn-primary">
-      ⬅️ Back to Home
-    </a>
+  <!-- Jobs -->
+  <div class="accordion-item">
+    <h2 class="accordion-header" id="headingJobs">
+      <button
+        class="accordion-button"
+        type="button"
+        data-bs-toggle="collapse"
+        data-bs-target="#collapseJobs"
+      >
+        🗂️ What is a Job and how do I create one?
+      </button>
+    </h2>
+    <div
+      id="collapseJobs"
+      class="accordion-collapse collapse"
+      data-bs-parent="#faqAccordion"
+    >
+      <div class="accordion-body">
+        A Job is a cut plan/client project. Click “➕ Create Job” on the home
+        page, fill out the client name, parts, panels and deadlines. Once saved,
+        you can always edit the job later.
+      </div>
+    </div>
+  </div>
+
+  <!-- Cut Sheets -->
+  <div class="accordion-item">
+    <h2 class="accordion-header" id="headingSheets">
+      <button
+        class="accordion-button"
+        type="button"
+        data-bs-toggle="collapse"
+        data-bs-target="#collapseSheets"
+      >
+        📄 How are Cut Sheets generated?
+      </button>
+    </h2>
+    <div
+      id="collapseSheets"
+      class="accordion-collapse collapse"
+      data-bs-parent="#faqAccordion"
+    >
+      <div class="accordion-body">
+        Cut sheets are automatically created based on your part dimensions and
+        material/thickness. They are saved in
+        <code>static/sheets/&lt;job_id&gt;</code> and can also be exported to
+        PDF inside a Job.
+      </div>
+    </div>
+  </div>
+
+  <!-- Estimates -->
+  <div class="accordion-item">
+    <h2 class="accordion-header" id="headingEstimate">
+      <button
+        class="accordion-button"
+        type="button"
+        data-bs-toggle="collapse"
+        data-bs-target="#collapseEstimate"
+      >
+        💰 How does Estimate Pricing work?
+      </button>
+    </h2>
+    <div
+      id="collapseEstimate"
+      class="accordion-collapse collapse"
+      data-bs-parent="#faqAccordion"
+    >
+      <div class="accordion-body">
+        You can add accessories (drawer slides, hinges, laminate, etc) and your
+        own prices. The system totals up the accessories, install fees and
+        commission to calculate a final estimate.
+      </div>
+    </div>
+  </div>
+
+  <!-- Stocks -->
+  <div class="accordion-item">
+    <h2 class="accordion-header" id="headingStocks">
+      <button
+        class="accordion-button"
+        type="button"
+        data-bs-toggle="collapse"
+        data-bs-target="#collapseStocks"
+      >
+        📦 What is the Stocks section for?
+      </button>
+    </h2>
+    <div
+      id="collapseStocks"
+      class="accordion-collapse collapse"
+      data-bs-parent="#faqAccordion"
+    >
+      <div class="accordion-body">
+        Use Stocks to manage your shop inventory (e.g., sheets of plywood,
+        hardware items). You can increment/decrement quantities as you use
+        materials on jobs.
+      </div>
+    </div>
+  </div>
+
+  <!-- Gallery -->
+  <div class="accordion-item">
+    <h2 class="accordion-header" id="headingGallery">
+      <button
+        class="accordion-button"
+        type="button"
+        data-bs-toggle="collapse"
+        data-bs-target="#collapseGallery"
+      >
+        🖼️ Where are uploaded images stored?
+      </button>
+    </h2>
+    <div
+      id="collapseGallery"
+      class="accordion-collapse collapse"
+      data-bs-parent="#faqAccordion"
+    >
+      <div class="accordion-body">
+        When you add uploads to a Job, they appear in the Job Gallery and are
+        stored in <code>static/uploads/&lt;job_id&gt;</code>. They do not affect
+        cut layout but are for your internal reference.
+      </div>
+    </div>
   </div>
 </div>
+
+<hr class="my-4" />
+
+<!-- User question submit form -->
+<h4 class="mb-3">Still need help?</h4>
+<p>Submit a question and we’ll get back to you soon:</p>
+<form method="POST" action="mailto:admin@yourcompany.com" enctype="text/plain">
+  <div class="mb-3">
+    <label class="form-label">Your Email (optional):</label>
+    <input
+      type="email"
+      name="email"
+      class="form-control"
+      placeholder="you@example.com"
+    />
+  </div>
+  <div class="mb-3">
+    <label class="form-label">Question:</label>
+    <textarea name="question" class="form-control" rows="3" required></textarea>
+  </div>
+  <button type="submit" class="btn btn-primary">Send Question ✉️</button>
+</form>
 
 {% endblock %}

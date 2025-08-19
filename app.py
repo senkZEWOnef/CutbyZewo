@@ -1105,6 +1105,77 @@ def expose_helpers():
     return {"has_endpoint": lambda name: name in app.view_functions}
 
 
+
+@app.route("/jobs/<uuid:job_id>/gallery")
+def gallery(job_id):
+    user = current_user()
+    if not user:
+        return redirect(url_for("login"))
+
+    access_token = request.cookies.get("access_token")
+
+    # Optional check for ownership
+    job_res = (
+        supabase.postgrest.auth(access_token)
+        .table("jobs")
+        .select("*")
+        .eq("id", str(job_id))
+        .single()
+        .execute()
+    )
+    job = job_res.data
+    if not job:
+        flash("Job not found or unauthorized.", "danger")
+        return redirect(url_for("jobs"))
+
+    upload_dir = f"static/uploads/{job_id}"
+    uploaded_images = []
+    if os.path.exists(upload_dir):
+        uploaded_images = [
+            f"uploads/{job_id}/{f}"
+            for f in os.listdir(upload_dir)
+            if f.lower().endswith((".png", ".jpg", ".jpeg", ".webp"))
+        ]
+
+    return render_template("gallery.html", job=job, uploaded_images=uploaded_images)
+
+
+@app.route("/jobs/<uuid:job_id>/gallery")
+def job_gallery(job_id):
+    user = current_user()
+    if not user:
+        return redirect(url_for("login"))
+
+    # Check access
+    access_token = request.cookies.get("access_token")
+    authed = supabase.postgrest.auth(access_token)
+
+    job_res = (
+        authed.table("jobs")
+        .select("*")
+        .eq("id", str(job_id))
+        .single()
+        .execute()
+    )
+    job = job_res.data
+    if not job:
+        return "Job not found", 404
+
+    # Uploaded images
+    upload_dir = f"static/uploads/{job_id}"
+    uploaded_images = []
+    if os.path.exists(upload_dir):
+        uploaded_images = [
+            f"uploads/{job_id}/{f}"
+            for f in os.listdir(upload_dir)
+            if f.lower().endswith((".png", ".jpg", ".jpeg", ".webp"))
+        ]
+
+    return render_template("job_gallery.html", job=job, uploaded_images=uploaded_images, user=user)
+
+
+
+
 #pdf routeßß
 @app.route("/jobs/<uuid:job_id>/download", methods=["GET"])
 def download_job_pdf(job_id):
