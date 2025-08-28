@@ -1,0 +1,291 @@
+{% extends "base.html" %}
+{% block title %}Create Detailed Estimate - {{ job.client_name }}{% endblock %}
+{% block content %}
+
+<div class="row mb-4">
+  <div class="col-12">
+    <nav aria-label="breadcrumb">
+      <ol class="breadcrumb">
+        <li class="breadcrumb-item"><a href="{{ url_for('home') }}">Dashboard</a></li>
+        <li class="breadcrumb-item"><a href="{{ url_for('jobs') }}">Jobs</a></li>
+        <li class="breadcrumb-item"><a href="{{ url_for('job_details', job_id=job.id) }}">{{ job.client_name }}</a></li>
+        <li class="breadcrumb-item active">Create Detailed Estimate</li>
+      </ol>
+    </nav>
+  </div>
+</div>
+
+<div class="row">
+  <div class="col-12">
+    <div class="card">
+      <div class="card-header bg-success text-white">
+        <h4 class="mb-0">
+          <i class="fas fa-calculator"></i> Create Detailed Estimate for {{ job.client_name }}
+        </h4>
+      </div>
+      <div class="card-body">
+        <form method="POST" id="estimateForm">
+          <!-- Estimate Details -->
+          <div class="row mb-4">
+            <div class="col-md-6">
+              <label class="form-label">Estimate Name</label>
+              <input type="text" name="estimate_name" class="form-control" 
+                     value="Cabinet Estimate - {{ job.client_name }}" required>
+            </div>
+            <div class="col-md-6">
+              <label class="form-label">Description</label>
+              <input type="text" name="description" class="form-control" 
+                     placeholder="Kitchen cabinets, bathroom vanity, etc.">
+            </div>
+          </div>
+
+          <!-- Pricing Settings -->
+          <div class="row mb-4">
+            <div class="col-md-6">
+              <label class="form-label">Labor Rate ($/hour)</label>
+              <div class="input-group">
+                <span class="input-group-text">$</span>
+                <input type="number" name="labor_rate" class="form-control" 
+                       value="50.00" step="0.01" min="0" required>
+              </div>
+            </div>
+            <div class="col-md-6">
+              <label class="form-label">Material Markup (%)</label>
+              <div class="input-group">
+                <input type="number" name="markup_percentage" class="form-control" 
+                       value="20.00" step="0.01" min="0" max="100" required>
+                <span class="input-group-text">%</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Line Items -->
+          <div class="card mb-4">
+            <div class="card-header bg-light">
+              <div class="d-flex justify-content-between align-items-center">
+                <h5 class="mb-0">Line Items</h5>
+                <button type="button" class="btn btn-sm btn-primary" onclick="addLineItem()">
+                  <i class="fas fa-plus"></i> Add Item
+                </button>
+              </div>
+            </div>
+            <div class="card-body">
+              <div id="lineItems">
+                <!-- Suggested Materials Section -->
+                {% if material_suggestions %}
+                <div class="alert alert-info">
+                  <h6><i class="fas fa-lightbulb"></i> Suggested Materials (based on your cut sheets):</h6>
+                  <div class="row">
+                    {% for suggestion in material_suggestions %}
+                    <div class="col-md-6 mb-2">
+                      <button type="button" class="btn btn-sm btn-outline-info w-100" 
+                              onclick="addSuggestedItem('{{ suggestion.name }}', '{{ suggestion.type }}', '{{ suggestion.quantity }}', '{{ suggestion.unit }}', '{{ suggestion.unit_price }}', '{{ suggestion.description }}')">
+                        {{ suggestion.name }} ({{ suggestion.quantity }} {{ suggestion.unit }})
+                      </button>
+                    </div>
+                    {% endfor %}
+                  </div>
+                </div>
+                {% endif %}
+
+                <!-- Initial line item -->
+                <div class="line-item-row" data-item-index="0">
+                  <div class="row mb-3">
+                    <div class="col-md-2">
+                      <label class="form-label">Type</label>
+                      <select name="item_type" class="form-select" required>
+                        <option value="material">Material</option>
+                        <option value="hardware">Hardware</option>
+                        <option value="labor">Labor</option>
+                      </select>
+                    </div>
+                    <div class="col-md-3">
+                      <label class="form-label">Item Name</label>
+                      <input type="text" name="item_name" class="form-control" 
+                             placeholder="3/4" Plywood, Hinges, Installation" required>
+                    </div>
+                    <div class="col-md-2">
+                      <label class="form-label">Quantity</label>
+                      <input type="number" name="item_quantity" class="form-control" 
+                             value="1" step="0.01" min="0" required>
+                    </div>
+                    <div class="col-md-2">
+                      <label class="form-label">Unit</label>
+                      <select name="item_unit" class="form-select">
+                        <option value="pieces">pieces</option>
+                        <option value="sheets">sheets</option>
+                        <option value="hours">hours</option>
+                        <option value="sq ft">sq ft</option>
+                        <option value="linear ft">linear ft</option>
+                        <option value="sets">sets</option>
+                      </select>
+                    </div>
+                    <div class="col-md-2">
+                      <label class="form-label">Unit Price</label>
+                      <div class="input-group">
+                        <span class="input-group-text">$</span>
+                        <input type="number" name="item_unit_price" class="form-control" 
+                               step="0.01" min="0" required>
+                      </div>
+                    </div>
+                    <div class="col-md-1">
+                      <label class="form-label">&nbsp;</label>
+                      <button type="button" class="btn btn-outline-danger w-100" onclick="removeLineItem(this)">
+                        <i class="fas fa-trash"></i>
+                      </button>
+                    </div>
+                  </div>
+                  <div class="row mb-3">
+                    <div class="col-12">
+                      <input type="text" name="item_description" class="form-control" 
+                             placeholder="Additional description or notes...">
+                    </div>
+                  </div>
+                  <hr>
+                </div>
+              </div>
+
+              <!-- Common Items Templates -->
+              <div class="mt-3">
+                <h6>Quick Add Common Items:</h6>
+                <div class="row">
+                  <div class="col-md-3 mb-2">
+                    <button type="button" class="btn btn-sm btn-outline-secondary w-100"
+                            onclick="addCommonItem('3/4 Plywood', 'material', '1', 'sheets', '85.00')">
+                      3/4" Plywood Sheet
+                    </button>
+                  </div>
+                  <div class="col-md-3 mb-2">
+                    <button type="button" class="btn btn-sm btn-outline-secondary w-100"
+                            onclick="addCommonItem('European Hinges', 'hardware', '1', 'sets', '12.00')">
+                      European Hinges
+                    </button>
+                  </div>
+                  <div class="col-md-3 mb-2">
+                    <button type="button" class="btn btn-sm btn-outline-secondary w-100"
+                            onclick="addCommonItem('Soft Close Slides', 'hardware', '1', 'sets', '25.00')">
+                      Soft Close Slides
+                    </button>
+                  </div>
+                  <div class="col-md-3 mb-2">
+                    <button type="button" class="btn btn-sm btn-outline-secondary w-100"
+                            onclick="addCommonItem('Installation Labor', 'labor', '8', 'hours', '50.00')">
+                      Installation Labor
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Action Buttons -->
+          <div class="row">
+            <div class="col-12 text-end">
+              <a href="{{ url_for('job_details', job_id=job.id) }}" class="btn btn-secondary me-2">
+                <i class="fas fa-arrow-left"></i> Cancel
+              </a>
+              <button type="submit" class="btn btn-success">
+                <i class="fas fa-save"></i> Create Detailed Estimate
+              </button>
+            </div>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+let itemCounter = 1;
+
+function addLineItem() {
+  const lineItemsContainer = document.getElementById('lineItems');
+  const newItem = `
+    <div class="line-item-row" data-item-index="${itemCounter}">
+      <div class="row mb-3">
+        <div class="col-md-2">
+          <label class="form-label">Type</label>
+          <select name="item_type" class="form-select" required>
+            <option value="material">Material</option>
+            <option value="hardware">Hardware</option>
+            <option value="labor">Labor</option>
+          </select>
+        </div>
+        <div class="col-md-3">
+          <label class="form-label">Item Name</label>
+          <input type="text" name="item_name" class="form-control" 
+                 placeholder="3/4" Plywood, Hinges, Installation" required>
+        </div>
+        <div class="col-md-2">
+          <label class="form-label">Quantity</label>
+          <input type="number" name="item_quantity" class="form-control" 
+                 value="1" step="0.01" min="0" required>
+        </div>
+        <div class="col-md-2">
+          <label class="form-label">Unit</label>
+          <select name="item_unit" class="form-select">
+            <option value="pieces">pieces</option>
+            <option value="sheets">sheets</option>
+            <option value="hours">hours</option>
+            <option value="sq ft">sq ft</option>
+            <option value="linear ft">linear ft</option>
+            <option value="sets">sets</option>
+          </select>
+        </div>
+        <div class="col-md-2">
+          <label class="form-label">Unit Price</label>
+          <div class="input-group">
+            <span class="input-group-text">$</span>
+            <input type="number" name="item_unit_price" class="form-control" 
+                   step="0.01" min="0" required>
+          </div>
+        </div>
+        <div class="col-md-1">
+          <label class="form-label">&nbsp;</label>
+          <button type="button" class="btn btn-outline-danger w-100" onclick="removeLineItem(this)">
+            <i class="fas fa-trash"></i>
+          </button>
+        </div>
+      </div>
+      <div class="row mb-3">
+        <div class="col-12">
+          <input type="text" name="item_description" class="form-control" 
+                 placeholder="Additional description or notes...">
+        </div>
+      </div>
+      <hr>
+    </div>
+  `;
+  
+  lineItemsContainer.insertAdjacentHTML('beforeend', newItem);
+  itemCounter++;
+}
+
+function removeLineItem(button) {
+  const lineItem = button.closest('.line-item-row');
+  lineItem.remove();
+}
+
+function addCommonItem(name, type, quantity, unit, unitPrice) {
+  addLineItem();
+  const lastItem = document.querySelector('.line-item-row:last-child');
+  lastItem.querySelector('select[name="item_type"]').value = type;
+  lastItem.querySelector('input[name="item_name"]').value = name;
+  lastItem.querySelector('input[name="item_quantity"]').value = quantity;
+  lastItem.querySelector('select[name="item_unit"]').value = unit;
+  lastItem.querySelector('input[name="item_unit_price"]').value = unitPrice;
+}
+
+function addSuggestedItem(name, type, quantity, unit, unitPrice, description) {
+  addLineItem();
+  const lastItem = document.querySelector('.line-item-row:last-child');
+  lastItem.querySelector('select[name="item_type"]').value = type;
+  lastItem.querySelector('input[name="item_name"]').value = name;
+  lastItem.querySelector('input[name="item_quantity"]').value = quantity;
+  lastItem.querySelector('select[name="item_unit"]').value = unit;
+  lastItem.querySelector('input[name="item_unit_price"]').value = unitPrice;
+  lastItem.querySelector('input[name="item_description"]').value = description;
+}
+</script>
+
+{% endblock %}

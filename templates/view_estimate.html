@@ -1,0 +1,301 @@
+{% extends "base.html" %}
+{% block title %}Estimate Details - {{ job.client_name }}{% endblock %}
+{% block content %}
+
+<div class="row mb-4">
+  <div class="col-12">
+    <nav aria-label="breadcrumb">
+      <ol class="breadcrumb">
+        <li class="breadcrumb-item"><a href="{{ url_for('home') }}">Dashboard</a></li>
+        <li class="breadcrumb-item"><a href="{{ url_for('jobs') }}">Jobs</a></li>
+        <li class="breadcrumb-item"><a href="{{ url_for('job_details', job_id=job.id) }}">{{ job.client_name }}</a></li>
+        <li class="breadcrumb-item active">Estimate Details</li>
+      </ol>
+    </nav>
+  </div>
+</div>
+
+<!-- Estimate Header -->
+<div class="row mb-4">
+  <div class="col-md-8">
+    <h1 class="display-6 mb-2">
+      <i class="fas fa-file-invoice-dollar text-success"></i>
+      {{ estimate.name or "Cabinet Estimate" }}
+    </h1>
+    <p class="text-muted mb-3">
+      <strong>Client:</strong> {{ job.client_name }} |
+      <strong>Created:</strong> 
+      {% if estimate.created_at %}
+        {% if estimate.created_at.strftime %}
+          {{ estimate.created_at.strftime('%B %d, %Y at %I:%M %p') }}
+        {% else %}
+          {{ estimate.created_at }}
+        {% endif %}
+      {% else %}
+        Unknown
+      {% endif %}
+    </p>
+    
+    {% if estimate.description %}
+    <p class="text-muted">{{ estimate.description }}</p>
+    {% endif %}
+  </div>
+  
+  <div class="col-md-4 text-end">
+    <div class="card bg-success text-white">
+      <div class="card-body text-center">
+        <h2 class="mb-0">${{ "{:,.2f}".format(estimate.amount) }}</h2>
+        <small>Total Estimate</small>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Action Buttons -->
+<div class="row mb-4">
+  <div class="col-12">
+    <div class="btn-group" role="group">
+      <a href="{{ url_for('job_details', job_id=job.id) }}" class="btn btn-outline-secondary">
+        <i class="fas fa-arrow-left"></i> Back to Job
+      </a>
+      <button class="btn btn-outline-primary" onclick="window.print()">
+        <i class="fas fa-print"></i> Print Estimate
+      </button>
+      <button class="btn btn-outline-warning" onclick="copyEstimateLink()">
+        <i class="fas fa-link"></i> Share Link
+      </button>
+      <a href="{{ url_for('create_detailed_estimate', job_id=job.id) }}" class="btn btn-success">
+        <i class="fas fa-plus"></i> Create New Estimate
+      </a>
+    </div>
+  </div>
+</div>
+
+<!-- Materials Section -->
+{% if grouped_items.material %}
+<div class="card mb-4">
+  <div class="card-header bg-primary text-white">
+    <div class="d-flex justify-content-between align-items-center">
+      <h5 class="mb-0">
+        <i class="fas fa-boxes"></i> Materials
+      </h5>
+      <h5 class="mb-0">${{ "{:,.2f}".format(totals.material) }}</h5>
+    </div>
+  </div>
+  <div class="card-body">
+    <div class="table-responsive">
+      <table class="table table-hover">
+        <thead class="table-light">
+          <tr>
+            <th>Item</th>
+            <th>Description</th>
+            <th class="text-center">Quantity</th>
+            <th class="text-center">Unit Price</th>
+            <th class="text-end">Total</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for item in grouped_items.material %}
+          <tr>
+            <td><strong>{{ item.name }}</strong></td>
+            <td class="text-muted">{{ item.description or '' }}</td>
+            <td class="text-center">{{ item.quantity }} {{ item.unit }}</td>
+            <td class="text-center">${{ "{:,.2f}".format(item.unit_price) }}</td>
+            <td class="text-end"><strong>${{ "{:,.2f}".format(item.total_price) }}</strong></td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+{% endif %}
+
+<!-- Hardware Section -->
+{% if grouped_items.hardware %}
+<div class="card mb-4">
+  <div class="card-header bg-info text-white">
+    <div class="d-flex justify-content-between align-items-center">
+      <h5 class="mb-0">
+        <i class="fas fa-tools"></i> Hardware
+      </h5>
+      <h5 class="mb-0">${{ "{:,.2f}".format(totals.hardware) }}</h5>
+    </div>
+  </div>
+  <div class="card-body">
+    <div class="table-responsive">
+      <table class="table table-hover">
+        <thead class="table-light">
+          <tr>
+            <th>Item</th>
+            <th>Description</th>
+            <th class="text-center">Quantity</th>
+            <th class="text-center">Unit Price</th>
+            <th class="text-end">Total</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for item in grouped_items.hardware %}
+          <tr>
+            <td><strong>{{ item.name }}</strong></td>
+            <td class="text-muted">{{ item.description or '' }}</td>
+            <td class="text-center">{{ item.quantity }} {{ item.unit }}</td>
+            <td class="text-center">${{ "{:,.2f}".format(item.unit_price) }}</td>
+            <td class="text-end"><strong>${{ "{:,.2f}".format(item.total_price) }}</strong></td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+{% endif %}
+
+<!-- Labor Section -->
+{% if grouped_items.labor %}
+<div class="card mb-4">
+  <div class="card-header bg-warning text-dark">
+    <div class="d-flex justify-content-between align-items-center">
+      <h5 class="mb-0">
+        <i class="fas fa-user-hard-hat"></i> Labor
+      </h5>
+      <h5 class="mb-0">${{ "{:,.2f}".format(totals.labor) }}</h5>
+    </div>
+  </div>
+  <div class="card-body">
+    <div class="table-responsive">
+      <table class="table table-hover">
+        <thead class="table-light">
+          <tr>
+            <th>Service</th>
+            <th>Description</th>
+            <th class="text-center">Hours</th>
+            <th class="text-center">Rate</th>
+            <th class="text-end">Total</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for item in grouped_items.labor %}
+          <tr>
+            <td><strong>{{ item.name }}</strong></td>
+            <td class="text-muted">{{ item.description or '' }}</td>
+            <td class="text-center">{{ item.quantity }} {{ item.unit }}</td>
+            <td class="text-center">${{ "{:,.2f}".format(item.unit_price) }}</td>
+            <td class="text-end"><strong>${{ "{:,.2f}".format(item.total_price) }}</strong></td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+{% endif %}
+
+<!-- Summary Card -->
+<div class="row">
+  <div class="col-md-6 offset-md-6">
+    <div class="card">
+      <div class="card-header bg-light">
+        <h5 class="mb-0">Estimate Summary</h5>
+      </div>
+      <div class="card-body">
+        <table class="table table-sm mb-0">
+          <tbody>
+            {% if totals.material > 0 %}
+            <tr>
+              <td>Materials Subtotal:</td>
+              <td class="text-end">${{ "{:,.2f}".format(totals.material) }}</td>
+            </tr>
+            {% endif %}
+            {% if totals.hardware > 0 %}
+            <tr>
+              <td>Hardware Subtotal:</td>
+              <td class="text-end">${{ "{:,.2f}".format(totals.hardware) }}</td>
+            </tr>
+            {% endif %}
+            {% if totals.labor > 0 %}
+            <tr>
+              <td>Labor Subtotal:</td>
+              <td class="text-end">${{ "{:,.2f}".format(totals.labor) }}</td>
+            </tr>
+            {% endif %}
+            <tr class="table-success">
+              <th>Total Estimate:</th>
+              <th class="text-end">${{ "{:,.2f}".format(estimate.amount) }}</th>
+            </tr>
+          </tbody>
+        </table>
+        
+        <!-- Pricing Details -->
+        {% if estimate.labor_rate or estimate.markup_percentage %}
+        <hr>
+        <small class="text-muted">
+          {% if estimate.labor_rate %}
+          Labor Rate: ${{ estimate.labor_rate }}/hour
+          {% endif %}
+          {% if estimate.markup_percentage %}
+          | Material Markup: {{ estimate.markup_percentage }}%
+          {% endif %}
+        </small>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Notes Section -->
+<div class="row mt-4">
+  <div class="col-12">
+    <div class="card">
+      <div class="card-body">
+        <h6>Terms & Conditions:</h6>
+        <ul class="small text-muted">
+          <li>This estimate is valid for 30 days from the date above</li>
+          <li>50% deposit required to begin work</li>
+          <li>Final payment due upon completion</li>
+          <li>Material prices subject to change based on market conditions</li>
+          <li>Additional charges may apply for changes to original specifications</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+function copyEstimateLink() {
+  const url = window.location.href;
+  navigator.clipboard.writeText(url).then(function() {
+    alert('Estimate link copied to clipboard!');
+  }, function(err) {
+    console.error('Could not copy text: ', err);
+    // Fallback for older browsers
+    const textArea = document.createElement("textarea");
+    textArea.value = url;
+    document.body.appendChild(textArea);
+    textArea.focus();
+    textArea.select();
+    try {
+      document.execCommand('copy');
+      alert('Estimate link copied to clipboard!');
+    } catch (err) {
+      alert('Please copy the URL manually from your browser address bar.');
+    }
+    document.body.removeChild(textArea);
+  });
+}
+
+// Print styles
+const printStyles = `
+  <style>
+    @media print {
+      .btn, .breadcrumb, nav { display: none !important; }
+      .card { border: none !important; box-shadow: none !important; }
+      .card-header { background-color: #f8f9fa !important; color: #000 !important; }
+      body { -webkit-print-color-adjust: exact; }
+    }
+  </style>
+`;
+document.head.insertAdjacentHTML('beforeend', printStyles);
+</script>
+
+{% endblock %}

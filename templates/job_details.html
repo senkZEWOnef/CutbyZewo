@@ -129,10 +129,15 @@
           </div>
         </form>
 
-        <!-- Add Estimate Button -->
-        <button class="btn btn-outline-success w-100 mb-3" data-bs-toggle="modal" data-bs-target="#estimateModal">
-          <i class="fas fa-calculator"></i> Add Estimate
-        </button>
+        <!-- Add Estimate Buttons -->
+        <div class="d-grid gap-2 mb-3">
+          <button class="btn btn-outline-success" data-bs-toggle="modal" data-bs-target="#estimateModal">
+            <i class="fas fa-calculator"></i> Quick Estimate
+          </button>
+          <a href="{{ url_for('create_detailed_estimate', job_id=job.id) }}" class="btn btn-success">
+            <i class="fas fa-file-invoice-dollar"></i> Detailed Estimate
+          </a>
+        </div>
 
         <!-- Update Status Form -->
         <form method="POST" action="{{ url_for('update_job_status', job_id=job.id) }}">
@@ -280,21 +285,53 @@
       <div class="card-body">
         {% for estimate in estimates %}
         <div class="d-flex justify-content-between align-items-center border-bottom py-2">
-          <div>
-            <strong class="text-success">${{ estimate.amount }}</strong>
-          </div>
-          <div>
-            <small class="text-muted">
-              {% if estimate.created_at %}
-                {% if estimate.created_at.strftime %}
-                  {{ estimate.created_at.strftime('%m/%d/%Y %I:%M %p') }}
-                {% else %}
-                  {{ estimate.created_at }}
+          <div class="flex-grow-1">
+            {% if estimate.name %}
+            <div class="d-flex justify-content-between align-items-start">
+              <div>
+                <strong class="text-success">${{ estimate.amount }}</strong>
+                <br>
+                <small class="text-primary">{{ estimate.name }}</small>
+                {% if estimate.description %}
+                <br>
+                <small class="text-muted">{{ estimate.description }}</small>
                 {% endif %}
-              {% else %}
-                Unknown date
-              {% endif %}
-            </small>
+              </div>
+              <div class="text-end">
+                <a href="{{ url_for('view_estimate', job_id=job.id, estimate_id=estimate.id) }}" 
+                   class="btn btn-sm btn-outline-primary mb-1">
+                  <i class="fas fa-eye"></i> View Details
+                </a>
+                <br>
+                <small class="text-muted">
+                  {% if estimate.created_at %}
+                    {% if estimate.created_at.strftime %}
+                      {{ estimate.created_at.strftime('%m/%d/%Y') }}
+                    {% else %}
+                      {{ estimate.created_at }}
+                    {% endif %}
+                  {% else %}
+                    Unknown date
+                  {% endif %}
+                </small>
+              </div>
+            </div>
+            {% else %}
+            <div class="d-flex justify-content-between align-items-center">
+              <strong class="text-success">${{ estimate.amount }}</strong>
+              <small class="text-muted">
+                {% if estimate.created_at %}
+                  {% if estimate.created_at.strftime %}
+                    {{ estimate.created_at.strftime('%m/%d/%Y %I:%M %p') }}
+                  {% else %}
+                    {{ estimate.created_at }}
+                  {% endif %}
+                {% else %}
+                  Unknown date
+                {% endif %}
+              </small>
+            </div>
+            {% endif %}
           </div>
         </div>
         {% endfor %}

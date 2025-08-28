@@ -1083,8 +1083,217 @@ def save_estimate(job_id):
     return redirect(url_for("job_details", job_id=job_id))
 
 
+@app.route("/jobs/<uuid:job_id>/create_detailed_estimate", methods=["GET", "POST"])
+def create_detailed_estimate(job_id):
+    user = current_user()
+    if not user:
+        return redirect(url_for("login"))
+
+    access_token = request.cookies.get("access_token")
+    
+    # Verify job ownership
+    job_res = (
+        supabase.postgrest.auth(access_token)
+        .table("jobs")
+        .select("id, client_name, user_id")
+        .eq("id", str(job_id))
+        .single()
+        .execute()
+    )
+    job = job_res.data
+    if not job or job["user_id"] != user["id"]:
+        flash("Job not found or unauthorized access.", "danger")
+        return redirect(url_for("jobs"))
+
+    # Get job parts for automatic material calculation
+    parts_res = (
+        supabase.postgrest.auth(access_token)
+        .table("parts")
+        .select("*")
+        .eq("job_id", str(job_id))
+        .execute()
+    )
+    parts = parts_res.data or []
+
+    if request.method == "POST":
+        estimate_name = request.form.get("estimate_name", "Cabinet Estimate")
+        description = request.form.get("description", "")
+        labor_rate = float(request.form.get("labor_rate", 50.0))
+        markup_percentage = float(request.form.get("markup_percentage", 20.0))
+
+        try:
+            # Create the main estimate record
+            estimate_res = (
+                supabase.postgrest.auth(access_token)
+                .table("estimates")
+                .insert({
+                    "job_id": str(job_id),
+                    "amount": 0.00,  # Will be calculated from line items
+                    "name": estimate_name,
+                    "description": description,
+                    "labor_rate": labor_rate,
+                    "markup_percentage": markup_percentage
+                })
+                .execute()
+            )
+            
+            if not estimate_res.data:
+                flash("Failed to create estimate.", "danger")
+                return redirect(url_for("job_details", job_id=job_id))
+            
+            estimate_id = estimate_res.data[0]["id"]
+            
+            # Process line items from form
+            line_items = []
+            total_estimate = 0.0
+            
+            # Get all form keys for line items
+            item_names = request.form.getlist("item_name")
+            item_types = request.form.getlist("item_type")
+            item_descriptions = request.form.getlist("item_description")
+            item_quantities = request.form.getlist("item_quantity")
+            item_units = request.form.getlist("item_unit")
+            item_unit_prices = request.form.getlist("item_unit_price")
+            
+            # Create line items
+            for i in range(len(item_names)):
+                if item_names[i].strip():  # Only process non-empty items
+                    quantity = float(item_quantities[i] or 1)
+                    unit_price = float(item_unit_prices[i] or 0)
+                    total_price = quantity * unit_price
+                    
+                    # Apply markup to materials and hardware
+                    if item_types[i] in ['material', 'hardware']:
+                        total_price *= (1 + markup_percentage / 100)
+                    
+                    line_items.append({
+                        "estimate_id": estimate_id,
+                        "item_type": item_types[i],
+                        "name": item_names[i],
+                        "description": item_descriptions[i] or "",
+                        "quantity": quantity,
+                        "unit": item_units[i] or "pieces",
+                        "unit_price": unit_price,
+                        "total_price": total_price
+                    })
+                    total_estimate += total_price
+            
+            # Insert all line items
+            if line_items:
+                supabase.postgrest.auth(access_token).table("estimate_items").insert(line_items).execute()
+            
+            # Update estimate total
+            supabase.postgrest.auth(access_token).table("estimates").update({
+                "amount": total_estimate
+            }).eq("id", estimate_id).execute()
+            
+            flash("Detailed estimate created successfully!", "success")
+            return redirect(url_for("view_estimate", job_id=job_id, estimate_id=estimate_id))
+            
+        except Exception as e:
+            print(f"Error creating detailed estimate: {e}")
+            flash("Failed to create estimate. Please try again.", "danger")
+
+    # Calculate suggested materials from parts
+    material_suggestions = []
+    if parts:
+        from collections import defaultdict
+        material_counts = defaultdict(lambda: defaultdict(float))
+        
+        for part in parts:
+            material = part.get("material", "Unknown")
+            width = float(part.get("width", 0))
+            height = float(part.get("height", 0))
+            area = (width * height) / 144  # Convert to square feet
+            material_counts[material]["area"] += area
+            material_counts[material]["pieces"] += 1
+        
+        # Create suggestions based on material usage
+        for material, stats in material_counts.items():
+            if "3/4" in material or "¾" in material:
+                sheets_needed = max(1, int(stats["area"] / 32) + 1)  # 4x8 sheet = 32 sq ft
+                material_suggestions.append({
+                    "name": f"{material} Plywood",
+                    "type": "material",
+                    "quantity": sheets_needed,
+                    "unit": "sheets",
+                    "unit_price": 85.00,
+                    "description": f"Based on {stats['pieces']:.0f} pieces, {stats['area']:.1f} sq ft"
+                })
+            elif "1/2" in material or "½" in material:
+                sheets_needed = max(1, int(stats["area"] / 32) + 1)
+                material_suggestions.append({
+                    "name": f"{material} Plywood",
+                    "type": "material", 
+                    "quantity": sheets_needed,
+                    "unit": "sheets",
+                    "unit_price": 65.00,
+                    "description": f"Based on {stats['pieces']:.0f} pieces, {stats['area']:.1f} sq ft"
+                })
+    
+    return render_template("create_detailed_estimate.html", 
+                         job=job, 
+                         parts=parts, 
+                         material_suggestions=material_suggestions)
 
 
+@app.route("/jobs/<uuid:job_id>/estimates/<uuid:estimate_id>", methods=["GET"])
+def view_estimate(job_id, estimate_id):
+    user = current_user()
+    if not user:
+        return redirect(url_for("login"))
+
+    access_token = request.cookies.get("access_token")
+    
+    # Get estimate with verification
+    estimate_res = (
+        supabase.postgrest.auth(access_token)
+        .table("estimates")
+        .select("*, jobs!inner(id, client_name, user_id)")
+        .eq("id", str(estimate_id))
+        .eq("job_id", str(job_id))
+        .single()
+        .execute()
+    )
+    
+    estimate = estimate_res.data
+    if not estimate or estimate["jobs"]["user_id"] != user["id"]:
+        flash("Estimate not found or unauthorized access.", "danger")
+        return redirect(url_for("job_details", job_id=job_id))
+    
+    # Get estimate line items
+    items_res = (
+        supabase.postgrest.auth(access_token)
+        .table("estimate_items")
+        .select("*")
+        .eq("estimate_id", str(estimate_id))
+        .order("item_type", desc=False)
+        .execute()
+    )
+    items = items_res.data or []
+    
+    # Group items by type
+    grouped_items = {
+        "material": [],
+        "hardware": [],
+        "labor": []
+    }
+    
+    for item in items:
+        item_type = item.get("item_type", "material")
+        if item_type in grouped_items:
+            grouped_items[item_type].append(item)
+    
+    # Calculate totals by category
+    totals = {}
+    for category, category_items in grouped_items.items():
+        totals[category] = sum(float(item.get("total_price", 0)) for item in category_items)
+    
+    return render_template("view_estimate.html", 
+                         estimate=estimate, 
+                         job=estimate["jobs"],
+                         grouped_items=grouped_items,
+                         totals=totals)
 
 
 #Add stock route
