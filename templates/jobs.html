@@ -64,7 +64,7 @@
               {% set urgent_count = 0 %}
               {% if jobs %}
                 {% for job in jobs %}
-                  {% if job.hard_deadline and (job.hard_deadline - (today() if today else now())).days <= 3 %}
+                  {% if job.hard_deadline %}
                     {% set urgent_count = urgent_count + 1 %}
                   {% endif %}
                 {% endfor %}
@@ -215,20 +215,12 @@
           
           <!-- Deadline Warning -->
           {% if job.hard_deadline %}
-            {% set days_until = (job.hard_deadline - (today() if today else now())).days %}
-            {% if days_until <= 3 %}
             <div class="alert alert-danger py-2 mb-3">
               <small>
                 <i class="fas fa-exclamation-triangle"></i>
                 Due {{ job.hard_deadline.strftime('%m/%d/%Y') if job.hard_deadline.strftime else job.hard_deadline }}
-                {% if days_until <= 0 %}
-                  (Overdue)
-                {% else %}
-                  ({{ days_until }} days)
-                {% endif %}
               </small>
             </div>
-            {% endif %}
           {% endif %}
           
           <!-- Job ID -->

@@ -368,7 +368,11 @@ def home():
                 flash("Session expired. Please log in again.", "warning")
             print("Error loading home page:", e)
 
-    return render_template("landing.html", jobs=jobs, stats=stats)
+    # Provide current date for templates
+    from datetime import datetime
+    current_date = datetime.now().date()
+    
+    return render_template("landing.html", jobs=jobs, stats=stats, current_date=current_date)
 
 
 
@@ -545,7 +549,11 @@ def jobs():
         for j in job_data:
             j["part_counts"] = counts.get(j["id"], {"3/4": 0, "1/2": 0, "1/4": 0, "Other": 0, "total": 0})
 
-        return render_template("jobs.html", jobs=job_data)
+        # Provide current date for templates
+        from datetime import datetime
+        current_date = datetime.now().date()
+
+        return render_template("jobs.html", jobs=job_data, current_date=current_date)
 
     except Exception as e:
         print("Error loading jobs:", e)
