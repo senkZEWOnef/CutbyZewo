@@ -6,10 +6,19 @@ endblock %} {% block content %}
 <div class="row">
   {% for img in uploaded_images %}
   <div class="col-md-4 mb-3">
-    <img
-      src="{{ url_for('static', filename=img) }}"
-      class="img-fluid rounded border"
-    />
+    <div class="position-relative">
+      <img
+        src="{{ img.url }}"
+        class="img-fluid rounded border"
+        alt="{{ img.filename }}"
+      />
+      <div class="position-absolute bottom-0 start-0 w-100 bg-dark bg-opacity-75 text-white p-2">
+        <small>{{ img.filename }}</small>
+        {% if img.subfolder %}
+        <br><small class="text-muted">{{ img.subfolder }}</small>
+        {% endif %}
+      </div>
+    </div>
   </div>
   {% endfor %}
 </div>

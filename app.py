@@ -16,6 +16,7 @@ from visualizer import draw_sheets_to_files
 from flask import jsonify
 from collections import defaultdict
 from dotenv import load_dotenv
+from storage_manager import StorageManager
 
 load_dotenv()
 
@@ -287,36 +288,44 @@ def home():
     user_id = session.get("user_id")
 
     jobs = []
-    user = None
 
     if user_id and access_token:
         try:
-            # Get hard deadlines + joined job names (no tricky .not_() filter)
+            # Get hard deadlines (simplified query to avoid join issues)
             resp = (
                 supabase
                 .postgrest.auth(access_token)
                 .table("deadlines")
-                .select("job_id, hard_deadline, jobs!deadlines_job_id_fkey(client_name)")
+                .select("job_id, hard_deadline")
                 .eq("user_id", user_id)
                 .not_("hard_deadline", "is", None)
-                .order("hard_deadline", desc=True)
+                .order("hard_deadline")
                 .execute()
             )
-            all_rows = resp.data or []
-            # Filter None in Python (avoids the API edge case)
-            jobs = [r for r in all_rows if r.get("hard_deadline") and r.get("jobs")]
-
-            # Get user for navbar greeting
-            user_resp = (
-                supabase
-                .postgrest.auth(access_token)
-                .table("users")
-                .select("id, username")
-                .eq("id", user_id)
-                .single()
-                .execute()
-            )
-            user = user_resp.data
+            deadlines = resp.data or []
+            
+            # Get job names separately if we have deadlines
+            jobs = []
+            for deadline in deadlines[:5]:  # Limit to 5 most recent
+                try:
+                    job_resp = (
+                        supabase
+                        .postgrest.auth(access_token)
+                        .table("jobs")
+                        .select("client_name")
+                        .eq("id", deadline["job_id"])
+                        .single()
+                        .execute()
+                    )
+                    if job_resp.data:
+                        jobs.append({
+                            "job_id": deadline["job_id"],
+                            "hard_deadline": deadline["hard_deadline"],
+                            "jobs": {"client_name": job_resp.data["client_name"]}
+                        })
+                except:
+                    # Skip if job not found
+                    continue
 
         except Exception as e:
             # If token is expired, clear session; still render page
@@ -325,7 +334,7 @@ def home():
                 flash("Session expired. Please log in again.", "warning")
             print("Error loading home page:", e)
 
-    return render_template("landing.html", jobs=jobs, user=user)
+    return render_template("landing.html", jobs=jobs)
 
 
 
@@ -416,14 +425,24 @@ def create_job():
                 print("Deadline insert error:", e)
                 flash("Failed to save deadlines.", "warning")
 
-        upload_dir = f"static/uploads/{job_uuid}"
-        os.makedirs(upload_dir, exist_ok=True)
+        # Handle file uploads using Supabase Storage
         if 'job_files' in request.files:
             files = request.files.getlist('job_files')
             for f in files:
                 if f.filename:
-                    filename = secure_filename(f.filename)
-                    f.save(os.path.join(upload_dir, filename))
+                    # Upload to Supabase Storage
+                    storage_path = StorageManager.upload_file(f, job_uuid)
+                    if storage_path:
+                        # Save file record to database
+                        try:
+                            supabase.postgrest.auth(access_token).table("files").insert({
+                                "job_id": job_uuid,
+                                "filename": secure_filename(f.filename),
+                                "storage_path": storage_path,
+                                "user_id": user_id
+                            }).execute()
+                        except Exception as e:
+                            print("Error saving file record:", e)
 
         return render_template(
             "result.html",
@@ -649,15 +668,30 @@ def job_details(job_id):
 
 
 
-    # Uploaded images
-    upload_dir = f"static/uploads/{job_id}"
+    # Uploaded images from Supabase Storage
     uploaded_images = []
-    if os.path.exists(upload_dir):
-        uploaded_images = [
-            f"uploads/{job_id}/{f}"
-            for f in os.listdir(upload_dir)
-            if f.lower().endswith((".png", ".jpg", ".jpeg", ".webp"))
-        ]
+    try:
+        files_resp = (
+            authed.table("files")
+            .select("*")
+            .eq("job_id", str(job_id))
+            .execute()
+        )
+        files_data = files_resp.data or []
+        
+        # Get public URLs for all files
+        for file_record in files_data:
+            url = StorageManager.get_file_url(file_record["storage_path"])
+            if url:
+                uploaded_images.append({
+                    "url": url,
+                    "filename": file_record["filename"],
+                    "subfolder": file_record.get("subfolder", ""),
+                    "uploaded_at": file_record.get("uploaded_at", "")
+                })
+    except Exception as e:
+        print(f"Error loading uploaded images: {e}")
+        uploaded_images = []
 
     return render_template(
         "job_details.html",
@@ -716,13 +750,23 @@ def edit_job(job_id):
 
             supabase.postgrest.auth(access_token).table("deadlines").upsert(deadline_data).execute()
 
-        # ✅ Handle uploads
-        upload_dir = f"static/uploads/{job_id}"
-        os.makedirs(upload_dir, exist_ok=True)
+        # ✅ Handle uploads using Supabase Storage
         if 'job_files' in request.files:
             for f in request.files.getlist('job_files'):
                 if f.filename:
-                    f.save(os.path.join(upload_dir, secure_filename(f.filename)))
+                    # Upload to Supabase Storage
+                    storage_path = StorageManager.upload_file(f, str(job_id))
+                    if storage_path:
+                        # Save file record to database
+                        try:
+                            supabase.postgrest.auth(access_token).table("files").insert({
+                                "job_id": str(job_id),
+                                "filename": secure_filename(f.filename),
+                                "storage_path": storage_path,
+                                "user_id": user["id"]
+                            }).execute()
+                        except Exception as e:
+                            print("Error saving file record:", e)
 
         # ✅ New parts
         widths = request.form.getlist("widths")
@@ -824,12 +868,16 @@ def delete_job(job_id):
         if os.path.exists(image_folder):
             shutil.rmtree(image_folder)
 
-        # ✅ Step 3: Delete uploaded files
+        # ✅ Step 3: Delete uploaded files from Supabase Storage
+        StorageManager.delete_job_files(str(job_id))
+        
+        # Also clean up any remaining local uploads (legacy)
         upload_dir = f"static/uploads/{job_id}"
         if os.path.exists(upload_dir):
             shutil.rmtree(upload_dir)
 
-        # ✅ Step 4: Delete from Supabase (jobs, parts, deadlines, estimates)
+        # ✅ Step 4: Delete from Supabase (jobs, parts, deadlines, estimates, files)
+        supabase.postgrest.auth(access_token).table("files").delete().eq("job_id", str(job_id)).execute()
         supabase.postgrest.auth(access_token).table("parts").delete().eq("job_id", str(job_id)).execute()
         supabase.postgrest.auth(access_token).table("deadlines").delete().eq("job_id", str(job_id)).execute()
         supabase.postgrest.auth(access_token).table("estimates").delete().eq("job_id", str(job_id)).execute()
@@ -918,15 +966,25 @@ def save_estimate(job_id):
             "amount": float(amount)
         }).execute()
 
-        # NEW: save any accessory images (optional)
+        # NEW: save any accessory images using Supabase Storage
         if 'acc_image[]' in request.files:
             files = request.files.getlist('acc_image[]')
-            save_dir = os.path.join("static", "uploads", str(job_id), "accessories")
-            os.makedirs(save_dir, exist_ok=True)
             for f in files:
                 if f and f.filename:
-                    fname = secure_filename(f.filename)
-                    f.save(os.path.join(save_dir, fname))
+                    # Upload to Supabase Storage with 'accessories' subfolder
+                    storage_path = StorageManager.upload_file(f, str(job_id), subfolder="accessories")
+                    if storage_path:
+                        # Save file record to database
+                        try:
+                            supabase.postgrest.auth(access_token).table("files").insert({
+                                "job_id": str(job_id),
+                                "filename": secure_filename(f.filename),
+                                "storage_path": storage_path,
+                                "subfolder": "accessories",
+                                "user_id": user["id"]
+                            }).execute()
+                        except Exception as e:
+                            print("Error saving accessory file record:", e)
 
         flash("Estimate saved successfully.")
     except Exception as e:
@@ -1128,14 +1186,31 @@ def gallery(job_id):
         flash("Job not found or unauthorized.", "danger")
         return redirect(url_for("jobs"))
 
-    upload_dir = f"static/uploads/{job_id}"
+    # Get uploaded images from Supabase Storage
     uploaded_images = []
-    if os.path.exists(upload_dir):
-        uploaded_images = [
-            f"uploads/{job_id}/{f}"
-            for f in os.listdir(upload_dir)
-            if f.lower().endswith((".png", ".jpg", ".jpeg", ".webp"))
-        ]
+    try:
+        files_resp = (
+            supabase.postgrest.auth(access_token)
+            .table("files")
+            .select("*")
+            .eq("job_id", str(job_id))
+            .execute()
+        )
+        files_data = files_resp.data or []
+        
+        # Get public URLs for all files
+        for file_record in files_data:
+            url = StorageManager.get_file_url(file_record["storage_path"])
+            if url:
+                uploaded_images.append({
+                    "url": url,
+                    "filename": file_record["filename"],
+                    "subfolder": file_record.get("subfolder", ""),
+                    "uploaded_at": file_record.get("uploaded_at", "")
+                })
+    except Exception as e:
+        print(f"Error loading gallery images: {e}")
+        uploaded_images = []
 
     return render_template("gallery.html", job=job, uploaded_images=uploaded_images)
 
@@ -1161,15 +1236,30 @@ def job_gallery(job_id):
     if not job:
         return "Job not found", 404
 
-    # Uploaded images
-    upload_dir = f"static/uploads/{job_id}"
+    # Get uploaded images from Supabase Storage
     uploaded_images = []
-    if os.path.exists(upload_dir):
-        uploaded_images = [
-            f"uploads/{job_id}/{f}"
-            for f in os.listdir(upload_dir)
-            if f.lower().endswith((".png", ".jpg", ".jpeg", ".webp"))
-        ]
+    try:
+        files_resp = (
+            authed.table("files")
+            .select("*")
+            .eq("job_id", str(job_id))
+            .execute()
+        )
+        files_data = files_resp.data or []
+        
+        # Get public URLs for all files
+        for file_record in files_data:
+            url = StorageManager.get_file_url(file_record["storage_path"])
+            if url:
+                uploaded_images.append({
+                    "url": url,
+                    "filename": file_record["filename"],
+                    "subfolder": file_record.get("subfolder", ""),
+                    "uploaded_at": file_record.get("uploaded_at", "")
+                })
+    except Exception as e:
+        print(f"Error loading job gallery images: {e}")
+        uploaded_images = []
 
     return render_template("job_gallery.html", job=job, uploaded_images=uploaded_images, user=user)
 
@@ -1337,6 +1427,7 @@ def download_job_pdf(job_id):
     buffer.seek(0)
 
     return send_file(buffer, as_attachment=True, download_name=f"job_{job_id}.pdf", mimetype='application/pdf')
+
 
 
 if __name__ == "__main__":

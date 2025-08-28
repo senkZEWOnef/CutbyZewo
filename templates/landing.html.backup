@@ -1,0 +1,91 @@
+{% extends "base.html" %} {% block title %}Cabinet Cut Planner{% endblock %} {%
+block content %}
+
+<div class="text-center mt-5 mb-5">
+  <h1 class="display-4 mb-3">Cabinet Cut Planner</h1>
+  <h4 class="text-muted mb-4">by Zewo</h4>
+
+  <div class="d-grid gap-3 col-md-4 mx-auto mb-5">
+    <a href="{{ url_for('create_job') }}" class="btn btn-dark btn-lg"
+      >➕ Create Job</a
+    >
+    <a href="{{ url_for('jobs') }}" class="btn btn-outline-warning btn-lg"
+      >📁 Saved Jobs</a
+    >
+
+    {# Only render if the endpoint exists on this deploy #} {% if
+    has_endpoint('view_stocks') %}
+    <a
+      href="{{ url_for('view_stocks') }}"
+      class="btn btn-outline-primary btn-lg"
+      >📦 View Stocks</a
+    >
+    {% endif %}
+
+    <a href="{{ url_for('calendar') }}" class="btn btn-outline-secondary btn-lg"
+      >📅 View Calendar</a
+    >
+    <a href="{{ url_for('help') }}" class="btn btn-outline-info btn-lg"
+      >❓ Help & FAQs</a
+    >
+  </div>
+</div>
+
+{% if jobs and jobs|length > 0 %}
+<div class="card shadow p-4 mb-5">
+  <h3 class="text-center mb-4">📅 Deadline Calendar</h3>
+  <div id="calendar"></div>
+</div>
+{% endif %}
+
+<link
+  href="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.8/main.min.css"
+  rel="stylesheet"
+/>
+<script src="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.8/main.min.js"></script>
+
+<script>
+  document.addEventListener("DOMContentLoaded", function () {
+    const calendarEl = document.getElementById("calendar");
+    if (!calendarEl) return;
+
+    const events = [
+      {% for job in jobs %}
+        {% set name = (job.jobs.client_name if job.jobs is not none else 'Job') %}
+        {% set start = (job.hard_deadline or '')[:10] %}
+        {% if start %}
+        {
+          title: {{ name|tojson }},
+          start: {{ start|tojson }},
+          url: "{{ url_for('job_details', job_id=job.job_id) }}"
+        }{% if not loop.last %},{% endif %}
+        {% endif %}
+      {% endfor %}
+    ];
+
+    const calendar = new FullCalendar.Calendar(calendarEl, {
+      initialView: "dayGridMonth",
+      headerToolbar: {
+        left: "prev,next today",
+        center: "title",
+        right: "dayGridMonth,timeGridWeek,listWeek"
+      },
+      events
+    });
+
+    calendar.render();
+  });
+</script>
+
+<style>
+  #calendar {
+    max-width: 100%;
+    margin: 0 auto;
+    background: #fff;
+    padding: 15px;
+    border-radius: 10px;
+    box-shadow: 0 0 12px rgba(0, 0, 0, 0.1);
+  }
+</style>
+
+{% endblock %}

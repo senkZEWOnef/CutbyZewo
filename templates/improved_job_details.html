@@ -266,15 +266,7 @@
           </div>
           <div>
             <small class="text-muted">
-              {% if estimate.created_at %}
-                {% if estimate.created_at.strftime %}
-                  {{ estimate.created_at.strftime('%m/%d/%Y %I:%M %p') }}
-                {% else %}
-                  {{ estimate.created_at }}
-                {% endif %}
-              {% else %}
-                Unknown date
-              {% endif %}
+              {{ estimate.created_at.strftime('%m/%d/%Y %I:%M %p') if estimate.created_at else 'Unknown date' }}
             </small>
           </div>
         </div>

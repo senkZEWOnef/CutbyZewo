@@ -1,0 +1,231 @@
+{% extends "base.html" %} {% block title %}Job Details{% endblock %} {% block
+content %}
+<h1 class="mb-4 text-center">📀 Job Details</h1>
+
+<!-- ✅ Job Info & Actions -->
+<div class="card p-4 shadow mb-4">
+  <h3>Client: {{ job.client_name or "N/A" }}</h3>
+  <p>
+    <strong>Created:</strong>
+    {% if job.created_at %} {{ job.created_at.strftime('%Y-%m-%d %H:%M') }} {%
+    else %} N/A {% endif %}
+  </p>
+  <p><strong>Final Price:</strong> ${{ job.final_price or "N/A" }}</p>
+  <p>
+    <strong>Soft Deadline:</strong>
+    {{ job.soft_deadline.strftime('%Y-%m-%d') if job.soft_deadline else "N/A" }}
+  </p>
+  <p>
+    <strong>Hard Deadline:</strong>
+    {{ job.hard_deadline.strftime('%Y-%m-%d') if job.hard_deadline else "N/A" }}
+  </p>
+
+  <!-- ✅ Update Final Price -->
+  <form
+    method="POST"
+    action="{{ url_for('set_price', job_id=job.id) }}"
+    class="mb-3"
+  >
+    <label><strong>Update Final Price (USD):</strong></label>
+    <div class="input-group">
+      <input
+        type="number"
+        step="0.01"
+        name="final_price"
+        class="form-control"
+        value="{{ job.final_price or '' }}"
+        required
+      />
+      <button type="submit" class="btn btn-success">Save</button>
+    </div>
+  </form>
+
+  <!-- ✅ Update Deadlines -->
+  <form method="POST" action="{{ url_for('job_details', job_id=job.id) }}">
+    <div class="row mb-2">
+      <div class="col-md-6">
+        <label for="soft_deadline" class="form-label"
+          ><strong>Soft Deadline</strong></label
+        >
+        <input
+          type="date"
+          class="form-control"
+          id="soft_deadline"
+          name="soft_deadline"
+          value="{{ job.soft_deadline.strftime('%Y-%m-%d') if job.soft_deadline else '' }}"
+        />
+      </div>
+      <div class="col-md-6">
+        <label for="hard_deadline" class="form-label"
+          ><strong>Hard Deadline</strong></label
+        >
+        <input
+          type="date"
+          class="form-control"
+          id="hard_deadline"
+          name="hard_deadline"
+          value="{{ job.hard_deadline.strftime('%Y-%m-%d') if job.hard_deadline else '' }}"
+        />
+      </div>
+    </div>
+    <button type="submit" class="btn btn-dark">💾 Save Deadlines</button>
+  </form>
+
+  <!-- ✅ Action Buttons -->
+  <button
+    type="button"
+    class="btn btn-outline-primary mb-2"
+    data-bs-toggle="modal"
+    data-bs-target="#estimateModal"
+  >
+    💰 Estimate Cost
+  </button>
+  <a
+    href="{{ url_for('edit_job', job_id=job.id) }}"
+    class="btn btn-warning mb-2"
+    >✏️ Edit Job</a
+  >
+  <form
+    action="{{ url_for('delete_job', job_id=job.id) }}"
+    method="POST"
+    style="display: inline"
+    onsubmit="return confirm('Are you sure?');"
+  >
+    <button type="submit" class="btn btn-danger mb-2">🗑️ Delete Job</button>
+  </form>
+  <a href="{{ url_for('jobs') }}" class="btn btn-secondary mb-2"
+    >⬅️ Back to Jobs</a
+  >
+</div>
+
+<!-- ✅ Grouped Cut Parts -->
+<div class="card p-4 shadow mb-4">
+  <h4>Cut Parts (Grouped)</h4>
+  {% if grouped_parts %}
+  <ul class="list-group">
+    {% for g in grouped_parts %}
+    <li
+      class="list-group-item d-flex justify-content-between align-items-center"
+    >
+      <div>
+        <strong>{{ g.width }} x {{ g.height }} in</strong>
+        <span class="text-muted">— {{ g.material }} panel</span>
+      </div>
+      <span class="badge bg-dark rounded-pill">{{ g.quantity }}</span>
+    </li>
+    {% endfor %}
+  </ul>
+  {% else %}
+  <p>No parts found for this job.</p>
+  {% endif %}
+</div>
+
+<!-- ✅ Cut Parts -->
+<div class="card p-4 shadow mb-4">
+  <h4>Cut Parts List</h4>
+  {% if parts %}
+  <ul class="list-group">
+    {% for part in parts %}
+    <li class="list-group-item">
+      <strong>Part #{{ loop.index }}:</strong> {{ part.width }} x {{ part.height
+      }} inches — <em>{{ part.material }} panel</em>
+    </li>
+    {% endfor %}
+  </ul>
+  {% else %}
+  <p>No parts found for this job.</p>
+  {% endif %}
+</div>
+
+<!-- ✅ PDF Buttons -->
+<a
+  href="{{ url_for('download_job_pdf', job_id=job.id) }}"
+  class="btn btn-outline-dark mb-2"
+>
+  📄 Export as PDF
+</a>
+
+<a
+  href="{{ url_for('download_job_pdf', job_id=job.id) }}"
+  class="btn btn-outline-dark mb-2"
+  >🧾 Download PDF</a
+>
+
+<!-- ✅ Cut Sheets -->
+<div class="card p-4 shadow mb-4">
+  <h4>Cut Sheets</h4>
+  {% if sheet_images %}
+  <div class="row g-4">
+    {% for img in sheet_images %}
+    <div class="col-md-6 col-lg-4">
+      <div class="card border-0 shadow-sm">
+        <img
+          src="{{ url_for('static', filename=img.src) }}"
+          class="card-img-top"
+          alt="Cut Sheet {{ loop.index }}"
+        />
+        <div class="card-body p-2 text-center">
+          Sheet {{ loop.index }}<br />
+          <small class="text-muted">{{ img.label }} panel</small>
+        </div>
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+  {% else %}
+  <p>No cut sheets found.</p>
+  {% endif %}
+</div>
+
+<!-- ✅ Uploaded Files -->
+<div class="card p-4 shadow mb-4">
+  <h4>Uploaded Files</h4>
+  {% if uploaded_images %}
+  <div class="row">
+    {% for img in uploaded_images %}
+    <div class="col-md-4 mb-3">
+      <div class="position-relative">
+        <img
+          src="{{ img.url }}"
+          class="img-fluid border rounded"
+          alt="{{ img.filename }}"
+        />
+        <div class="position-absolute bottom-0 start-0 w-100 bg-dark bg-opacity-75 text-white p-2">
+          <small>{{ img.filename }}</small>
+          {% if img.subfolder %}
+          <br><small class="text-muted">{{ img.subfolder }}</small>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+  {% else %}
+  <p>No files uploaded for this job.</p>
+  {% endif %}
+</div>
+
+<!-- ✅ Past Estimates -->
+<div class="card p-4 shadow mb-4">
+  <h4>Past Estimates</h4>
+  {% if estimates %}
+  <ul class="list-group">
+    {% for est in estimates %}
+    <li
+      class="list-group-item d-flex justify-content-between align-items-center"
+    >
+      ${{ "%.2f"|format(est.amount) }}
+      <small class="text-muted"
+        >{{ est.created_at[:16].replace("T", " ") if est.created_at else "N/A"
+        }}</small
+      >
+    </li>
+    {% endfor %}
+  </ul>
+  {% else %}
+  <p>No estimates saved yet.</p>
+  {% endif %}
+</div>
+
+<!-- ✅ Estimate Modal -->
+{% include "partials/estimate_modal.html" %} {% endblock %}

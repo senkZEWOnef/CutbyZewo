@@ -1,0 +1,166 @@
+{% extends "base.html" %} 
+{% block title %}My Jobs - byZewo{% endblock %} 
+{% block content %}
+
+<div class="d-flex justify-content-between align-items-center mb-4">
+  <h1 class="display-6">
+    <i class="fas fa-folder-open text-primary"></i> My Projects
+  </h1>
+  <a href="{{ url_for('create_job') }}" class="btn btn-primary btn-lg">
+    <i class="fas fa-plus"></i> New Job
+  </a>
+</div>
+
+<!-- Job Stats Overview -->
+<div class="row mb-4">
+  <div class="col-md-3 mb-3">
+    <div class="card text-center bg-primary text-white">
+      <div class="card-body">
+        <i class="fas fa-briefcase fa-2x mb-2"></i>
+        <h4>{{ jobs|length }}</h4>
+        <small>Total Jobs</small>
+      </div>
+    </div>
+  </div>
+  <div class="col-md-3 mb-3">
+    <div class="card text-center bg-success text-white">
+      <div class="card-body">
+        <i class="fas fa-dollar-sign fa-2x mb-2"></i>
+        <h4>${{ (jobs|selectattr('final_price')|sum(attribute='final_price') or 0)|round(2) }}</h4>
+        <small>Total Value</small>
+      </div>
+    </div>
+  </div>
+  <div class="col-md-3 mb-3">
+    <div class="card text-center bg-warning text-dark">
+      <div class="card-body">
+        <i class="fas fa-clock fa-2x mb-2"></i>
+        <h4>{{ jobs|selectattr('hard_deadline')|list|length }}</h4>
+        <small>With Deadlines</small>
+      </div>
+    </div>
+  </div>
+  <div class="col-md-3 mb-3">
+    <div class="card text-center bg-info text-white">
+      <div class="card-body">
+        <i class="fas fa-cut fa-2x mb-2"></i>
+        <h4>{{ jobs|sum(attribute='part_counts.total') }}</h4>
+        <small>Total Parts</small>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Jobs List -->
+{% if jobs %}
+<div class="row">
+  {% for job in jobs %}
+  <div class="col-lg-6 col-xl-4 mb-4">
+    <div class="card job-card h-100">
+      <div class="card-header bg-light d-flex justify-content-between align-items-center">
+        <h6 class="mb-0 text-truncate me-2">
+          <i class="fas fa-user"></i>
+          {{ job.client_name or "Unnamed Client" }}
+        </h6>
+        
+        <!-- Job Status Badge -->
+        {% if job.final_price %}
+        <span class="badge bg-success">Quoted</span>
+        {% else %}
+        <span class="badge bg-warning text-dark">Draft</span>
+        {% endif %}
+      </div>
+      
+      <div class="card-body">
+        <!-- Job Details -->
+        <div class="row text-center mb-3">
+          <div class="col-4">
+            <div class="text-primary">
+              <i class="fas fa-puzzle-piece"></i>
+              <div class="small">Parts</div>
+              <strong>{{ job.part_counts.total }}</strong>
+            </div>
+          </div>
+          <div class="col-4">
+            <div class="text-success">
+              <i class="fas fa-dollar-sign"></i>
+              <div class="small">Value</div>
+              <strong>${{ job.final_price or "TBD" }}</strong>
+            </div>
+          </div>
+          <div class="col-4">
+            <div class="text-info">
+              <i class="fas fa-calendar"></i>
+              <div class="small">Created</div>
+              <strong>{{ job.created_at.strftime('%m/%d') if job.created_at else "N/A" }}</strong>
+            </div>
+          </div>
+        </div>
+
+        <!-- Materials Breakdown -->
+        {% if job.part_counts.total > 0 %}
+        <div class="mb-3">
+          <small class="text-muted">Materials:</small>
+          <div class="d-flex flex-wrap gap-1">
+            {% if job.part_counts['3/4'] > 0 %}
+            <span class="badge bg-secondary">3/4": {{ job.part_counts['3/4'] }}</span>
+            {% endif %}
+            {% if job.part_counts['1/2'] > 0 %}
+            <span class="badge bg-secondary">1/2": {{ job.part_counts['1/2'] }}</span>
+            {% endif %}
+            {% if job.part_counts['1/4'] > 0 %}
+            <span class="badge bg-secondary">1/4": {{ job.part_counts['1/4'] }}</span>
+            {% endif %}
+          </div>
+        </div>
+        {% endif %}
+
+        <!-- Deadline Warning -->
+        {% if job.hard_deadline %}
+        {% set days_until = (job.hard_deadline - now).days if now else 0 %}
+        <div class="alert alert-{{ 'danger' if days_until < 3 else 'warning' if days_until < 7 else 'info' }} alert-sm py-2">
+          <i class="fas fa-exclamation-triangle"></i>
+          <strong>Due:</strong> {{ job.hard_deadline.strftime('%B %d, %Y') }}
+          {% if days_until >= 0 %}
+          <small>({{ days_until }} days)</small>
+          {% endif %}
+        </div>
+        {% endif %}
+      </div>
+
+      <div class="card-footer bg-transparent">
+        <div class="d-grid gap-2">
+          <a href="{{ url_for('job_details', job_id=job.id) }}" class="btn btn-primary btn-sm">
+            <i class="fas fa-eye"></i> View Details
+          </a>
+          <div class="btn-group" role="group">
+            <a href="{{ url_for('edit_job', job_id=job.id) }}" class="btn btn-outline-secondary btn-sm">
+              <i class="fas fa-edit"></i> Edit
+            </a>
+            <a href="{{ url_for('job_gallery', job_id=job.id) }}" class="btn btn-outline-secondary btn-sm">
+              <i class="fas fa-images"></i> Photos
+            </a>
+            <a href="{{ url_for('download_job_pdf', job_id=job.id) }}" class="btn btn-outline-success btn-sm">
+              <i class="fas fa-download"></i> PDF
+            </a>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  {% endfor %}
+</div>
+
+{% else %}
+<!-- Empty State -->
+<div class="text-center py-5">
+  <i class="fas fa-folder-open fa-4x text-muted mb-4"></i>
+  <h3 class="text-muted mb-3">No Jobs Yet</h3>
+  <p class="text-muted mb-4">Create your first cabinet cutting project to get started.</p>
+  <a href="{{ url_for('create_job') }}" class="btn btn-primary btn-lg">
+    <i class="fas fa-plus"></i> Create First Job
+  </a>
+</div>
+{% endif %}
+
+{% endblock %}
