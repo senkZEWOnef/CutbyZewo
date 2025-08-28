@@ -130,9 +130,28 @@
         </form>
 
         <!-- Add Estimate Button -->
-        <button class="btn btn-outline-success w-100" data-bs-toggle="modal" data-bs-target="#estimateModal">
+        <button class="btn btn-outline-success w-100 mb-3" data-bs-toggle="modal" data-bs-target="#estimateModal">
           <i class="fas fa-calculator"></i> Add Estimate
         </button>
+
+        <!-- Update Status Form -->
+        <form method="POST" action="{{ url_for('update_job_status', job_id=job.id) }}">
+          <label class="form-label">
+            <i class="fas fa-tasks"></i> Update Status
+          </label>
+          <div class="input-group">
+            <select name="status" class="form-select">
+              <option value="draft" {{ 'selected' if job.status == 'draft' else '' }}>Draft</option>
+              <option value="quoted" {{ 'selected' if job.status == 'quoted' else '' }}>Quoted</option>
+              <option value="in_progress" {{ 'selected' if job.status == 'in_progress' else '' }}>In Progress</option>
+              <option value="completed" {{ 'selected' if job.status == 'completed' else '' }}>Completed</option>
+              <option value="cancelled" {{ 'selected' if job.status == 'cancelled' else '' }}>Cancelled</option>
+            </select>
+            <button class="btn btn-outline-primary" type="submit">
+              <i class="fas fa-sync"></i>
+            </button>
+          </div>
+        </form>
       </div>
     </div>
 

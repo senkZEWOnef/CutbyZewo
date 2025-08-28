@@ -288,11 +288,37 @@ def home():
     user_id = session.get("user_id")
 
     jobs = []
+    stats = {
+        "total_jobs": 0,
+        "total_revenue": 0.0,
+        "pending_quotes": 0,
+        "urgent_jobs": 0,
+        "completed_jobs": 0,
+        "in_progress_jobs": 0
+    }
 
     if user_id and access_token:
         try:
-            # Get hard deadlines (simplified query to avoid join issues)
-            resp = (
+            # Get all jobs for statistics
+            all_jobs_resp = (
+                supabase
+                .postgrest.auth(access_token)
+                .table("jobs")
+                .select("id, client_name, final_price, status, created_at")
+                .eq("user_id", user_id)
+                .execute()
+            )
+            all_jobs = all_jobs_resp.data or []
+            
+            # Calculate statistics
+            stats["total_jobs"] = len(all_jobs)
+            stats["total_revenue"] = sum(float(job.get("final_price", 0) or 0) for job in all_jobs)
+            stats["pending_quotes"] = len([job for job in all_jobs if not job.get("final_price")])
+            stats["completed_jobs"] = len([job for job in all_jobs if job.get("status") == "completed"])
+            stats["in_progress_jobs"] = len([job for job in all_jobs if job.get("status") == "in_progress"])
+
+            # Get hard deadlines for urgent jobs calculation
+            deadlines_resp = (
                 supabase
                 .postgrest.auth(access_token)
                 .table("deadlines")
@@ -302,29 +328,37 @@ def home():
                 .order("hard_deadline")
                 .execute()
             )
-            deadlines = resp.data or []
+            deadlines = deadlines_resp.data or []
             
-            # Get job names separately if we have deadlines
+            # Calculate urgent jobs (within 3 days)
+            from datetime import datetime, timedelta
+            today = datetime.now().date()
+            urgent_threshold = today + timedelta(days=3)
+            
+            urgent_job_ids = []
+            for deadline in deadlines:
+                if deadline.get("hard_deadline"):
+                    try:
+                        deadline_date = datetime.fromisoformat(deadline["hard_deadline"].replace('Z', '+00:00')).date()
+                        if deadline_date <= urgent_threshold:
+                            urgent_job_ids.append(deadline["job_id"])
+                    except:
+                        continue
+            
+            stats["urgent_jobs"] = len(urgent_job_ids)
+            
+            # Get upcoming deadlines for dashboard display (top 5)
             jobs = []
-            for deadline in deadlines[:5]:  # Limit to 5 most recent
+            for deadline in deadlines[:5]:
                 try:
-                    job_resp = (
-                        supabase
-                        .postgrest.auth(access_token)
-                        .table("jobs")
-                        .select("client_name")
-                        .eq("id", deadline["job_id"])
-                        .single()
-                        .execute()
-                    )
-                    if job_resp.data:
+                    job_data = next((job for job in all_jobs if job["id"] == deadline["job_id"]), None)
+                    if job_data:
                         jobs.append({
                             "job_id": deadline["job_id"],
                             "hard_deadline": deadline["hard_deadline"],
-                            "jobs": {"client_name": job_resp.data["client_name"]}
+                            "jobs": {"client_name": job_data["client_name"]}
                         })
                 except:
-                    # Skip if job not found
                     continue
 
         except Exception as e:
@@ -334,7 +368,7 @@ def home():
                 flash("Session expired. Please log in again.", "warning")
             print("Error loading home page:", e)
 
-    return render_template("landing.html", jobs=jobs)
+    return render_template("landing.html", jobs=jobs, stats=stats)
 
 
 
@@ -474,7 +508,7 @@ def jobs():
         # Jobs for this user
         jobs_resp = (
             authed.table("jobs")
-            .select("*")
+            .select("id, client_name, final_price, status, created_at")
             .eq("user_id", user_id)
             .order("created_at", desc=True)
             .execute()
@@ -914,16 +948,64 @@ def set_price(job_id):
     )
 
     if job_res.data:
-        # ✅ Step 2: Update the final_price with token
+        # ✅ Step 2: Update the final_price and status with token
+        update_data = {"final_price": new_price}
+        # If price is set, automatically move to quoted status
+        if new_price and float(new_price) > 0:
+            update_data["status"] = "quoted"
         (
             supabase
             .postgrest.auth(access_token)
             .table("jobs")
-            .update({"final_price": new_price})
+            .update(update_data)
             .eq("id", str(job_id))
             .execute()
         )
         flash("Final price updated.")
+    else:
+        flash("Unauthorized or job not found.", "danger")
+
+    return redirect(url_for("job_details", job_id=job_id))
+
+
+@app.route("/jobs/<uuid:job_id>/update_status", methods=["POST"])
+def update_job_status(job_id):
+    user = current_user()
+    if not user:
+        return redirect(url_for("login"))
+
+    access_token = request.cookies.get("access_token")
+    new_status = request.form.get("status")
+    
+    # Validate status
+    valid_statuses = ["draft", "quoted", "in_progress", "completed", "cancelled"]
+    if new_status not in valid_statuses:
+        flash("Invalid status.", "danger")
+        return redirect(url_for("job_details", job_id=job_id))
+
+    # Verify ownership using RLS-authenticated query
+    job_res = (
+        supabase
+        .postgrest.auth(access_token)
+        .table("jobs")
+        .select("id, status")
+        .eq("id", str(job_id))
+        .eq("user_id", user["id"])
+        .single()
+        .execute()
+    )
+
+    if job_res.data:
+        # Update the status
+        (
+            supabase
+            .postgrest.auth(access_token)
+            .table("jobs")
+            .update({"status": new_status})
+            .eq("id", str(job_id))
+            .execute()
+        )
+        flash(f"Job status updated to {new_status.replace('_', ' ').title()}.", "success")
     else:
         flash("Unauthorized or job not found.", "danger")
 

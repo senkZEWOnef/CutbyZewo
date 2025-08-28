@@ -12,27 +12,43 @@
     
     {% if user %}
     <div class="row justify-content-center">
-      <div class="col-md-3 mb-3">
-        <div class="card bg-light border-0">
+      <div class="col-md-2 mb-3">
+        <div class="card bg-primary text-white border-0">
           <div class="card-body text-center">
-            <h5 class="text-primary">12</h5>
-            <small class="text-muted">Active Jobs</small>
+            <h5>{{ stats.total_jobs if stats else 0 }}</h5>
+            <small>Total Jobs</small>
           </div>
         </div>
       </div>
-      <div class="col-md-3 mb-3">
-        <div class="card bg-light border-0">
+      <div class="col-md-2 mb-3">
+        <div class="card bg-success text-white border-0">
           <div class="card-body text-center">
-            <h5 class="text-success">$15,420</h5>
-            <small class="text-muted">Monthly Revenue</small>
+            <h5>${{ "{:,.0f}".format(stats.total_revenue) if stats else "0" }}</h5>
+            <small>Total Revenue</small>
           </div>
         </div>
       </div>
-      <div class="col-md-3 mb-3">
-        <div class="card bg-light border-0">
+      <div class="col-md-2 mb-3">
+        <div class="card bg-warning text-dark border-0">
           <div class="card-body text-center">
-            <h5 class="text-warning">3</h5>
-            <small class="text-muted">Due This Week</small>
+            <h5>{{ stats.pending_quotes if stats else 0 }}</h5>
+            <small>Pending Quotes</small>
+          </div>
+        </div>
+      </div>
+      <div class="col-md-2 mb-3">
+        <div class="card bg-danger text-white border-0">
+          <div class="card-body text-center">
+            <h5>{{ stats.urgent_jobs if stats else 0 }}</h5>
+            <small>Urgent Jobs</small>
+          </div>
+        </div>
+      </div>
+      <div class="col-md-2 mb-3">
+        <div class="card bg-info text-white border-0">
+          <div class="card-body text-center">
+            <h5>{{ stats.in_progress_jobs if stats else 0 }}</h5>
+            <small>In Progress</small>
           </div>
         </div>
       </div>

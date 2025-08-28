@@ -42,11 +42,14 @@ class StorageManager:
         try:
             # Read file content
             file_bytes = file.read()
+            print(f"StorageManager: Attempting to upload {unique_filename} ({len(file_bytes)} bytes)")
             
             # Get MIME type
             mime_type, _ = mimetypes.guess_type(filename)
             if not mime_type:
                 mime_type = "application/octet-stream"
+                
+            print(f"StorageManager: MIME type: {mime_type}, Storage path: {storage_path}")
             
             print(f"📤 Uploading {storage_path} to bucket '{StorageManager.BUCKET_NAME}'")
             print(f"📄 File size: {len(file_bytes)} bytes, MIME type: {mime_type}")
