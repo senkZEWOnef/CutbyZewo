@@ -403,14 +403,10 @@ def create_job():
         soft_deadline = datetime.strptime(soft_deadline, "%Y-%m-%d") if soft_deadline else None
         hard_deadline = datetime.strptime(hard_deadline, "%Y-%m-%d") if hard_deadline else None
 
-        parts_by_thickness = {}
-        for w, h, q, t in zip(widths, heights, quantities, thicknesses):
-            if w and h and q and t:
-                parts_by_thickness.setdefault(t, []).extend([(float(w), float(h))] * int(q))
-
+        # Process parts in order while maintaining sheets by thickness
         panel_width = float(request.form.get("panel_width", 96))
         panel_height = float(request.form.get("panel_height", 48))
-
+        
         job_uuid = str(uuid.uuid4())
         output_dir = f"static/sheets/{job_uuid}"
         os.makedirs(output_dir, exist_ok=True)
@@ -426,31 +422,50 @@ def create_job():
             flash("Job creation failed. Try again.", "danger")
             return redirect(url_for("create_job"))
 
+        # Track active sheets for each thickness
+        sheets_by_thickness = {}
+        all_parts = []
+        
+        # Process parts in the order they were entered
+        for w, h, q, t in zip(widths, heights, quantities, thicknesses):
+            if w and h and q and t:
+                # Add each part (respecting quantity) to the thickness-specific optimization
+                parts_for_thickness = [(float(w), float(h))] * int(q)
+                all_parts.extend([(float(w), float(h), t) for _ in range(int(q))])
+                
+                if t not in sheets_by_thickness:
+                    sheets_by_thickness[t] = []
+                
+                # Optimize this thickness incrementally with new parts
+                current_parts = [p[:2] for p in all_parts if p[2] == t]  # Get all parts for this thickness so far
+                sheets_by_thickness[t] = optimize_cuts(panel_width, panel_height, current_parts)
+
+        # Generate images and collect paths
         sheet_images = []
-        for t, parts in parts_by_thickness.items():
+        for t, sheets in sheets_by_thickness.items():
             subfolder = os.path.join(output_dir, t)
             os.makedirs(subfolder, exist_ok=True)
 
-            sheets = optimize_cuts(panel_width, panel_height, parts)
             draw_sheets_to_files(sheets, subfolder)
 
             for i in range(len(sheets)):
                 rel = f"sheets/{job_uuid}/{t}/sheet_{i+1}.png"
                 sheet_images.append((rel, t))
 
-            try:
-                supabase.table("parts").insert([
-                    {
-                        "job_id": job_uuid,
-                        "width": w,
-                        "height": h,
-                        "material": t
-                    }
-                    for w, h in parts
-                ]).execute()
-            except Exception as e:
-                print("Parts insert error:", e)
-                flash("Failed to insert parts.", "warning")
+        # Insert all parts into database
+        try:
+            supabase.table("parts").insert([
+                {
+                    "job_id": job_uuid,
+                    "width": w,
+                    "height": h,
+                    "material": t
+                }
+                for w, h, t in all_parts
+            ]).execute()
+        except Exception as e:
+            print("Parts insert error:", e)
+            flash("Failed to insert parts.", "warning")
 
         if soft_deadline or hard_deadline:
             try:
@@ -845,26 +860,39 @@ def edit_job(job_id):
                 for (w, h) in plist
             ]).execute()
 
-        # ✅ Regenerate sheets
+        # ✅ Regenerate sheets with improved optimization
         panel_width = 96
         panel_height = 48
         output_dir = f"static/sheets/{job_id}"
 
+        # Clear existing sheet images
         for t in ["3/4", "1/2", "1/4"]:
             subfolder = os.path.join(output_dir, t)
             if os.path.exists(subfolder):
                 for f in os.listdir(subfolder):
                     os.remove(os.path.join(subfolder, f))
 
-        sheet_map = {}
+        # Track sheets for each thickness to allow better optimization
+        sheets_by_thickness = {}
+        
+        # Process all parts to maintain order-based optimization
         for part in combined_parts:
             t = part["material"]
-            sheet_map.setdefault(t, []).append((part["width"], part["height"]))
+            w = float(part["width"])
+            h = float(part["height"])
+            
+            if t not in sheets_by_thickness:
+                sheets_by_thickness[t] = []
+            
+            # Get all parts for this thickness so far and re-optimize
+            current_parts = [(float(p["width"]), float(p["height"])) 
+                           for p in combined_parts if p["material"] == t]
+            sheets_by_thickness[t] = optimize_cuts(panel_width, panel_height, current_parts)
 
-        for t, parts in sheet_map.items():
+        # Generate sheet images
+        for t, sheets in sheets_by_thickness.items():
             subfolder = os.path.join(output_dir, t)
             os.makedirs(subfolder, exist_ok=True)
-            sheets = optimize_cuts(panel_width, panel_height, parts)
             draw_sheets_to_files(sheets, subfolder)
 
         return redirect(url_for("job_details", job_id=job_id))
