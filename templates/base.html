@@ -83,8 +83,14 @@
         font-weight: 600;
       }
 
-      .status-pending { background: var(--warning-amber); color: #000; }
+      .status-draft { background: #6c757d; color: #fff; }
+      .status-quoted { background: var(--warning-amber); color: #000; }
       .status-progress { background: var(--steel-blue); color: #fff; }
+      .status-completed { background: var(--success-green); color: #fff; }
+      .status-cancelled { background: var(--danger-red); color: #fff; }
+      
+      /* Legacy status classes */
+      .status-pending { background: var(--warning-amber); color: #000; }
       .status-complete { background: var(--success-green); color: #fff; }
 
       /* Better job cards */

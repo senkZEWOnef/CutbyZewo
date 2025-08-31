@@ -287,7 +287,8 @@ def home():
     access_token = request.cookies.get("access_token")
     user_id = session.get("user_id")
 
-    jobs = []
+    upcoming_deadlines = []
+    recent_jobs = []
     stats = {
         "total_jobs": 0,
         "total_revenue": 0.0,
@@ -348,15 +349,30 @@ def home():
             stats["urgent_jobs"] = len(urgent_job_ids)
             
             # Get upcoming deadlines for dashboard display (top 5)
-            jobs = []
+            upcoming_deadlines = []
             for deadline in deadlines[:5]:
                 try:
                     job_data = next((job for job in all_jobs if job["id"] == deadline["job_id"]), None)
                     if job_data:
-                        jobs.append({
+                        upcoming_deadlines.append({
                             "job_id": deadline["job_id"],
                             "hard_deadline": deadline["hard_deadline"],
                             "jobs": {"client_name": job_data["client_name"]}
+                        })
+                except:
+                    continue
+
+            # Get recent jobs for dashboard display (top 5 most recent)
+            recent_jobs = []
+            for job in sorted(all_jobs, key=lambda x: x.get("created_at", ""), reverse=True)[:5]:
+                try:
+                    if job.get("created_at"):
+                        created_at = datetime.fromisoformat(job["created_at"].replace("Z", "+00:00"))
+                        recent_jobs.append({
+                            "id": job["id"],
+                            "client_name": job["client_name"],
+                            "status": job.get("status", "draft"),
+                            "created_at": created_at
                         })
                 except:
                     continue
@@ -372,7 +388,7 @@ def home():
     from datetime import datetime
     current_date = datetime.now().date()
     
-    return render_template("landing.html", jobs=jobs, stats=stats, current_date=current_date)
+    return render_template("landing.html", jobs=upcoming_deadlines, recent_jobs=recent_jobs, stats=stats, current_date=current_date)
 
 
 

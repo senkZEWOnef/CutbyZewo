@@ -110,7 +110,8 @@
           </h5>
         </div>
         <div class="card-body">
-          <!-- Job items would go here -->
+          {% if recent_jobs and recent_jobs|length > 0 %}
+          {% for job in recent_jobs %}
           <div class="d-flex align-items-center p-3 border-bottom">
             <div class="me-3">
               <div class="rounded-circle bg-primary d-flex align-items-center justify-content-center" style="width: 40px; height: 40px;">
@@ -118,14 +119,30 @@
               </div>
             </div>
             <div class="flex-grow-1">
-              <h6 class="mb-1">Kitchen Renovation - Smith Family</h6>
-              <small class="text-muted">Created 2 days ago</small>
+              <h6 class="mb-1">{{ job.client_name or 'Unnamed Client' }}</h6>
+              <small class="text-muted">Created {{ job.created_at.strftime('%b %d, %Y') if job.created_at else 'Unknown date' }}</small>
             </div>
             <div>
-              <span class="status-badge status-progress">In Progress</span>
+              {% set status_class = {
+                'draft': 'status-draft',
+                'quoted': 'status-quoted', 
+                'in_progress': 'status-progress',
+                'completed': 'status-completed',
+                'cancelled': 'status-cancelled'
+              }.get(job.status, 'status-draft') %}
+              <span class="status-badge {{ status_class }}">{{ job.status.replace('_', ' ').title() if job.status else 'Draft' }}</span>
             </div>
           </div>
-          <!-- More job items... -->
+          {% endfor %}
+          {% else %}
+          <div class="text-center py-4">
+            <i class="fas fa-folder-open fa-3x text-muted mb-3"></i>
+            <p class="text-muted">No recent jobs found.</p>
+            <a href="{{ url_for('create_job') }}" class="btn btn-primary btn-sm">
+              <i class="fas fa-plus"></i> Create Your First Job
+            </a>
+          </div>
+          {% endif %}
         </div>
       </div>
     </div>
