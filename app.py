@@ -475,7 +475,7 @@ def create_job():
                     "job_id": job_uuid,
                     "width": w,
                     "height": h,
-                    "material": t
+                    "thickness": t
                 }
                 for w, h, t in all_parts
             ]).execute()
@@ -515,11 +515,155 @@ def create_job():
 
         return render_template(
             "result.html",
-            parts=[(w, h, t) for t, ps in parts_by_thickness.items() for (w, h) in ps],
-            sheet_images=sheet_images
+            parts=all_parts,
+            sheet_images=sheet_images,
+            job_id=job_uuid
         )
 
     return render_template("index.html")
+
+
+@app.route("/jobs/<uuid:job_id>/visualize")
+def visualize_cabinet(job_id):
+    if "user_id" not in session:
+        flash("Please log in to view cabinet visualizer.", "warning")
+        return redirect(url_for("login"))
+
+    user_id = session["user_id"]
+    access_token = request.cookies.get("access_token")
+
+    if not access_token:
+        flash("Session expired. Please log in again.", "danger")
+        return redirect(url_for("logout"))
+
+    try:
+        # Get job details
+        job_resp = (
+            supabase
+            .postgrest.auth(access_token)
+            .table("jobs")
+            .select("*")
+            .eq("id", str(job_id))
+            .eq("user_id", user_id)
+            .single()
+            .execute()
+        )
+        job = job_resp.data
+        
+        # Parse date string if it exists
+        if job and job.get('created_at'):
+            from datetime import datetime
+            try:
+                job['created_at'] = datetime.fromisoformat(job['created_at'].replace('Z', '+00:00'))
+            except:
+                job['created_at'] = None
+
+        # Get parts for this job
+        parts_resp = (
+            supabase
+            .postgrest.auth(access_token)
+            .table("parts")
+            .select("*")
+            .eq("job_id", str(job_id))
+            .execute()
+        )
+        parts = parts_resp.data or []
+
+        response = make_response(render_template("kitchen_designer.html", job=job, parts=parts))
+        response.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate'
+        response.headers['Pragma'] = 'no-cache'
+        response.headers['Expires'] = '0'
+        return response
+
+    except Exception as e:
+        print("Error loading job for visualization:", e)
+        print(f"Job ID: {job_id}, User ID: {user_id}")
+        flash(f"Could not load cabinet visualizer: {str(e)}", "danger")
+        return redirect(url_for("jobs"))
+
+@app.route("/3d-test")
+def standalone_3d_test():
+    response = make_response(render_template("test_3d_only.html"))
+    response.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate'
+    response.headers['Pragma'] = 'no-cache'
+    response.headers['Expires'] = '0'
+    return response
+
+@app.route("/fresh-3d-test")
+def fresh_3d_test():
+    response = make_response(render_template("test_3d_only.html"))
+    response.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate'
+    response.headers['Pragma'] = 'no-cache'
+    response.headers['Expires'] = '0'
+    return response
+
+@app.route("/kitchen-designer-new")
+def kitchen_designer_new():
+    response = make_response(render_template("kitchen_designer.html"))
+    response.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate'
+    response.headers['Pragma'] = 'no-cache'
+    response.headers['Expires'] = '0'
+    return response
+
+@app.route("/jobs/<uuid:job_id>/test3d")
+def test_3d(job_id):
+    if "user_id" not in session:
+        flash("Please log in to view 3D test.", "warning")
+        return redirect(url_for("login"))
+
+    user_id = session["user_id"]
+    access_token = request.cookies.get("access_token")
+
+    if not access_token:
+        flash("Session expired. Please log in again.", "danger")
+        return redirect(url_for("logout"))
+
+    try:
+        # Get job details
+        job_resp = (
+            supabase
+            .postgrest.auth(access_token)
+            .table("jobs")
+            .select("*")
+            .eq("id", str(job_id))
+            .eq("user_id", user_id)
+            .single()
+            .execute()
+        )
+        job = job_resp.data
+        
+        # Parse date string if it exists
+        if job and job.get('created_at'):
+            from datetime import datetime
+            try:
+                # Parse ISO format date string from Supabase
+                job['created_at'] = datetime.fromisoformat(job['created_at'].replace('Z', '+00:00'))
+            except:
+                # If parsing fails, set to None
+                job['created_at'] = None
+
+        # Get parts for this job
+        parts_resp = (
+            supabase
+            .postgrest.auth(access_token)
+            .table("parts")
+            .select("*")
+            .eq("job_id", str(job_id))
+            .execute()
+        )
+        parts = parts_resp.data or []
+
+        response = make_response(render_template("cabinet_visualizer_simple.html", job=job, parts=parts))
+        response.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate'
+        response.headers['Pragma'] = 'no-cache'
+        response.headers['Expires'] = '0'
+        return response
+
+    except Exception as e:
+        print("Error loading job for visualization:", e)
+        print(f"Job ID: {job_id}, User ID: {user_id}")
+        flash(f"Could not load cabinet visualizer: {str(e)}", "danger")
+        return redirect(url_for("jobs"))
 
 
 @app.route("/dashboard")

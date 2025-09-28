@@ -1,0 +1,210 @@
+{% extends "base.html" %}
+
+{% block title %}Cabinet Visualizer - Cut byZewo{% endblock %}
+
+{% block content %}
+<div class="page-header text-center">
+  <h1><i class="fas fa-cube"></i> Cabinet Visualizer</h1>
+  <p class="lead">Preview your cabinet design in 3D</p>
+</div>
+
+<div class="row">
+  <!-- 3D Viewer -->
+  <div class="col-lg-9">
+    <div class="card">
+      <div class="card-header d-flex justify-content-between align-items-center">
+        <h5 class="mb-0">
+          <i class="fas fa-eye"></i> 3D Preview
+          {% if job %}
+          - {{ job.client_name }}
+          {% endif %}
+        </h5>
+        <div class="btn-group" role="group">
+          <button type="button" class="btn btn-sm btn-outline-primary" onclick="resetCamera()">
+            <i class="fas fa-home"></i> Reset View
+          </button>
+        </div>
+      </div>
+      <div class="card-body p-0">
+        <div id="viewer" style="height: 600px; background: #f0f0f0;"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Controls Panel -->
+  <div class="col-lg-3">
+    <div class="card">
+      <div class="card-header">
+        <h6 class="mb-0"><i class="fas fa-info-circle"></i> Status</h6>
+      </div>
+      <div class="card-body">
+        <div id="status">Loading...</div>
+        <button class="btn btn-primary mt-2" onclick="testScene()">Test Scene</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Three.js Scripts -->
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/build/three.min.js"></script>
+
+<script>
+let scene, camera, renderer;
+let isMouseDown = false;
+let mouseX = 0, mouseY = 0;
+let cameraDistance = 10;
+
+function log(msg) {
+  console.log('[3D Test]', msg);
+  document.getElementById('status').innerHTML += '<br>' + msg;
+}
+
+function init3D() {
+  log('Starting Three.js initialization...');
+  
+  // Check Three.js
+  if (typeof THREE === 'undefined') {
+    log('ERROR: Three.js not loaded!');
+    return;
+  }
+  log('✓ Three.js loaded');
+  
+  // Get container
+  const container = document.getElementById('viewer');
+  if (!container) {
+    log('ERROR: Container not found!');
+    return;
+  }
+  log('✓ Container found');
+  
+  // Create scene
+  scene = new THREE.Scene();
+  scene.background = new THREE.Color(0x87CEEB); // Sky blue
+  log('✓ Scene created');
+  
+  // Create camera
+  const aspect = container.clientWidth / container.clientHeight;
+  camera = new THREE.PerspectiveCamera(75, aspect, 0.1, 1000);
+  camera.position.set(0, 0, 10);
+  camera.lookAt(0, 0, 0);
+  log('✓ Camera created');
+  
+  // Create renderer
+  renderer = new THREE.WebGLRenderer({ antialias: true });
+  renderer.setSize(container.clientWidth, container.clientHeight);
+  container.appendChild(renderer.domElement);
+  log('✓ Renderer created');
+  
+  // Add test objects
+  addTestObjects();
+  
+  // Add mouse controls
+  addMouseControls();
+  
+  // Start animation
+  animate();
+  
+  log('✓ Initialization complete!');
+}
+
+function addTestObjects() {
+  log('Adding test objects...');
+  
+  // Red cube at center
+  const redGeometry = new THREE.BoxGeometry(2, 2, 2);
+  const redMaterial = new THREE.MeshBasicMaterial({ color: 0xff0000 });
+  const redCube = new THREE.Mesh(redGeometry, redMaterial);
+  redCube.position.set(0, 0, 0);
+  scene.add(redCube);
+  log('✓ Red cube added');
+  
+  // Green cube
+  const greenGeometry = new THREE.BoxGeometry(1, 1, 1);
+  const greenMaterial = new THREE.MeshBasicMaterial({ color: 0x00ff00 });
+  const greenCube = new THREE.Mesh(greenGeometry, greenMaterial);
+  greenCube.position.set(3, 0, 0);
+  scene.add(greenCube);
+  log('✓ Green cube added');
+  
+  // Blue cube
+  const blueGeometry = new THREE.BoxGeometry(1, 1, 1);
+  const blueMaterial = new THREE.MeshBasicMaterial({ color: 0x0000ff });
+  const blueCube = new THREE.Mesh(blueGeometry, blueMaterial);
+  blueCube.position.set(-3, 0, 0);
+  scene.add(blueCube);
+  log('✓ Blue cube added');
+}
+
+function addMouseControls() {
+  const canvas = renderer.domElement;
+  
+  canvas.addEventListener('mousedown', (e) => {
+    isMouseDown = true;
+    mouseX = e.clientX;
+    mouseY = e.clientY;
+  });
+  
+  canvas.addEventListener('mousemove', (e) => {
+    if (!isMouseDown) return;
+    
+    const deltaX = e.clientX - mouseX;
+    const deltaY = e.clientY - mouseY;
+    
+    // Simple rotation
+    const theta = deltaX * 0.01;
+    const phi = deltaY * 0.01;
+    
+    const x = cameraDistance * Math.sin(theta);
+    const z = cameraDistance * Math.cos(theta);
+    const y = camera.position.y + phi;
+    
+    camera.position.set(x, y, z);
+    camera.lookAt(0, 0, 0);
+    
+    mouseX = e.clientX;
+    mouseY = e.clientY;
+  });
+  
+  canvas.addEventListener('mouseup', () => {
+    isMouseDown = false;
+  });
+  
+  canvas.addEventListener('wheel', (e) => {
+    e.preventDefault();
+    cameraDistance += e.deltaY * 0.01;
+    cameraDistance = Math.max(2, Math.min(50, cameraDistance));
+    
+    const currentPos = camera.position.clone().normalize();
+    camera.position.copy(currentPos.multiplyScalar(cameraDistance));
+    camera.lookAt(0, 0, 0);
+  });
+}
+
+function animate() {
+  requestAnimationFrame(animate);
+  if (renderer && scene && camera) {
+    renderer.render(scene, camera);
+  }
+}
+
+function resetCamera() {
+  camera.position.set(0, 0, 10);
+  camera.lookAt(0, 0, 0);
+  cameraDistance = 10;
+  log('Camera reset');
+}
+
+function testScene() {
+  log('--- TEST SCENE ---');
+  log('Scene children: ' + scene.children.length);
+  log('Camera position: ' + camera.position.x + ', ' + camera.position.y + ', ' + camera.position.z);
+  log('Renderer size: ' + renderer.domElement.width + 'x' + renderer.domElement.height);
+}
+
+// Initialize when page loads
+document.addEventListener('DOMContentLoaded', function() {
+  init3D();
+});
+</script>
+
+{% endblock %}

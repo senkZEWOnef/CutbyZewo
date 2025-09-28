@@ -11,8 +11,10 @@
     <!-- Font Awesome for better icons -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     
-    <!-- FullCalendar CSS -->
+    <!-- FullCalendar CSS - Only load on calendar page -->
+    {% if request.endpoint == 'calendar' %}
     <link href="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.8/main.min.css" rel="stylesheet" />
+    {% endif %}
 
     <!-- Custom CSS for cabinet business theme -->
     <style>
@@ -198,6 +200,9 @@
 
     <!-- Scripts -->
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+    <!-- FullCalendar JS - Only load on calendar page -->
+    {% if request.endpoint == 'calendar' %}
     <script src="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.8/main.min.js"></script>
+    {% endif %}
   </body>
 </html>

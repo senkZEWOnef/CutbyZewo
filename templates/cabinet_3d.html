@@ -1,0 +1,394 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Cabinet 3D Preview - Cut byZewo</title>
+    <style>
+        body { margin: 0; font-family: Arial; background: #f8f9fa; }
+        .header { background: #8B4513; color: white; padding: 20px; text-align: center; }
+        .container { display: flex; height: calc(100vh - 80px); }
+        .viewer { flex: 1; background: #e9ecef; }
+        .controls { width: 300px; background: white; padding: 20px; overflow-y: auto; box-shadow: -2px 0 5px rgba(0,0,0,0.1); }
+        .control-group { margin-bottom: 20px; }
+        .control-group label { display: block; margin-bottom: 5px; font-weight: bold; }
+        .control-group input, .control-group select { width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px; }
+        .control-group input[type="range"] { margin: 10px 0; }
+        .btn { padding: 10px 15px; background: #007bff; color: white; border: none; border-radius: 4px; cursor: pointer; margin: 5px 0; width: 100%; }
+        .btn:hover { background: #0056b3; }
+        .btn-secondary { background: #6c757d; }
+        .btn-secondary:hover { background: #545b62; }
+        .value-display { font-size: 12px; color: #666; }
+        .parts-list { background: #f8f9fa; padding: 10px; border-radius: 4px; margin-top: 10px; }
+        .part-item { background: white; padding: 8px; margin: 5px 0; border-radius: 3px; border-left: 3px solid #007bff; }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>🪚 Cabinet 3D Preview</h1>
+        <p>{{ job.client_name if job else 'Test Cabinet' }} - Interactive 3D Visualization</p>
+    </div>
+    
+    <div class="container">
+        <div class="viewer" id="viewer"></div>
+        
+        <div class="controls">
+            <h3>Cabinet Dimensions</h3>
+            
+            <div class="control-group">
+                <label>Width: <span id="widthValue">24</span>"</label>
+                <input type="range" id="widthSlider" min="12" max="48" value="24" oninput="updateWidth(this.value)">
+            </div>
+            
+            <div class="control-group">
+                <label>Height: <span id="heightValue">36</span>"</label>
+                <input type="range" id="heightSlider" min="30" max="96" value="36" oninput="updateHeight(this.value)">
+            </div>
+            
+            <div class="control-group">
+                <label>Depth: <span id="depthValue">24</span>"</label>
+                <input type="range" id="depthSlider" min="12" max="30" value="24" oninput="updateDepth(this.value)">
+            </div>
+            
+            <hr>
+            
+            <h3>Materials & Finish</h3>
+            
+            <div class="control-group">
+                <label>Wood Type</label>
+                <select id="woodType" onchange="updateMaterial()">
+                    <option value="oak">Oak</option>
+                    <option value="maple">Maple</option>
+                    <option value="cherry">Cherry</option>
+                    <option value="pine">Pine</option>
+                    <option value="birch">Birch</option>
+                </select>
+            </div>
+            
+            <div class="control-group">
+                <label>Door Style</label>
+                <select id="doorStyle" onchange="updateCabinet()">
+                    <option value="shaker">Shaker</option>
+                    <option value="flat">Flat Panel</option>
+                    <option value="raised">Raised Panel</option>
+                </select>
+            </div>
+            
+            <div class="control-group">
+                <label>Hardware</label>
+                <select id="hardware" onchange="updateCabinet()">
+                    <option value="brushed-nickel">Brushed Nickel</option>
+                    <option value="black">Black</option>
+                    <option value="brass">Brass</option>
+                    <option value="chrome">Chrome</option>
+                </select>
+            </div>
+            
+            <button class="btn" onclick="resetView()">Reset View</button>
+            <button class="btn btn-secondary" onclick="takeScreenshot()">Take Screenshot</button>
+            
+            {% if job and parts %}
+            <hr>
+            <h3>Job Parts</h3>
+            <div class="parts-list">
+                {% for part in parts %}
+                <div class="part-item">
+                    <strong>Part {{ loop.index }}</strong><br>
+                    {{ part.width }}" × {{ part.height }}"<br>
+                    <small>{{ part.thickness or 'Standard' }}</small>
+                </div>
+                {% endfor %}
+            </div>
+            
+            <button class="btn" onclick="buildFromParts()">Build from Job Parts</button>
+            {% endif %}
+            
+            {% if job %}
+            <hr>
+            <div style="font-size: 12px; color: #666;">
+                <strong>Client:</strong> {{ job.client_name }}<br>
+                <strong>Created:</strong> {{ job.created_at.strftime('%m/%d/%Y') if job.created_at else 'Unknown' }}
+            </div>
+            {% endif %}
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/build/three.min.js"></script>
+    <script>
+        let scene, camera, renderer;
+        let cabinet, floor;
+        let mouseDown = false;
+        let mouseX = 0, mouseY = 0;
+        let cameraDistance = 50;
+        let cameraAngle = 0;
+        
+        // Job data from Flask
+        const jobParts = {{ parts | tojson if parts else '[]' }};
+        
+        // Wood materials
+        const woodMaterials = {
+            oak: new THREE.MeshLambertMaterial({ color: 0xDEB887 }),
+            maple: new THREE.MeshLambertMaterial({ color: 0xF5DEB3 }),
+            cherry: new THREE.MeshLambertMaterial({ color: 0x8B4513 }),
+            pine: new THREE.MeshLambertMaterial({ color: 0xFFE4B5 }),
+            birch: new THREE.MeshLambertMaterial({ color: 0xF0E68C })
+        };
+        
+        function init() {
+            console.log('🏗️ Building cabinet visualizer...');
+            
+            // Scene
+            scene = new THREE.Scene();
+            scene.background = new THREE.Color(0xf0f0f0);
+            
+            // Camera
+            const container = document.getElementById('viewer');
+            const aspect = container.clientWidth / container.clientHeight;
+            camera = new THREE.PerspectiveCamera(75, aspect, 0.1, 1000);
+            updateCameraPosition();
+            
+            // Renderer
+            renderer = new THREE.WebGLRenderer({ antialias: true });
+            renderer.setSize(container.clientWidth, container.clientHeight);
+            renderer.shadowMap.enabled = true;
+            renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+            container.appendChild(renderer.domElement);
+            
+            // Lighting
+            setupLighting();
+            
+            // Floor
+            createFloor();
+            
+            // Initial cabinet
+            createCabinet();
+            
+            // Mouse controls
+            setupControls();
+            
+            // Animation loop
+            animate();
+            
+            console.log('✅ Cabinet visualizer ready!');
+        }
+        
+        function setupLighting() {
+            // Ambient light
+            const ambientLight = new THREE.AmbientLight(0x404040, 0.6);
+            scene.add(ambientLight);
+            
+            // Main light
+            const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
+            directionalLight.position.set(30, 50, 30);
+            directionalLight.castShadow = true;
+            directionalLight.shadow.mapSize.width = 2048;
+            directionalLight.shadow.mapSize.height = 2048;
+            scene.add(directionalLight);
+            
+            // Fill light
+            const fillLight = new THREE.DirectionalLight(0xffffff, 0.3);
+            fillLight.position.set(-30, 30, -30);
+            scene.add(fillLight);
+        }
+        
+        function createFloor() {
+            const floorGeometry = new THREE.PlaneGeometry(100, 100);
+            const floorMaterial = new THREE.MeshLambertMaterial({ 
+                color: 0xcccccc,
+                transparent: true,
+                opacity: 0.7
+            });
+            floor = new THREE.Mesh(floorGeometry, floorMaterial);
+            floor.rotation.x = -Math.PI / 2;
+            floor.position.y = -1;
+            floor.receiveShadow = true;
+            scene.add(floor);
+        }
+        
+        function createCabinet() {
+            // Remove existing cabinet
+            if (cabinet) {
+                scene.remove(cabinet);
+            }
+            
+            cabinet = new THREE.Group();
+            
+            // Get dimensions
+            const width = parseInt(document.getElementById('widthSlider').value);
+            const height = parseInt(document.getElementById('heightSlider').value);
+            const depth = parseInt(document.getElementById('depthSlider').value);
+            
+            // Get material
+            const woodType = document.getElementById('woodType').value;
+            const material = woodMaterials[woodType];
+            
+            // Cabinet body
+            const bodyGeometry = new THREE.BoxGeometry(width, height, depth);
+            const body = new THREE.Mesh(bodyGeometry, material);
+            body.position.set(0, height/2, 0);
+            body.castShadow = true;
+            body.receiveShadow = true;
+            cabinet.add(body);
+            
+            // Cabinet doors
+            const doorWidth = (width - 2) / 2; // Two doors with gap
+            const doorHeight = height - 6; // Leave space for frame
+            const doorGeometry = new THREE.BoxGeometry(doorWidth, doorHeight, 2);
+            
+            // Left door
+            const leftDoor = new THREE.Mesh(doorGeometry, material);
+            leftDoor.position.set(-doorWidth/2 - 1, height/2, depth/2 + 1);
+            leftDoor.castShadow = true;
+            cabinet.add(leftDoor);
+            
+            // Right door
+            const rightDoor = new THREE.Mesh(doorGeometry, material);
+            rightDoor.position.set(doorWidth/2 + 1, height/2, depth/2 + 1);
+            rightDoor.castShadow = true;
+            cabinet.add(rightDoor);
+            
+            // Door handles
+            addHardware(leftDoor, rightDoor, doorHeight);
+            
+            scene.add(cabinet);
+        }
+        
+        function addHardware(leftDoor, rightDoor, doorHeight) {
+            const hardwareType = document.getElementById('hardware').value;
+            let handleColor = 0xB8B8B8; // Default brushed nickel
+            
+            switch(hardwareType) {
+                case 'black': handleColor = 0x2C2C2C; break;
+                case 'brass': handleColor = 0xFFD700; break;
+                case 'chrome': handleColor = 0xE8E8E8; break;
+            }
+            
+            const handleMaterial = new THREE.MeshLambertMaterial({ color: handleColor });
+            const handleGeometry = new THREE.CylinderGeometry(0.3, 0.3, 3);
+            
+            // Left handle
+            const leftHandle = new THREE.Mesh(handleGeometry, handleMaterial);
+            leftHandle.position.copy(leftDoor.position);
+            leftHandle.position.z += 2;
+            leftHandle.position.x += 3;
+            leftHandle.rotation.x = Math.PI / 2;
+            cabinet.add(leftHandle);
+            
+            // Right handle
+            const rightHandle = new THREE.Mesh(handleGeometry, handleMaterial);
+            rightHandle.position.copy(rightDoor.position);
+            rightHandle.position.z += 2;
+            rightHandle.position.x -= 3;
+            rightHandle.rotation.x = Math.PI / 2;
+            cabinet.add(rightHandle);
+        }
+        
+        function buildFromParts() {
+            if (jobParts.length === 0) return;
+            
+            // Calculate dimensions from job parts
+            let maxWidth = 0, maxHeight = 0;
+            
+            jobParts.forEach(part => {
+                if (part.width) maxWidth = Math.max(maxWidth, parseFloat(part.width));
+                if (part.height) maxHeight = Math.max(maxHeight, parseFloat(part.height));
+            });
+            
+            // Set sliders to calculated dimensions
+            const width = Math.min(48, Math.max(12, maxWidth));
+            const height = Math.min(96, Math.max(30, maxHeight));
+            
+            document.getElementById('widthSlider').value = width;
+            document.getElementById('heightSlider').value = height;
+            document.getElementById('widthValue').textContent = width;
+            document.getElementById('heightValue').textContent = height;
+            
+            createCabinet();
+            console.log(`📐 Built cabinet from job parts: ${width}"W x ${height}"H`);
+        }
+        
+        function setupControls() {
+            const canvas = renderer.domElement;
+            
+            canvas.addEventListener('mousedown', (e) => {
+                mouseDown = true;
+                mouseX = e.clientX;
+                mouseY = e.clientY;
+            });
+            
+            canvas.addEventListener('mousemove', (e) => {
+                if (!mouseDown) return;
+                
+                const deltaX = e.clientX - mouseX;
+                cameraAngle -= deltaX * 0.01;
+                updateCameraPosition();
+                
+                mouseX = e.clientX;
+                mouseY = e.clientY;
+            });
+            
+            canvas.addEventListener('mouseup', () => {
+                mouseDown = false;
+            });
+            
+            canvas.addEventListener('wheel', (e) => {
+                e.preventDefault();
+                cameraDistance += e.deltaY * 0.1;
+                cameraDistance = Math.max(20, Math.min(100, cameraDistance));
+                updateCameraPosition();
+            });
+        }
+        
+        function updateCameraPosition() {
+            const x = Math.sin(cameraAngle) * cameraDistance;
+            const z = Math.cos(cameraAngle) * cameraDistance;
+            camera.position.set(x, cameraDistance * 0.4, z);
+            camera.lookAt(0, 20, 0);
+        }
+        
+        function animate() {
+            requestAnimationFrame(animate);
+            renderer.render(scene, camera);
+        }
+        
+        // Control functions
+        function updateWidth(value) {
+            document.getElementById('widthValue').textContent = value;
+            createCabinet();
+        }
+        
+        function updateHeight(value) {
+            document.getElementById('heightValue').textContent = value;
+            createCabinet();
+        }
+        
+        function updateDepth(value) {
+            document.getElementById('depthValue').textContent = value;
+            createCabinet();
+        }
+        
+        function updateMaterial() {
+            createCabinet();
+        }
+        
+        function updateCabinet() {
+            createCabinet();
+        }
+        
+        function resetView() {
+            cameraAngle = 0;
+            cameraDistance = 50;
+            updateCameraPosition();
+        }
+        
+        function takeScreenshot() {
+            renderer.render(scene, camera);
+            const link = document.createElement('a');
+            link.download = 'cabinet-preview.png';
+            link.href = renderer.domElement.toDataURL();
+            link.click();
+        }
+        
+        // Initialize when page loads
+        document.addEventListener('DOMContentLoaded', init);
+    </script>
+</body>
+</html>

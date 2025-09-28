@@ -1,0 +1,928 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Kitchen Designer 3D - Cut byZewo</title>
+    <style>
+        body { margin: 0; font-family: Arial; background: #f8f9fa; }
+        .header { background: linear-gradient(45deg, #8B4513, #654321); color: white; padding: 15px; text-align: center; }
+        .toolbar { background: white; padding: 10px; border-bottom: 1px solid #ddd; display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+        .container { display: flex; height: calc(100vh - 120px); }
+        .viewer { flex: 1; background: #e9ecef; position: relative; }
+        .controls { width: 320px; background: white; overflow-y: auto; border-left: 1px solid #ddd; }
+        .control-section { padding: 15px; border-bottom: 1px solid #eee; }
+        .control-section h4 { margin: 0 0 10px 0; color: #333; }
+        .btn { padding: 8px 12px; background: #007bff; color: white; border: none; border-radius: 4px; cursor: pointer; margin: 2px; font-size: 12px; }
+        .btn:hover { background: #0056b3; }
+        .btn-secondary { background: #6c757d; }
+        .btn-success { background: #28a745; }
+        .btn-danger { background: #dc3545; }
+        .btn-warning { background: #ffc107; color: #212529; }
+        .btn.active { background: #0056b3; box-shadow: inset 0 2px 4px rgba(0,0,0,0.2); }
+        .control-group { margin: 10px 0; }
+        .control-group label { display: block; margin-bottom: 5px; font-weight: bold; font-size: 12px; }
+        .control-group input, .control-group select { width: 100%; padding: 6px; border: 1px solid #ddd; border-radius: 4px; font-size: 12px; }
+        .control-group input[type="range"] { margin: 8px 0; }
+        .value-display { font-size: 11px; color: #666; text-align: center; }
+        .cabinet-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+        .cabinet-btn { padding: 10px; border: 2px solid #ddd; border-radius: 6px; background: white; cursor: pointer; text-align: center; font-size: 11px; }
+        .cabinet-btn:hover { border-color: #007bff; background: #f8f9fa; }
+        .cabinet-btn.selected { border-color: #007bff; background: #e3f2fd; }
+        .appliance-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 5px; }
+        .room-controls { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+        .instructions { background: #f8f9fa; padding: 10px; border-radius: 4px; font-size: 11px; color: #666; margin-bottom: 10px; }
+        .stats { background: #e3f2fd; padding: 8px; border-radius: 4px; font-size: 11px; }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>🏠 Kitchen Designer 3D</h1>
+        <p>{{ job.client_name if job else 'Custom Kitchen' }} - Complete Kitchen Layout & Visualization</p>
+    </div>
+    
+    <div class="toolbar">
+        <button class="btn" id="selectMode" onclick="setMode('select')">📍 Select</button>
+        <button class="btn" id="cabinetMode" onclick="setMode('cabinet')">🗄️ Add Cabinet</button>
+        <button class="btn" id="applianceMode" onclick="setMode('appliance')">📱 Add Appliance</button>
+        <button class="btn" id="wallMode" onclick="setMode('wall')">🧱 Draw Walls</button>
+        <button class="btn btn-secondary" onclick="clearKitchen()">🗑️ Clear All</button>
+        <button class="btn btn-success" onclick="saveLayout()">💾 Save Layout</button>
+        <button class="btn btn-warning" onclick="takeScreenshot()">📸 Screenshot</button>
+        <button class="btn" onclick="testCabinet()" style="background: #ff6b6b;">🧪 Test Cabinet</button>
+        <label style="margin-left: 10px;">
+            <input type="checkbox" id="keepPlacing"> Keep placing mode
+        </label>
+        <span style="margin-left: auto; font-size: 12px; color: #666;">
+            Mode: <strong id="currentMode">Select</strong>
+        </span>
+    </div>
+    
+    <div class="container">
+        <div class="viewer" id="viewer"></div>
+        
+        <div class="controls">
+            <!-- Room Setup -->
+            <div class="control-section">
+                <h4>🏠 Room Dimensions</h4>
+                <div class="room-controls">
+                    <div>
+                        <label>Width: <span id="roomWidthValue">144</span>"</label>
+                        <input type="range" id="roomWidth" min="96" max="240" value="144" oninput="updateRoom()">
+                    </div>
+                    <div>
+                        <label>Depth: <span id="roomDepthValue">120</span>"</label>
+                        <input type="range" id="roomDepth" min="96" max="240" value="120" oninput="updateRoom()">
+                    </div>
+                </div>
+                <button class="btn" onclick="resetRoom()">Reset Room</button>
+            </div>
+            
+            <!-- Cabinet Library -->
+            <div class="control-section">
+                <h4>🗄️ Cabinet Library</h4>
+                <div class="instructions">
+                    <strong>How to use:</strong><br>
+                    1. Click a cabinet type below<br>
+                    2. Click repeatedly on floor to place multiple<br>
+                    3. Click "📍 Select" then drag cabinets to move<br>
+                    4. Right-click drag to rotate view<br>
+                    <br><strong>Selected:</strong> <span id="selectedCabinetInfo">None</span>
+                </div>
+                <div class="cabinet-grid">
+                    <div class="cabinet-btn" onclick="selectCabinet('base', 24, 36, 24)">
+                        <strong>Base Cabinet</strong><br>24"W × 36"H
+                    </div>
+                    <div class="cabinet-btn" onclick="selectCabinet('wall', 24, 30, 12)">
+                        <strong>Wall Cabinet</strong><br>24"W × 30"H
+                    </div>
+                    <div class="cabinet-btn" onclick="selectCabinet('tall', 24, 84, 24)">
+                        <strong>Tall Cabinet</strong><br>24"W × 84"H
+                    </div>
+                    <div class="cabinet-btn" onclick="selectCabinet('corner', 36, 36, 24)">
+                        <strong>Corner Base</strong><br>36"W × 36"H
+                    </div>
+                    <div class="cabinet-btn" onclick="selectCabinet('island', 48, 36, 24)">
+                        <strong>Island</strong><br>48"W × 36"H
+                    </div>
+                    <div class="cabinet-btn" onclick="selectCabinet('peninsula', 60, 36, 24)">
+                        <strong>Peninsula</strong><br>60"W × 36"H
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Appliances -->
+            <div class="control-section">
+                <h4>📱 Appliances</h4>
+                <div class="appliance-grid">
+                    <button class="btn btn-secondary" onclick="selectAppliance('refrigerator')">🧊 Fridge</button>
+                    <button class="btn btn-secondary" onclick="selectAppliance('stove')">🔥 Stove</button>
+                    <button class="btn btn-secondary" onclick="selectAppliance('dishwasher')">🍽️ Dishwasher</button>
+                    <button class="btn btn-secondary" onclick="selectAppliance('microwave')">📡 Microwave</button>
+                </div>
+            </div>
+            
+            <!-- Materials -->
+            <div class="control-section">
+                <h4>🎨 Materials & Style</h4>
+                <div class="control-group">
+                    <label>Cabinet Wood</label>
+                    <select id="cabinetWood" onchange="updateAllMaterials()">
+                        <option value="oak">Oak</option>
+                        <option value="maple">Maple</option>
+                        <option value="cherry">Cherry</option>
+                        <option value="pine">Pine</option>
+                        <option value="birch">Birch</option>
+                    </select>
+                </div>
+                <div class="control-group">
+                    <label>Countertop</label>
+                    <select id="countertop" onchange="updateCountertops()">
+                        <option value="granite">Granite</option>
+                        <option value="quartz">Quartz</option>
+                        <option value="marble">Marble</option>
+                        <option value="butcher">Butcher Block</option>
+                    </select>
+                </div>
+                <div class="control-group">
+                    <label>Hardware</label>
+                    <select id="hardware" onchange="updateHardware()">
+                        <option value="brushed-nickel">Brushed Nickel</option>
+                        <option value="black">Black</option>
+                        <option value="brass">Brass</option>
+                        <option value="chrome">Chrome</option>
+                    </select>
+                </div>
+            </div>
+            
+            <!-- Selected Item -->
+            <div class="control-section" id="selectedItemControls" style="display: none;">
+                <h4>🎯 Selected Item</h4>
+                <div id="selectedItemInfo"></div>
+                <button class="btn btn-danger" onclick="deleteSelected()">🗑️ Delete</button>
+                <button class="btn" onclick="duplicateSelected()">📋 Duplicate</button>
+            </div>
+            
+            <!-- Kitchen Stats -->
+            <div class="control-section">
+                <h4>📊 Kitchen Stats</h4>
+                <div class="stats" id="kitchenStats">
+                    Cabinets: <span id="cabinetCount">0</span><br>
+                    Appliances: <span id="applianceCount">0</span><br>
+                    Total Cost: $<span id="totalCost">0</span>
+                </div>
+                {% if job and parts %}
+                <div style="margin-top: 10px;">
+                    <button class="btn btn-success" onclick="buildFromJobParts()">📐 Build from Job Parts</button>
+                    <div style="font-size: 11px; margin-top: 5px; color: #666;">
+                        Will analyze your {{ parts|length }} parts and suggest cabinet layout
+                    </div>
+                </div>
+                {% endif %}
+            </div>
+            
+            {% if job %}
+            <div class="control-section">
+                <h4>📋 Job Info</h4>
+                <div style="font-size: 11px; color: #666;">
+                    <strong>Client:</strong> {{ job.client_name }}<br>
+                    <strong>Created:</strong> {{ job.created_at.strftime('%m/%d/%Y') if job.created_at else 'Unknown' }}<br>
+                    {% if job.notes %}
+                    <strong>Notes:</strong> {{ job.notes }}<br>
+                    {% endif %}
+                </div>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/build/three.min.js"></script>
+    <script>
+        let scene, camera, renderer, raycaster, mouse;
+        let room, floor;
+        let cabinets = [];
+        let appliances = [];
+        let selectedObject = null;
+        let currentMode = 'select';
+        let selectedCabinetType = null;
+        let selectedApplianceType = null;
+        
+        // Job data
+        const jobParts = {{ parts | tojson if parts else '[]' }};
+        
+        // Materials
+        const woodMaterials = {
+            oak: new THREE.MeshLambertMaterial({ color: 0xDEB887 }),
+            maple: new THREE.MeshLambertMaterial({ color: 0xF5DEB3 }),
+            cherry: new THREE.MeshLambertMaterial({ color: 0x8B4513 }),
+            pine: new THREE.MeshLambertMaterial({ color: 0xFFE4B5 }),
+            birch: new THREE.MeshLambertMaterial({ color: 0xF0E68C })
+        };
+        
+        const countertopMaterials = {
+            granite: new THREE.MeshLambertMaterial({ color: 0x2F2F2F }),
+            quartz: new THREE.MeshLambertMaterial({ color: 0xF5F5F5 }),
+            marble: new THREE.MeshLambertMaterial({ color: 0xFFFFF0 }),
+            butcher: new THREE.MeshLambertMaterial({ color: 0xDEB887 })
+        };
+        
+        function init() {
+            console.log('🏠 Initializing Kitchen Designer...');
+            
+            // Scene setup
+            scene = new THREE.Scene();
+            scene.background = new THREE.Color(0xf0f0f0);
+            
+            // Camera
+            const container = document.getElementById('viewer');
+            const aspect = container.clientWidth / container.clientHeight;
+            camera = new THREE.PerspectiveCamera(75, aspect, 0.1, 1000);
+            camera.position.set(100, 80, 100);
+            camera.lookAt(0, 0, 0);
+            
+            // Renderer
+            renderer = new THREE.WebGLRenderer({ antialias: true });
+            renderer.setSize(container.clientWidth, container.clientHeight);
+            renderer.shadowMap.enabled = true;
+            renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+            container.appendChild(renderer.domElement);
+            
+            // Raycaster for mouse picking
+            raycaster = new THREE.Raycaster();
+            mouse = new THREE.Vector2();
+            
+            // Lighting
+            setupLighting();
+            
+            // Initial room
+            createRoom();
+            
+            // Controls
+            setupControls();
+            
+            // Animation
+            animate();
+            
+            setMode('select');
+            updateStats();
+            
+            console.log('✅ Kitchen Designer ready!');
+        }
+        
+        function setupLighting() {
+            // Ambient light
+            const ambientLight = new THREE.AmbientLight(0x404040, 0.4);
+            scene.add(ambientLight);
+            
+            // Main light
+            const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
+            directionalLight.position.set(50, 100, 50);
+            directionalLight.castShadow = true;
+            directionalLight.shadow.mapSize.width = 2048;
+            directionalLight.shadow.mapSize.height = 2048;
+            directionalLight.shadow.camera.left = -100;
+            directionalLight.shadow.camera.right = 100;
+            directionalLight.shadow.camera.top = 100;
+            directionalLight.shadow.camera.bottom = -100;
+            scene.add(directionalLight);
+            
+            // Fill lights
+            const fillLight1 = new THREE.DirectionalLight(0xffffff, 0.3);
+            fillLight1.position.set(-50, 50, -50);
+            scene.add(fillLight1);
+            
+            const fillLight2 = new THREE.DirectionalLight(0xffffff, 0.2);
+            fillLight2.position.set(0, 50, -100);
+            scene.add(fillLight2);
+        }
+        
+        function createRoom() {
+            // Remove existing room
+            if (room) scene.remove(room);
+            if (floor) scene.remove(floor);
+            
+            const width = parseInt(document.getElementById('roomWidth').value);
+            const depth = parseInt(document.getElementById('roomDepth').value);
+            const height = 96; // 8 feet
+            
+            room = new THREE.Group();
+            
+            // Floor
+            const floorGeometry = new THREE.PlaneGeometry(width, depth);
+            const floorMaterial = new THREE.MeshLambertMaterial({ 
+                color: 0xF5F5DC,
+                transparent: true,
+                opacity: 0.8
+            });
+            floor = new THREE.Mesh(floorGeometry, floorMaterial);
+            floor.rotation.x = -Math.PI / 2;
+            floor.receiveShadow = true;
+            scene.add(floor);
+            
+            // Walls
+            const wallMaterial = new THREE.MeshLambertMaterial({ 
+                color: 0xFFFFF0,
+                transparent: true,
+                opacity: 0.3,
+                side: THREE.DoubleSide
+            });
+            
+            // Back wall
+            const backWallGeometry = new THREE.PlaneGeometry(width, height);
+            const backWall = new THREE.Mesh(backWallGeometry, wallMaterial);
+            backWall.position.set(0, height/2, -depth/2);
+            room.add(backWall);
+            
+            // Left wall
+            const leftWallGeometry = new THREE.PlaneGeometry(depth, height);
+            const leftWall = new THREE.Mesh(leftWallGeometry, wallMaterial);
+            leftWall.position.set(-width/2, height/2, 0);
+            leftWall.rotation.y = Math.PI/2;
+            room.add(leftWall);
+            
+            // Right wall
+            const rightWall = new THREE.Mesh(leftWallGeometry, wallMaterial);
+            rightWall.position.set(width/2, height/2, 0);
+            rightWall.rotation.y = -Math.PI/2;
+            room.add(rightWall);
+            
+            scene.add(room);
+            
+            // Update display
+            document.getElementById('roomWidthValue').textContent = width;
+            document.getElementById('roomDepthValue').textContent = depth;
+        }
+        
+        function createCabinet(type, width, height, depth, x, z) {
+            console.log('🏗️ Creating cabinet...', { type, width, height, depth, x, z });
+            
+            const cabinet = new THREE.Group();
+            cabinet.userData = { type, width, height, depth, itemType: 'cabinet' };
+            
+            const woodType = document.getElementById('cabinetWood').value;
+            const material = woodMaterials[woodType];
+            console.log('🎨 Using material:', woodType, material);
+            
+            // Cabinet body
+            const bodyGeometry = new THREE.BoxGeometry(width, height, depth);
+            const body = new THREE.Mesh(bodyGeometry, material);
+            body.position.set(0, height/2, 0);
+            body.castShadow = true;
+            body.receiveShadow = true;
+            cabinet.add(body);
+            console.log('📦 Cabinet body added');
+            
+            // Countertop (for base cabinets)
+            if (type === 'base' || type === 'corner' || type === 'island' || type === 'peninsula') {
+                const counterType = document.getElementById('countertop').value;
+                const counterMaterial = countertopMaterials[counterType];
+                const counterGeometry = new THREE.BoxGeometry(width + 2, 2, depth + 2);
+                const counter = new THREE.Mesh(counterGeometry, counterMaterial);
+                counter.position.set(0, height + 1, 0);
+                counter.castShadow = true;
+                counter.receiveShadow = true;
+                cabinet.add(counter);
+                console.log('🍽️ Countertop added');
+            }
+            
+            // Position cabinet
+            cabinet.position.set(x, 0, z);
+            console.log('📍 Cabinet positioned at:', x, z);
+            
+            scene.add(cabinet);
+            cabinets.push(cabinet);
+            console.log('✅ Cabinet added to scene. Total cabinets:', cabinets.length);
+            
+            return cabinet;
+        }
+        
+        function createAppliance(type, x, z) {
+            const appliance = new THREE.Group();
+            appliance.userData = { type, itemType: 'appliance' };
+            
+            let geometry, material, width, height, depth;
+            
+            switch(type) {
+                case 'refrigerator':
+                    width = 36; height = 70; depth = 30;
+                    material = new THREE.MeshLambertMaterial({ color: 0xE0E0E0 });
+                    break;
+                case 'stove':
+                    width = 30; height = 36; depth = 25;
+                    material = new THREE.MeshLambertMaterial({ color: 0x2C2C2C });
+                    break;
+                case 'dishwasher':
+                    width = 24; height = 34; depth = 24;
+                    material = new THREE.MeshLambertMaterial({ color: 0xE0E0E0 });
+                    break;
+                case 'microwave':
+                    width = 24; height = 12; depth = 15;
+                    material = new THREE.MeshLambertMaterial({ color: 0x2C2C2C });
+                    break;
+            }
+            
+            geometry = new THREE.BoxGeometry(width, height, depth);
+            const mesh = new THREE.Mesh(geometry, material);
+            mesh.position.set(0, height/2, 0);
+            mesh.castShadow = true;
+            mesh.receiveShadow = true;
+            appliance.add(mesh);
+            
+            appliance.position.set(x, 0, z);
+            appliance.userData.width = width;
+            appliance.userData.height = height;
+            appliance.userData.depth = depth;
+            
+            scene.add(appliance);
+            appliances.push(appliance);
+            
+            return appliance;
+        }
+        
+        function setupControls() {
+            const canvas = renderer.domElement;
+            
+            // Mouse controls for camera
+            let mouseDown = false;
+            let mouseX = 0, mouseY = 0;
+            let cameraDistance = 150;
+            let cameraAngle = 0;
+            let cameraHeight = 80;
+            
+            function updateCamera() {
+                const x = Math.sin(cameraAngle) * cameraDistance;
+                const z = Math.cos(cameraAngle) * cameraDistance;
+                camera.position.set(x, cameraHeight, z);
+                camera.lookAt(0, 20, 0);
+            }
+            
+            let mouseDownPos = { x: 0, y: 0 };
+            let hasMovedMouse = false;
+            
+            canvas.addEventListener('mousedown', (e) => {
+                console.log('🖱️ Mouse down:', { button: e.button, currentMode, selectedCabinetType });
+                
+                mouseDownPos.x = e.clientX;
+                mouseDownPos.y = e.clientY;
+                hasMovedMouse = false;
+                
+                if (e.button === 2) { // Right click for camera
+                    mouseDown = true;
+                    mouseX = e.clientX;
+                    mouseY = e.clientY;
+                } else if (e.button === 0) { // Left click
+                    if (currentMode === 'cabinet' && selectedCabinetType) {
+                        console.log('🎯 Cabinet placement mode');
+                        handlePlacement(e);
+                    } else if (currentMode === 'appliance' && selectedApplianceType) {
+                        console.log('📱 Appliance placement mode');
+                        handlePlacement(e);
+                    } else if (currentMode === 'select') {
+                        console.log('👆 Selection mode - preparing for selection or drag');
+                        handleSelection(e);
+                    } else {
+                        console.log('❓ Unknown mode or no item selected');
+                    }
+                }
+            });
+            
+            canvas.addEventListener('mousemove', (e) => {
+                // Check if mouse has moved significantly
+                const moved = Math.abs(e.clientX - mouseDownPos.x) > 5 || Math.abs(e.clientY - mouseDownPos.y) > 5;
+                if (moved) hasMovedMouse = true;
+                
+                if (mouseDown) {
+                    // Camera movement (right mouse button)
+                    const deltaX = e.clientX - mouseX;
+                    const deltaY = e.clientY - mouseY;
+                    
+                    cameraAngle -= deltaX * 0.01;
+                    cameraHeight += deltaY * 0.5;
+                    cameraHeight = Math.max(20, Math.min(200, cameraHeight));
+                    
+                    updateCamera();
+                    
+                    mouseX = e.clientX;
+                    mouseY = e.clientY;
+                } else if (selectedObject && hasMovedMouse) {
+                    // Start dragging if we have selected object and mouse moved
+                    if (!isDragging) {
+                        isDragging = true;
+                        console.log('🚀 Started dragging cabinet');
+                    }
+                    handleDragging(e);
+                }
+            });
+            
+            canvas.addEventListener('mouseup', () => {
+                mouseDown = false;
+                isDragging = false;
+            });
+            
+            canvas.addEventListener('wheel', (e) => {
+                e.preventDefault();
+                cameraDistance += e.deltaY * 0.1;
+                cameraDistance = Math.max(50, Math.min(300, cameraDistance));
+                updateCamera();
+            });
+            
+            // Context menu disable
+            canvas.addEventListener('contextmenu', (e) => e.preventDefault());
+            
+            updateCamera();
+        }
+        
+        function handlePlacement(event) {
+            console.log('🎯 Handling placement...', { currentMode, selectedCabinetType, selectedApplianceType });
+            
+            const rect = renderer.domElement.getBoundingClientRect();
+            mouse.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
+            mouse.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
+            
+            raycaster.setFromCamera(mouse, camera);
+            const intersects = raycaster.intersectObject(floor);
+            
+            console.log('🎯 Floor intersects:', intersects.length);
+            
+            if (intersects.length > 0) {
+                const point = intersects[0].point;
+                console.log('📍 Placement point:', point);
+                
+                if (currentMode === 'cabinet' && selectedCabinetType) {
+                    console.log('🗄️ Creating cabinet...', selectedCabinetType);
+                    const cabinet = createCabinet(
+                        selectedCabinetType.type,
+                        selectedCabinetType.width,
+                        selectedCabinetType.height,
+                        selectedCabinetType.depth,
+                        point.x,
+                        point.z
+                    );
+                    console.log('✅ Cabinet created:', cabinet);
+                    updateStats();
+                    
+                    // If not in keep placing mode, switch to select mode
+                    if (!document.getElementById('keepPlacing').checked) {
+                        setMode('select');
+                        selectedCabinetType = null;
+                        document.getElementById('selectedCabinetInfo').textContent = 'None';
+                        document.querySelectorAll('.cabinet-btn').forEach(btn => btn.classList.remove('selected'));
+                        console.log('🔄 Switched to select mode (place one cabinet)');
+                    }
+                } else if (currentMode === 'appliance' && selectedApplianceType) {
+                    console.log('📱 Creating appliance...', selectedApplianceType);
+                    createAppliance(selectedApplianceType, point.x, point.z);
+                    updateStats();
+                } else {
+                    console.log('❌ No valid item selected for placement');
+                }
+            } else {
+                console.log('❌ No floor intersection found');
+            }
+        }
+        
+        let isDragging = false;
+        let dragOffset = new THREE.Vector3();
+        
+        function handleSelection(event) {
+            const rect = renderer.domElement.getBoundingClientRect();
+            mouse.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
+            mouse.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
+            
+            raycaster.setFromCamera(mouse, camera);
+            const allObjects = [...cabinets, ...appliances];
+            const intersects = raycaster.intersectObjects(allObjects, true);
+            
+            // Clear previous selection
+            if (selectedObject) {
+                selectedObject.traverse((child) => {
+                    if (child.material && child.material.emissive) {
+                        child.material.emissive.setHex(0x000000);
+                    }
+                });
+            }
+            
+            if (intersects.length > 0) {
+                selectedObject = intersects[0].object.parent;
+                
+                // Highlight selection with bright color
+                selectedObject.traverse((child) => {
+                    if (child.material && child.material.emissive) {
+                        child.material.emissive.setHex(0x0066ff); // Bright blue highlight
+                    }
+                });
+                
+                // Prepare for dragging but don't start yet
+                const intersectPoint = intersects[0].point;
+                dragOffset.copy(selectedObject.position).sub(intersectPoint);
+                
+                showSelectedInfo();
+                console.log('✅ Selected object:', selectedObject.userData.type);
+                console.log('💡 Drag to move this cabinet');
+            } else {
+                selectedObject = null;
+                isDragging = false;
+                hideSelectedInfo();
+                console.log('❌ No object selected');
+            }
+        }
+        
+        function handleDragging(event) {
+            if (!isDragging || !selectedObject) return;
+            
+            const rect = renderer.domElement.getBoundingClientRect();
+            mouse.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
+            mouse.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
+            
+            raycaster.setFromCamera(mouse, camera);
+            const intersects = raycaster.intersectObject(floor);
+            
+            if (intersects.length > 0) {
+                const point = intersects[0].point;
+                selectedObject.position.x = point.x + dragOffset.x;
+                selectedObject.position.z = point.z + dragOffset.z;
+                showSelectedInfo(); // Update position display
+            }
+        }
+        
+        function setMode(mode) {
+            currentMode = mode;
+            document.getElementById('currentMode').textContent = mode.charAt(0).toUpperCase() + mode.slice(1);
+            
+            // Update button states
+            document.querySelectorAll('.toolbar .btn').forEach(btn => btn.classList.remove('active'));
+            document.getElementById(mode + 'Mode').classList.add('active');
+            
+            // Clear selections
+            document.querySelectorAll('.cabinet-btn').forEach(btn => btn.classList.remove('selected'));
+            selectedCabinetType = null;
+            selectedApplianceType = null;
+        }
+        
+        function selectCabinet(type, width, height, depth) {
+            console.log('🗄️ Selecting cabinet:', { type, width, height, depth });
+            setMode('cabinet');
+            selectedCabinetType = { type, width, height, depth };
+            
+            // Update UI
+            document.querySelectorAll('.cabinet-btn').forEach(btn => btn.classList.remove('selected'));
+            
+            // Find the clicked button and highlight it
+            const buttons = document.querySelectorAll('.cabinet-btn');
+            buttons.forEach(btn => {
+                if (btn.textContent.includes(type.charAt(0).toUpperCase() + type.slice(1))) {
+                    btn.classList.add('selected');
+                }
+            });
+            
+            // Update selected info
+            document.getElementById('selectedCabinetInfo').textContent = `${type} ${width}"×${height}"×${depth}"`;
+            
+            console.log('✅ Cabinet selected, mode set to cabinet');
+        }
+        
+        function selectAppliance(type) {
+            setMode('appliance');
+            selectedApplianceType = type;
+        }
+        
+        function updateRoom() {
+            createRoom();
+        }
+        
+        function resetRoom() {
+            document.getElementById('roomWidth').value = 144;
+            document.getElementById('roomDepth').value = 120;
+            createRoom();
+        }
+        
+        function clearKitchen() {
+            // Remove all cabinets
+            cabinets.forEach(cabinet => scene.remove(cabinet));
+            cabinets = [];
+            
+            // Remove all appliances
+            appliances.forEach(appliance => scene.remove(appliance));
+            appliances = [];
+            
+            selectedObject = null;
+            hideSelectedInfo();
+            updateStats();
+        }
+        
+        function updateAllMaterials() {
+            const woodType = document.getElementById('cabinetWood').value;
+            const material = woodMaterials[woodType];
+            
+            cabinets.forEach(cabinet => {
+                cabinet.traverse((child) => {
+                    if (child.isMesh && child.material === material) {
+                        child.material = material.clone();
+                    }
+                });
+            });
+        }
+        
+        function updateCountertops() {
+            const counterType = document.getElementById('countertop').value;
+            const material = countertopMaterials[counterType];
+            
+            cabinets.forEach(cabinet => {
+                if (['base', 'corner', 'island', 'peninsula'].includes(cabinet.userData.type)) {
+                    // Update countertop material
+                    cabinet.children.forEach(child => {
+                        if (child.position.y > cabinet.userData.height) {
+                            child.material = material.clone();
+                        }
+                    });
+                }
+            });
+        }
+        
+        function deleteSelected() {
+            if (!selectedObject) return;
+            
+            if (selectedObject.userData.itemType === 'cabinet') {
+                const index = cabinets.indexOf(selectedObject);
+                if (index > -1) cabinets.splice(index, 1);
+            } else if (selectedObject.userData.itemType === 'appliance') {
+                const index = appliances.indexOf(selectedObject);
+                if (index > -1) appliances.splice(index, 1);
+            }
+            
+            scene.remove(selectedObject);
+            selectedObject = null;
+            hideSelectedInfo();
+            updateStats();
+        }
+        
+        function duplicateSelected() {
+            if (!selectedObject) return;
+            
+            const data = selectedObject.userData;
+            
+            if (data.itemType === 'cabinet') {
+                createCabinet(
+                    data.type, data.width, data.height, data.depth,
+                    selectedObject.position.x + 30,
+                    selectedObject.position.z
+                );
+            } else if (data.itemType === 'appliance') {
+                createAppliance(
+                    data.type,
+                    selectedObject.position.x + 30,
+                    selectedObject.position.z
+                );
+            }
+            
+            updateStats();
+        }
+        
+        function showSelectedInfo() {
+            if (!selectedObject) return;
+            
+            const data = selectedObject.userData;
+            const info = document.getElementById('selectedItemInfo');
+            const controls = document.getElementById('selectedItemControls');
+            
+            if (data.itemType === 'cabinet') {
+                info.innerHTML = `
+                    <strong>${data.type.charAt(0).toUpperCase() + data.type.slice(1)} Cabinet</strong><br>
+                    ${data.width}"W × ${data.height}"H × ${data.depth}"D<br>
+                    Position: ${Math.round(selectedObject.position.x)}", ${Math.round(selectedObject.position.z)}"
+                `;
+            } else if (data.itemType === 'appliance') {
+                info.innerHTML = `
+                    <strong>${data.type.charAt(0).toUpperCase() + data.type.slice(1)}</strong><br>
+                    ${data.width}"W × ${data.height}"H × ${data.depth}"D<br>
+                    Position: ${Math.round(selectedObject.position.x)}", ${Math.round(selectedObject.position.z)}"
+                `;
+            }
+            
+            controls.style.display = 'block';
+        }
+        
+        function hideSelectedInfo() {
+            document.getElementById('selectedItemControls').style.display = 'none';
+        }
+        
+        function updateStats() {
+            document.getElementById('cabinetCount').textContent = cabinets.length;
+            document.getElementById('applianceCount').textContent = appliances.length;
+            
+            // Calculate rough cost
+            let totalCost = 0;
+            cabinets.forEach(cabinet => {
+                const data = cabinet.userData;
+                const sqft = (data.width * data.height) / 144; // Convert to sq ft
+                totalCost += sqft * 200; // Rough estimate $200/sq ft
+            });
+            appliances.forEach(appliance => {
+                const type = appliance.userData.type;
+                const cost = {
+                    refrigerator: 2000,
+                    stove: 1200,
+                    dishwasher: 800,
+                    microwave: 300
+                }[type] || 500;
+                totalCost += cost;
+            });
+            
+            document.getElementById('totalCost').textContent = Math.round(totalCost).toLocaleString();
+        }
+        
+        function buildFromJobParts() {
+            if (jobParts.length === 0) return;
+            
+            console.log('🔨 Building kitchen from job parts...');
+            
+            // Analyze parts to determine cabinet types
+            let totalLinearFeet = 0;
+            jobParts.forEach(part => {
+                if (part.width) totalLinearFeet += parseFloat(part.width);
+            });
+            
+            // Create a basic L-shaped kitchen layout
+            const baseWidth = 24;
+            const wallHeight = 30;
+            
+            // Base cabinets along back wall
+            for (let x = -60; x <= 60; x += 30) {
+                createCabinet('base', baseWidth, 36, 24, x, -45);
+            }
+            
+            // Wall cabinets along back wall
+            for (let x = -60; x <= 60; x += 30) {
+                createCabinet('wall', baseWidth, wallHeight, 12, x, -45);
+            }
+            
+            // Side cabinets
+            for (let z = -15; z <= 15; z += 30) {
+                createCabinet('base', baseWidth, 36, 24, -75, z);
+            }
+            
+            // Add some appliances
+            createAppliance('refrigerator', 90, -45);
+            createAppliance('stove', 0, -45);
+            createAppliance('dishwasher', -30, -45);
+            
+            updateStats();
+            console.log(`✅ Generated kitchen with ${cabinets.length} cabinets from ${jobParts.length} parts`);
+        }
+        
+        function saveLayout() {
+            const layout = {
+                room: {
+                    width: parseInt(document.getElementById('roomWidth').value),
+                    depth: parseInt(document.getElementById('roomDepth').value)
+                },
+                cabinets: cabinets.map(c => ({
+                    type: c.userData.type,
+                    width: c.userData.width,
+                    height: c.userData.height,
+                    depth: c.userData.depth,
+                    x: c.position.x,
+                    z: c.position.z
+                })),
+                appliances: appliances.map(a => ({
+                    type: a.userData.type,
+                    x: a.position.x,
+                    z: a.position.z
+                })),
+                materials: {
+                    wood: document.getElementById('cabinetWood').value,
+                    countertop: document.getElementById('countertop').value,
+                    hardware: document.getElementById('hardware').value
+                }
+            };
+            
+            console.log('💾 Kitchen layout:', layout);
+            alert('Layout saved to console! (In production, this would save to your database)');
+        }
+        
+        function takeScreenshot() {
+            renderer.render(scene, camera);
+            const link = document.createElement('a');
+            link.download = 'kitchen-design.png';
+            link.href = renderer.domElement.toDataURL();
+            link.click();
+        }
+        
+        function testCabinet() {
+            console.log('🧪 Testing cabinet creation...');
+            
+            // Create a test cabinet directly
+            const testCabinet = createCabinet('base', 24, 36, 24, 0, 0);
+            updateStats();
+            
+            console.log('🧪 Test cabinet created at center');
+        }
+        
+        function animate() {
+            requestAnimationFrame(animate);
+            renderer.render(scene, camera);
+        }
+        
+        // Initialize
+        document.addEventListener('DOMContentLoaded', init);
+    </script>
+</body>
+</html>

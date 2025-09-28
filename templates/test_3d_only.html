@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>3D Test - No Cache</title>
+    <style>
+        body { margin: 0; font-family: Arial; background: #222; color: white; }
+        #container { width: 100%; height: 100vh; position: relative; }
+        #viewer { width: 80%; height: 100%; float: left; }
+        #info { width: 20%; height: 100%; float: right; padding: 20px; box-sizing: border-box; background: #333; }
+        button { padding: 10px; margin: 5px; background: #007bff; color: white; border: none; cursor: pointer; }
+        button:hover { background: #0056b3; }
+    </style>
+</head>
+<body>
+    <div id="container">
+        <div id="viewer"></div>
+        <div id="info">
+            <h3>3D Test</h3>
+            <div id="log">Starting...</div>
+            <br>
+            <button onclick="resetCamera()">Reset Camera</button>
+            <button onclick="addCube()">Add Cube</button>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/build/three.min.js"></script>
+    <script>
+        let scene, camera, renderer;
+        let mouseDown = false;
+        let mouseX = 0, mouseY = 0;
+        let cameraDistance = 10;
+        let cubeCount = 0;
+
+        function log(msg) {
+            console.log('[3D]', msg);
+            const logEl = document.getElementById('log');
+            logEl.innerHTML += '<br>' + msg;
+            logEl.scrollTop = logEl.scrollHeight;
+        }
+
+        function init() {
+            log('🚀 Starting 3D test...');
+            
+            if (typeof THREE === 'undefined') {
+                log('❌ THREE.js not loaded');
+                return;
+            }
+            log('✅ THREE.js loaded');
+
+            // Scene
+            scene = new THREE.Scene();
+            scene.background = new THREE.Color(0x1e90ff); // Bright blue
+            log('✅ Scene created');
+
+            // Camera
+            const container = document.getElementById('viewer');
+            const aspect = container.clientWidth / container.clientHeight;
+            camera = new THREE.PerspectiveCamera(75, aspect, 0.1, 1000);
+            camera.position.set(0, 0, 10);
+            camera.lookAt(0, 0, 0);
+            log('✅ Camera at (0,0,10)');
+
+            // Renderer
+            renderer = new THREE.WebGLRenderer({ antialias: true });
+            renderer.setSize(container.clientWidth, container.clientHeight);
+            container.appendChild(renderer.domElement);
+            log('✅ Renderer added to page');
+
+            // Test objects
+            createTestObjects();
+            
+            // Mouse controls
+            setupMouse();
+            
+            // Animation loop
+            animate();
+            
+            log('🎉 READY! You should see cubes!');
+        }
+
+        function createTestObjects() {
+            // Big red cube in center
+            const geo1 = new THREE.BoxGeometry(3, 3, 3);
+            const mat1 = new THREE.MeshBasicMaterial({ color: 0xff0000 });
+            const cube1 = new THREE.Mesh(geo1, mat1);
+            cube1.position.set(0, 0, 0);
+            scene.add(cube1);
+            log('🔴 Big red cube added');
+
+            // Small green cube  
+            const geo2 = new THREE.BoxGeometry(1, 1, 1);
+            const mat2 = new THREE.MeshBasicMaterial({ color: 0x00ff00 });
+            const cube2 = new THREE.Mesh(geo2, mat2);
+            cube2.position.set(4, 0, 0);
+            scene.add(cube2);
+            log('🟢 Green cube added');
+
+            // Small blue cube
+            const geo3 = new THREE.BoxGeometry(1, 1, 1);
+            const mat3 = new THREE.MeshBasicMaterial({ color: 0x0000ff });
+            const cube3 = new THREE.Mesh(geo3, mat3);
+            cube3.position.set(-4, 0, 0);
+            scene.add(cube3);
+            log('🔵 Blue cube added');
+
+            cubeCount = 3;
+        }
+
+        function setupMouse() {
+            const canvas = renderer.domElement;
+            
+            canvas.addEventListener('mousedown', (e) => {
+                mouseDown = true;
+                mouseX = e.clientX;
+                mouseY = e.clientY;
+            });
+
+            canvas.addEventListener('mousemove', (e) => {
+                if (!mouseDown) return;
+                
+                const deltaX = e.clientX - mouseX;
+                const deltaY = e.clientY - mouseY;
+                
+                // Rotate around Y axis
+                const angle = deltaX * 0.01;
+                const x = camera.position.x * Math.cos(angle) - camera.position.z * Math.sin(angle);
+                const z = camera.position.x * Math.sin(angle) + camera.position.z * Math.cos(angle);
+                
+                camera.position.x = x;
+                camera.position.z = z;
+                camera.position.y += deltaY * 0.02;
+                camera.lookAt(0, 0, 0);
+                
+                mouseX = e.clientX;
+                mouseY = e.clientY;
+            });
+
+            canvas.addEventListener('mouseup', () => {
+                mouseDown = false;
+            });
+
+            canvas.addEventListener('wheel', (e) => {
+                e.preventDefault();
+                const factor = e.deltaY > 0 ? 1.1 : 0.9;
+                camera.position.multiplyScalar(factor);
+                camera.lookAt(0, 0, 0);
+            });
+        }
+
+        function animate() {
+            requestAnimationFrame(animate);
+            if (renderer && scene && camera) {
+                renderer.render(scene, camera);
+            }
+        }
+
+        function resetCamera() {
+            camera.position.set(0, 0, 10);
+            camera.lookAt(0, 0, 0);
+            log('📸 Camera reset');
+        }
+
+        function addCube() {
+            const size = Math.random() * 2 + 0.5;
+            const geo = new THREE.BoxGeometry(size, size, size);
+            const mat = new THREE.MeshBasicMaterial({ 
+                color: Math.random() * 0xffffff 
+            });
+            const cube = new THREE.Mesh(geo, mat);
+            cube.position.set(
+                (Math.random() - 0.5) * 10,
+                (Math.random() - 0.5) * 10,
+                (Math.random() - 0.5) * 10
+            );
+            scene.add(cube);
+            cubeCount++;
+            log('🎲 Cube #' + cubeCount + ' added');
+        }
+
+        // Start immediately
+        document.addEventListener('DOMContentLoaded', init);
+    </script>
+</body>
+</html>

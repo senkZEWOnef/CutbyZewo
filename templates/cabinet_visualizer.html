@@ -1,0 +1,630 @@
+{% extends "base.html" %}
+
+{% block title %}Cabinet Visualizer - Cut byZewo{% endblock %}
+
+{% block content %}
+<div class="page-header text-center">
+  <h1><i class="fas fa-cube"></i> Cabinet Visualizer</h1>
+  <p class="lead">Preview your cabinet design in 3D</p>
+</div>
+
+<div class="row">
+  <!-- 3D Viewer -->
+  <div class="col-lg-9">
+    <div class="card">
+      <div class="card-header d-flex justify-content-between align-items-center">
+        <h5 class="mb-0">
+          <i class="fas fa-eye"></i> 3D Preview
+          {% if job %}
+          - {{ job.client_name }}
+          {% endif %}
+        </h5>
+        <div class="btn-group" role="group">
+          <button type="button" class="btn btn-sm btn-outline-primary" onclick="resetView()">
+            <i class="fas fa-home"></i> Reset View
+          </button>
+          <button type="button" class="btn btn-sm btn-outline-primary" onclick="takeScreenshot()">
+            <i class="fas fa-camera"></i> Screenshot
+          </button>
+        </div>
+      </div>
+      <div class="card-body p-0">
+        <div id="cabinet-viewer" style="height: 600px; background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Controls Panel -->
+  <div class="col-lg-3">
+    <div class="card mb-3">
+      <div class="card-header">
+        <h6 class="mb-0"><i class="fas fa-cogs"></i> Cabinet Controls</h6>
+      </div>
+      <div class="card-body">
+        <!-- Cabinet Dimensions -->
+        <div class="mb-3">
+          <label class="form-label">Cabinet Width (inches)</label>
+          <input type="range" class="form-range" id="cabinetWidth" min="12" max="48" value="24" oninput="updateCabinetWidth(this.value)">
+          <small class="text-muted">Current: <span id="widthValue">24</span>"</small>
+        </div>
+
+        <div class="mb-3">
+          <label class="form-label">Cabinet Height (inches)</label>
+          <input type="range" class="form-range" id="cabinetHeight" min="30" max="96" value="36" oninput="updateCabinetHeight(this.value)">
+          <small class="text-muted">Current: <span id="heightValue">36</span>"</small>
+        </div>
+
+        <div class="mb-3">
+          <label class="form-label">Cabinet Depth (inches)</label>
+          <input type="range" class="form-range" id="cabinetDepth" min="12" max="30" value="24" oninput="updateCabinetDepth(this.value)">
+          <small class="text-muted">Current: <span id="depthValue">24</span>"</small>
+        </div>
+
+        <hr>
+
+        <!-- Material & Finish -->
+        <div class="mb-3">
+          <label class="form-label">Wood Type</label>
+          <select class="form-select" id="woodType" onchange="updateWoodType(this.value)">
+            <option value="oak">Oak</option>
+            <option value="maple">Maple</option>
+            <option value="cherry">Cherry</option>
+            <option value="pine">Pine</option>
+            <option value="birch">Birch</option>
+          </select>
+        </div>
+
+        <div class="mb-3">
+          <label class="form-label">Finish</label>
+          <select class="form-select" id="finish" onchange="updateFinish(this.value)">
+            <option value="natural">Natural</option>
+            <option value="stained">Stained</option>
+            <option value="painted-white">Painted White</option>
+            <option value="painted-black">Painted Black</option>
+          </select>
+        </div>
+
+        <hr>
+
+        <!-- Cabinet Style -->
+        <div class="mb-3">
+          <label class="form-label">Door Style</label>
+          <select class="form-select" id="doorStyle" onchange="updateDoorStyle(this.value)">
+            <option value="shaker">Shaker</option>
+            <option value="raised-panel">Raised Panel</option>
+            <option value="flat-panel">Flat Panel</option>
+            <option value="glass">Glass</option>
+          </select>
+        </div>
+
+        <div class="mb-3">
+          <label class="form-label">Hardware</label>
+          <select class="form-select" id="hardware" onchange="updateHardware(this.value)">
+            <option value="brushed-nickel">Brushed Nickel</option>
+            <option value="black">Black</option>
+            <option value="brass">Brass</option>
+            <option value="chrome">Chrome</option>
+          </select>
+        </div>
+      </div>
+    </div>
+
+    <!-- Job Info -->
+    {% if job %}
+    <div class="card">
+      <div class="card-header">
+        <h6 class="mb-0"><i class="fas fa-info-circle"></i> Job Details</h6>
+      </div>
+      <div class="card-body">
+        <p><strong>Client:</strong> {{ job.client_name }}</p>
+        <p><strong>Created:</strong> {{ job.created_at.strftime('%m/%d/%Y') if job.created_at else 'Unknown' }}</p>
+        {% if job.notes %}
+        <p><strong>Notes:</strong> {{ job.notes }}</p>
+        {% endif %}
+        <a href="{{ url_for('job_details', job_id=job.id) }}" class="btn btn-sm btn-outline-primary">
+          <i class="fas fa-arrow-left"></i> Back to Job
+        </a>
+      </div>
+    </div>
+    {% endif %}
+  </div>
+</div>
+
+<!-- Three.js Scripts -->
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/build/three.min.js"></script>
+<script>
+// Manual OrbitControls implementation as fallback
+class BasicOrbitControls {
+  constructor(camera, domElement) {
+    this.camera = camera;
+    this.domElement = domElement;
+    this.enableDamping = true;
+    this.dampingFactor = 0.05;
+    
+    this.spherical = {
+      radius: 10, // Much closer for test scene
+      phi: Math.PI / 2, // Looking straight forward
+      theta: 0 // Front view
+    };
+    
+    this.isMouseDown = false;
+    this.mouseX = 0;
+    this.mouseY = 0;
+    
+    this.addEventListeners();
+    this.update();
+  }
+  
+  addEventListeners() {
+    this.domElement.addEventListener('mousedown', (e) => {
+      this.isMouseDown = true;
+      this.mouseX = e.clientX;
+      this.mouseY = e.clientY;
+    });
+    
+    this.domElement.addEventListener('mousemove', (e) => {
+      if (!this.isMouseDown) return;
+      
+      const deltaX = e.clientX - this.mouseX;
+      const deltaY = e.clientY - this.mouseY;
+      
+      this.spherical.theta -= deltaX * 0.01;
+      this.spherical.phi += deltaY * 0.01;
+      this.spherical.phi = Math.max(0.1, Math.min(Math.PI - 0.1, this.spherical.phi));
+      
+      this.mouseX = e.clientX;
+      this.mouseY = e.clientY;
+      
+      this.update();
+    });
+    
+    this.domElement.addEventListener('mouseup', () => {
+      this.isMouseDown = false;
+    });
+    
+    this.domElement.addEventListener('wheel', (e) => {
+      e.preventDefault();
+      this.spherical.radius += e.deltaY * 0.02; // Less sensitive
+      this.spherical.radius = Math.max(5, Math.min(100, this.spherical.radius)); // Better range
+      this.update();
+    });
+  }
+  
+  update() {
+    const x = this.spherical.radius * Math.sin(this.spherical.phi) * Math.cos(this.spherical.theta);
+    const y = this.spherical.radius * Math.cos(this.spherical.phi);
+    const z = this.spherical.radius * Math.sin(this.spherical.phi) * Math.sin(this.spherical.theta);
+    
+    this.camera.position.set(x, y, z);
+    this.camera.lookAt(0, 0, 0); // Look at center of test scene
+  }
+  
+  reset() {
+    this.spherical = {
+      radius: 10, // Much closer for test scene
+      phi: Math.PI / 2, // Looking straight forward
+      theta: 0 // Front view
+    };
+    this.update();
+  }
+}
+
+// Our custom controls are ready to use
+</script>
+
+<script>
+// Global variables
+let scene, camera, renderer, controls;
+let cabinetGroup;
+let currentCabinet = null;
+
+// Debug logging
+function debugLog(message) {
+  console.log('[Cabinet Visualizer]', message);
+}
+
+// Cabinet materials
+const materials = {
+  oak: new THREE.MeshLambertMaterial({ color: 0xDEB887 }),
+  maple: new THREE.MeshLambertMaterial({ color: 0xF5DEB3 }),
+  cherry: new THREE.MeshLambertMaterial({ color: 0x8B4513 }),
+  pine: new THREE.MeshLambertMaterial({ color: 0xFFE4B5 }),
+  birch: new THREE.MeshLambertMaterial({ color: 0xF0E68C })
+};
+
+// Initialize Three.js scene
+function initThreeJS() {
+  debugLog('Initializing Three.js...');
+  
+  // Check if Three.js is loaded
+  if (typeof THREE === 'undefined') {
+    console.error('Three.js not loaded!');
+    return;
+  }
+  debugLog('Three.js loaded successfully');
+  
+  const container = document.getElementById('cabinet-viewer');
+  if (!container) {
+    console.error('Cabinet viewer container not found!');
+    return;
+  }
+  debugLog('Container found:', container);
+  
+  // Scene
+  scene = new THREE.Scene();
+  scene.background = new THREE.Color(0x87CEEB); // Sky blue background
+  debugLog('Scene created');
+  
+  // Camera - SIMPLE SETUP
+  const aspect = container.clientWidth / container.clientHeight;
+  camera = new THREE.PerspectiveCamera(75, aspect, 0.1, 1000);
+  camera.position.set(0, 0, 10); // Simple straight-on view
+  camera.lookAt(0, 0, 0); // Look at center
+  debugLog('Camera created at position:', camera.position);
+  
+  // Renderer
+  renderer = new THREE.WebGLRenderer({ antialias: true });
+  renderer.setSize(container.clientWidth, container.clientHeight);
+  container.appendChild(renderer.domElement);
+  debugLog('Renderer created and added to container');
+  
+  // SIMPLE TEST SCENE - Add basic shapes that MUST be visible
+  createTestScene();
+  
+  // Use our custom controls
+  controls = new BasicOrbitControls(camera, renderer.domElement);
+  debugLog('Custom OrbitControls initialized');
+  
+  // Start render loop
+  animate();
+  
+  // Handle window resize
+  window.addEventListener('resize', onWindowResize, false);
+  
+  debugLog('Three.js initialization complete');
+}
+
+// Create a simple test scene that MUST work
+function createTestScene() {
+  debugLog('Creating test scene...');
+  
+  // Big red cube at center - MUST be visible
+  const geometry1 = new THREE.BoxGeometry(2, 2, 2);
+  const material1 = new THREE.MeshBasicMaterial({ color: 0xff0000 });
+  const cube1 = new THREE.Mesh(geometry1, material1);
+  cube1.position.set(0, 0, 0);
+  scene.add(cube1);
+  debugLog('Red cube added at center');
+  
+  // Green cube to the right
+  const geometry2 = new THREE.BoxGeometry(1, 1, 1);
+  const material2 = new THREE.MeshBasicMaterial({ color: 0x00ff00 });
+  const cube2 = new THREE.Mesh(geometry2, material2);
+  cube2.position.set(3, 0, 0);
+  scene.add(cube2);
+  debugLog('Green cube added to right');
+  
+  // Blue cube to the left
+  const geometry3 = new THREE.BoxGeometry(1, 1, 1);
+  const material3 = new THREE.MeshBasicMaterial({ color: 0x0000ff });
+  const cube3 = new THREE.Mesh(geometry3, material3);
+  cube3.position.set(-3, 0, 0);
+  scene.add(cube3);
+  debugLog('Blue cube added to left');
+  
+  // Add some basic lighting
+  const light = new THREE.AmbientLight(0xffffff, 1);
+  scene.add(light);
+  debugLog('Ambient light added');
+  
+  debugLog('Test scene created - you should see red, green, and blue cubes');
+}
+
+function setupLighting() {
+  debugLog('Setting up lighting...');
+  
+  // Ambient light
+  const ambientLight = new THREE.AmbientLight(0x404040, 0.6);
+  scene.add(ambientLight);
+  debugLog('Ambient light added');
+  
+  // Main directional light
+  const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
+  directionalLight.position.set(50, 100, 50);
+  directionalLight.castShadow = true;
+  directionalLight.shadow.mapSize.width = 2048;
+  directionalLight.shadow.mapSize.height = 2048;
+  scene.add(directionalLight);
+  debugLog('Directional light added');
+  
+  // Fill light
+  const fillLight = new THREE.DirectionalLight(0xffffff, 0.4);
+  fillLight.position.set(-50, 50, -50);
+  scene.add(fillLight);
+  debugLog('Fill light added');
+}
+
+function createCabinet(width, height, depth) {
+  debugLog(`Creating cabinet: ${width}w x ${height}h x ${depth}d`);
+  
+  // Remove existing cabinet
+  if (currentCabinet) {
+    scene.remove(currentCabinet);
+    debugLog('Removed existing cabinet');
+  }
+  
+  currentCabinet = new THREE.Group();
+  
+  // Scale down dimensions (cabinet was too big!)
+  const scale = 0.5; // Make cabinet smaller
+  const w = width * scale;
+  const h = height * scale;  
+  const d = depth * scale;
+  
+  debugLog(`Scaled dimensions: ${w}w x ${h}h x ${d}d`);
+  
+  // Cabinet body (frame) - use wireframe for debugging
+  const frameGeometry = new THREE.BoxGeometry(w, h, d);
+  const woodTypeSelect = document.getElementById('woodType');
+  const currentMaterial = materials[woodTypeSelect ? woodTypeSelect.value : 'oak'] || materials.oak;
+  
+  // Create frame with both solid and wireframe for debugging
+  const frame = new THREE.Mesh(frameGeometry, currentMaterial);
+  frame.position.set(0, h/2, 0);
+  frame.castShadow = true;
+  frame.receiveShadow = true;
+  currentCabinet.add(frame);
+  
+  // Add wireframe outline for debugging
+  const wireframe = new THREE.WireframeGeometry(frameGeometry);
+  const line = new THREE.LineSegments(wireframe, new THREE.LineBasicMaterial({color: 0x000000}));
+  line.position.set(0, h/2, 0);
+  currentCabinet.add(line);
+  
+  debugLog('Frame added to cabinet');
+  
+  // Cabinet doors (front) - make them more visible
+  const doorWidth = w / 2 - 1;
+  const doorHeight = h - 2; 
+  const doorDepth = 1;
+  const doorGeometry = new THREE.BoxGeometry(doorWidth, doorHeight, doorDepth);
+  
+  // Use different material for doors to make them stand out
+  const doorMaterial = new THREE.MeshLambertMaterial({ color: 0x8B4513 }); // Brown
+  
+  // Left door
+  const leftDoor = new THREE.Mesh(doorGeometry, doorMaterial);
+  leftDoor.position.set(-doorWidth/2 - 0.5, h/2, d/2 + doorDepth/2);
+  leftDoor.castShadow = true;
+  currentCabinet.add(leftDoor);
+  
+  // Right door  
+  const rightDoor = new THREE.Mesh(doorGeometry, doorMaterial);
+  rightDoor.position.set(doorWidth/2 + 0.5, h/2, d/2 + doorDepth/2);
+  rightDoor.castShadow = true;
+  currentCabinet.add(rightDoor);
+  debugLog('Doors added to cabinet');
+  
+  // Door handles - make them bigger and more visible
+  createHardware(currentCabinet, doorWidth, doorHeight, d);
+  
+  // Add to scene
+  scene.add(currentCabinet);
+  debugLog('Cabinet added to scene');
+  
+  // Add floor for reference - make it smaller and more visible
+  if (!scene.getObjectByName('floor')) {
+    const floorGeometry = new THREE.PlaneGeometry(100, 100);
+    const floorMaterial = new THREE.MeshLambertMaterial({ 
+      color: 0xaaaaaa,
+      transparent: true,
+      opacity: 0.5
+    });
+    const floor = new THREE.Mesh(floorGeometry, floorMaterial);
+    floor.rotation.x = -Math.PI / 2;
+    floor.position.y = -1;
+    floor.receiveShadow = true;
+    floor.name = 'floor';
+    scene.add(floor);
+    debugLog('Floor added to scene');
+  }
+  
+  // Add a simple colored cube for testing
+  const testGeometry = new THREE.BoxGeometry(5, 5, 5);
+  const testMaterial = new THREE.MeshBasicMaterial({ color: 0xff0000 }); // Red cube
+  const testCube = new THREE.Mesh(testGeometry, testMaterial);
+  testCube.position.set(20, 10, 0);
+  scene.add(testCube);
+  debugLog('Red test cube added for reference');
+  
+  debugLog('Cabinet creation complete');
+}
+
+function createHardware(cabinet, doorWidth, doorHeight, depth) {
+  const hardwareColor = getHardwareColor();
+  const handleMaterial = new THREE.MeshLambertMaterial({ color: hardwareColor });
+  
+  // Left door handle
+  const handleGeometry = new THREE.CylinderGeometry(0.3, 0.3, 4);
+  const leftHandle = new THREE.Mesh(handleGeometry, handleMaterial);
+  leftHandle.position.set(-doorWidth/2 + 2, doorHeight/2, depth/2 + 1);
+  leftHandle.rotation.x = Math.PI / 2;
+  cabinet.add(leftHandle);
+  
+  // Right door handle
+  const rightHandle = new THREE.Mesh(handleGeometry, handleMaterial);
+  rightHandle.position.set(doorWidth/2 - 2, doorHeight/2, depth/2 + 1);
+  rightHandle.rotation.x = Math.PI / 2;
+  cabinet.add(rightHandle);
+}
+
+function getHardwareColor() {
+  const hardware = document.getElementById('hardware').value;
+  switch(hardware) {
+    case 'brushed-nickel': return 0xB8B8B8;
+    case 'black': return 0x2C2C2C;
+    case 'brass': return 0xFFD700;
+    case 'chrome': return 0xE8E8E8;
+    default: return 0xB8B8B8;
+  }
+}
+
+// Control functions
+function updateCabinetWidth(value) {
+  document.getElementById('widthValue').textContent = value;
+  updateCabinet();
+}
+
+function updateCabinetHeight(value) {
+  document.getElementById('heightValue').textContent = value;
+  updateCabinet();
+}
+
+function updateCabinetDepth(value) {
+  document.getElementById('depthValue').textContent = value;
+  updateCabinet();
+}
+
+function updateCabinet() {
+  const width = parseInt(document.getElementById('cabinetWidth').value);
+  const height = parseInt(document.getElementById('cabinetHeight').value);
+  const depth = parseInt(document.getElementById('cabinetDepth').value);
+  createCabinet(width, height, depth);
+}
+
+function updateWoodType(value) {
+  updateCabinet();
+}
+
+function updateFinish(value) {
+  // Could add finish effects here
+  updateCabinet();
+}
+
+function updateDoorStyle(value) {
+  // Could add different door geometries here
+  updateCabinet();
+}
+
+function updateHardware(value) {
+  updateCabinet();
+}
+
+function resetView() {
+  if (controls && controls.reset) {
+    controls.reset();
+  } else {
+    camera.position.set(25, 20, 25);
+    camera.lookAt(0, 10, 0);
+  }
+}
+
+function takeScreenshot() {
+  renderer.render(scene, camera);
+  const dataURL = renderer.domElement.toDataURL('image/png');
+  const link = document.createElement('a');
+  link.download = 'cabinet-preview.png';
+  link.href = dataURL;
+  link.click();
+}
+
+function animate() {
+  requestAnimationFrame(animate);
+  
+  if (controls) {
+    controls.update();
+  }
+  
+  if (renderer && scene && camera) {
+    renderer.render(scene, camera);
+  }
+}
+
+function onWindowResize() {
+  const container = document.getElementById('cabinet-viewer');
+  camera.aspect = container.clientWidth / container.clientHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(container.clientWidth, container.clientHeight);
+}
+
+// Initialize when page loads
+document.addEventListener('DOMContentLoaded', function() {
+  initThreeJS();
+  
+  // Load job data if available
+  {% if parts %}
+  loadJobData();
+  {% endif %}
+});
+
+// Load actual job part data
+function loadJobData() {
+  const parts = {{ parts | tojson }};
+  
+  if (parts && parts.length > 0) {
+    // Calculate average dimensions from parts
+    let totalWidth = 0, totalHeight = 0, totalDepth = 24; // Default depth
+    let count = 0;
+    
+    parts.forEach(part => {
+      if (part.width && part.height) {
+        totalWidth += parseFloat(part.width);
+        totalHeight += parseFloat(part.height);
+        count++;
+      }
+    });
+    
+    if (count > 0) {
+      const avgWidth = Math.min(48, Math.max(12, totalWidth / count)); // Clamp to realistic values
+      const avgHeight = Math.min(96, Math.max(30, totalHeight / count));
+      
+      // Update sliders to reflect job data
+      document.getElementById('cabinetWidth').value = Math.round(avgWidth);
+      document.getElementById('cabinetHeight').value = Math.round(avgHeight);
+      document.getElementById('widthValue').textContent = Math.round(avgWidth);
+      document.getElementById('heightValue').textContent = Math.round(avgHeight);
+      
+      // Update the cabinet
+      createCabinet(avgWidth, avgHeight, totalDepth);
+    }
+    
+    // Add parts list to UI
+    displayPartsList(parts);
+  }
+}
+
+// Display parts in the controls panel
+function displayPartsList(parts) {
+  // Find or create parts display area
+  let partsDisplay = document.getElementById('partsDisplay');
+  if (!partsDisplay) {
+    partsDisplay = document.createElement('div');
+    partsDisplay.id = 'partsDisplay';
+    partsDisplay.className = 'mt-3';
+    partsDisplay.innerHTML = '<hr><h6><i class="fas fa-list"></i> Job Parts</h6>';
+    
+    // Insert before hardware section
+    const hardwareSection = document.querySelector('.card-body');
+    hardwareSection.appendChild(partsDisplay);
+  }
+  
+  // Create parts list
+  const partsList = document.createElement('div');
+  partsList.className = 'small';
+  
+  parts.forEach((part, index) => {
+    const partDiv = document.createElement('div');
+    partDiv.className = 'border rounded p-2 mb-1 bg-light';
+    partDiv.innerHTML = `
+      <strong>Part ${index + 1}:</strong><br>
+      ${part.width}" × ${part.height}"<br>
+      <small class="text-muted">${part.thickness || 'Standard'}</small>
+    `;
+    partsList.appendChild(partDiv);
+  });
+  
+  partsDisplay.appendChild(partsList);
+}
+</script>
+
+{% endblock %}

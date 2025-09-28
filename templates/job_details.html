@@ -36,6 +36,11 @@
   </div>
   
   <div class="col-md-4 text-end">
+    <div class="mb-2">
+      <a href="{{ url_for('visualize_cabinet', job_id=job.id) }}" class="btn btn-primary">
+        <i class="fas fa-cube"></i> 3D Preview
+      </a>
+    </div>
     <div class="btn-group" role="group">
       <a href="{{ url_for('edit_job', job_id=job.id) }}" class="btn btn-outline-primary">
         <i class="fas fa-edit"></i> Edit
