@@ -37,9 +37,9 @@
   
   <div class="col-md-4 text-end">
     <div class="mb-2">
-      <a href="{{ url_for('visualize_cabinet', job_id=job.id) }}" class="btn btn-primary">
-        <i class="fas fa-cube"></i> 3D Preview
-      </a>
+      <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#sketchModal">
+        <i class="fas fa-pencil-alt"></i> Design Sketch
+      </button>
     </div>
     <div class="btn-group" role="group">
       <a href="{{ url_for('edit_job', job_id=job.id) }}" class="btn btn-outline-primary">
@@ -346,6 +346,75 @@
   </div>
 </div>
 
+<!-- Design Sketch Modal -->
+<div class="modal fade" id="sketchModal" tabindex="-1">
+  <div class="modal-dialog modal-xl modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header bg-primary text-white">
+        <h5 class="modal-title">
+          <i class="fas fa-pencil-alt"></i> Design Sketch - {{ job.client_name }}
+        </h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body p-0">
+        <div class="sketch-container" style="position: relative; background: white;">
+          <!-- Drawing Tools -->
+          <div class="drawing-tools p-3 border-bottom bg-light">
+            <div class="row align-items-center">
+              <div class="col-md-8">
+                <div class="btn-group me-3" role="group">
+                  <button type="button" class="btn btn-outline-primary active" id="penTool" onclick="setTool('pen')">
+                    <i class="fas fa-pen"></i> Pen
+                  </button>
+                  <button type="button" class="btn btn-outline-secondary" id="eraserTool" onclick="setTool('eraser')">
+                    <i class="fas fa-eraser"></i> Eraser
+                  </button>
+                </div>
+                
+                <div class="btn-group me-3" role="group">
+                  <label class="btn btn-outline-dark">
+                    <input type="color" id="colorPicker" value="#000000" onchange="setColor(this.value)" style="width: 20px; height: 20px; border: none;">
+                  </label>
+                </div>
+                
+                <div class="btn-group me-3" role="group">
+                  <label for="brushSize" class="form-label me-2">Size:</label>
+                  <input type="range" id="brushSize" min="1" max="20" value="3" onchange="setBrushSize(this.value)" style="width: 100px;">
+                  <span id="sizeDisplay" class="ms-2">3px</span>
+                </div>
+              </div>
+              
+              <div class="col-md-4 text-end">
+                <button class="btn btn-outline-warning me-2" onclick="clearCanvas()">
+                  <i class="fas fa-trash"></i> Clear
+                </button>
+                <button class="btn btn-success" onclick="saveSketch()">
+                  <i class="fas fa-save"></i> Save Sketch
+                </button>
+              </div>
+            </div>
+          </div>
+          
+          <!-- Canvas -->
+          <div style="overflow: auto; max-height: 70vh;">
+            <canvas id="sketchCanvas" 
+                    style="display: block; margin: 0 auto; border: 1px solid #ddd; background: white; touch-action: none;"
+                    width="800" 
+                    height="600">
+            </canvas>
+          </div>
+          
+          <!-- Saved Sketches -->
+          <div id="savedSketches" class="p-3 border-top bg-light" style="display: none;">
+            <h6>Previous Sketches:</h6>
+            <div id="sketchGallery" class="row"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
 <!-- Image Modal -->
 <div class="modal fade" id="imageModal" tabindex="-1">
   <div class="modal-dialog modal-lg modal-dialog-centered">
@@ -393,6 +462,223 @@
 function openImageModal(imageSrc) {
   document.getElementById('modalImage').src = imageSrc;
   new bootstrap.Modal(document.getElementById('imageModal')).show();
+}
+
+// Drawing functionality
+let canvas, ctx;
+let isDrawing = false;
+let currentTool = 'pen';
+let currentColor = '#000000';
+let currentSize = 3;
+let lastPoint = null;
+
+// Initialize drawing when modal opens
+document.getElementById('sketchModal').addEventListener('shown.bs.modal', function() {
+  initializeDrawing();
+  loadSavedSketches();
+});
+
+function initializeDrawing() {
+  canvas = document.getElementById('sketchCanvas');
+  ctx = canvas.getContext('2d');
+  
+  // Set up canvas
+  ctx.lineCap = 'round';
+  ctx.lineJoin = 'round';
+  ctx.strokeStyle = currentColor;
+  ctx.lineWidth = currentSize;
+  
+  // Mouse events
+  canvas.addEventListener('mousedown', startDrawing);
+  canvas.addEventListener('mousemove', draw);
+  canvas.addEventListener('mouseup', stopDrawing);
+  canvas.addEventListener('mouseout', stopDrawing);
+  
+  // Touch events for tablets/phones
+  canvas.addEventListener('touchstart', handleTouch);
+  canvas.addEventListener('touchmove', handleTouch);
+  canvas.addEventListener('touchend', stopDrawing);
+  
+  // Prevent scrolling when drawing
+  canvas.addEventListener('touchstart', preventDefault);
+  canvas.addEventListener('touchmove', preventDefault);
+  
+  console.log('🎨 Drawing canvas initialized with Apple Pencil support');
+}
+
+function preventDefault(e) {
+  e.preventDefault();
+}
+
+function startDrawing(e) {
+  isDrawing = true;
+  const rect = canvas.getBoundingClientRect();
+  lastPoint = {
+    x: e.clientX - rect.left,
+    y: e.clientY - rect.top
+  };
+}
+
+function draw(e) {
+  if (!isDrawing) return;
+  
+  const rect = canvas.getBoundingClientRect();
+  const currentPoint = {
+    x: e.clientX - rect.left,
+    y: e.clientY - rect.top
+  };
+  
+  if (currentTool === 'pen') {
+    ctx.globalCompositeOperation = 'source-over';
+    ctx.strokeStyle = currentColor;
+  } else if (currentTool === 'eraser') {
+    ctx.globalCompositeOperation = 'destination-out';
+  }
+  
+  ctx.lineWidth = currentSize;
+  ctx.beginPath();
+  ctx.moveTo(lastPoint.x, lastPoint.y);
+  ctx.lineTo(currentPoint.x, currentPoint.y);
+  ctx.stroke();
+  
+  lastPoint = currentPoint;
+}
+
+function handleTouch(e) {
+  e.preventDefault();
+  const touch = e.touches[0];
+  const mouseEvent = new MouseEvent(e.type === 'touchstart' ? 'mousedown' : 
+                                   e.type === 'touchmove' ? 'mousemove' : 'mouseup', {
+    clientX: touch.clientX,
+    clientY: touch.clientY
+  });
+  
+  if (e.type === 'touchstart') {
+    startDrawing(mouseEvent);
+  } else if (e.type === 'touchmove') {
+    draw(mouseEvent);
+  }
+}
+
+function stopDrawing() {
+  if (!isDrawing) return;
+  isDrawing = false;
+  ctx.beginPath();
+}
+
+function setTool(tool) {
+  currentTool = tool;
+  
+  // Update button states
+  document.getElementById('penTool').classList.toggle('active', tool === 'pen');
+  document.getElementById('eraserTool').classList.toggle('active', tool === 'eraser');
+  
+  console.log('🔧 Tool changed to:', tool);
+}
+
+function setColor(color) {
+  currentColor = color;
+  console.log('🎨 Color changed to:', color);
+}
+
+function setBrushSize(size) {
+  currentSize = parseInt(size);
+  document.getElementById('sizeDisplay').textContent = size + 'px';
+  console.log('📏 Brush size changed to:', size);
+}
+
+function clearCanvas() {
+  if (confirm('Are you sure you want to clear the entire sketch?')) {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    console.log('🗑️ Canvas cleared');
+  }
+}
+
+function saveSketch() {
+  const dataURL = canvas.toDataURL('image/png');
+  const jobId = {{ job.id }};
+  
+  // Create a temporary download link
+  const link = document.createElement('a');
+  link.download = `sketch-${jobId}-${Date.now()}.png`;
+  link.href = dataURL;
+  
+  // Save to localStorage for persistence
+  const savedSketches = JSON.parse(localStorage.getItem(`sketches_${jobId}`) || '[]');
+  savedSketches.push({
+    timestamp: Date.now(),
+    dataURL: dataURL,
+    name: `Sketch ${savedSketches.length + 1}`
+  });
+  localStorage.setItem(`sketches_${jobId}`, JSON.stringify(savedSketches));
+  
+  // Trigger download
+  link.click();
+  
+  // Show success message
+  alert('Sketch saved successfully! The file has been downloaded to your device.');
+  
+  // Refresh saved sketches display
+  loadSavedSketches();
+  
+  console.log('💾 Sketch saved for job', jobId);
+}
+
+function loadSavedSketches() {
+  const jobId = {{ job.id }};
+  const savedSketches = JSON.parse(localStorage.getItem(`sketches_${jobId}`) || '[]');
+  const gallery = document.getElementById('sketchGallery');
+  const container = document.getElementById('savedSketches');
+  
+  if (savedSketches.length > 0) {
+    container.style.display = 'block';
+    gallery.innerHTML = '';
+    
+    savedSketches.forEach((sketch, index) => {
+      const col = document.createElement('div');
+      col.className = 'col-md-3 mb-3';
+      
+      const date = new Date(sketch.timestamp).toLocaleDateString();
+      col.innerHTML = `
+        <div class="card">
+          <img src="${sketch.dataURL}" class="card-img-top" style="height: 150px; object-fit: cover; cursor: pointer;" 
+               onclick="loadSketch('${sketch.dataURL}')">
+          <div class="card-body p-2">
+            <small class="text-muted">${date}</small>
+            <br>
+            <button class="btn btn-sm btn-outline-danger" onclick="deleteSketch(${index})">
+              <i class="fas fa-trash"></i>
+            </button>
+          </div>
+        </div>
+      `;
+      
+      gallery.appendChild(col);
+    });
+  } else {
+    container.style.display = 'none';
+  }
+}
+
+function loadSketch(dataURL) {
+  const img = new Image();
+  img.onload = function() {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.drawImage(img, 0, 0);
+  };
+  img.src = dataURL;
+  console.log('📂 Sketch loaded from gallery');
+}
+
+function deleteSketch(index) {
+  if (confirm('Delete this sketch?')) {
+    const jobId = {{ job.id }};
+    const savedSketches = JSON.parse(localStorage.getItem(`sketches_${jobId}`) || '[]');
+    savedSketches.splice(index, 1);
+    localStorage.setItem(`sketches_${jobId}`, JSON.stringify(savedSketches));
+    loadSavedSketches();
+    console.log('🗑️ Sketch deleted');
+  }
 }
 </script>
 

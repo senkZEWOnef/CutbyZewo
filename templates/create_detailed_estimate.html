@@ -42,19 +42,19 @@
           <!-- Pricing Settings -->
           <div class="row mb-4">
             <div class="col-md-6">
-              <label class="form-label">Labor Rate ($/hour)</label>
+              <label class="form-label">Labor Fee (Fixed Price)</label>
               <div class="input-group">
                 <span class="input-group-text">$</span>
-                <input type="number" name="labor_rate" class="form-control" 
-                       value="50.00" step="0.01" min="0" required>
+                <input type="number" name="labor_fee" class="form-control" 
+                       value="0.00" step="0.01" min="0" required onchange="calculateTotals()" oninput="calculateTotals()">
               </div>
             </div>
             <div class="col-md-6">
-              <label class="form-label">Material Markup (%)</label>
+              <label class="form-label">Commission (Salaries/Bonus)</label>
               <div class="input-group">
-                <input type="number" name="markup_percentage" class="form-control" 
-                       value="20.00" step="0.01" min="0" max="100" required>
-                <span class="input-group-text">%</span>
+                <span class="input-group-text">$</span>
+                <input type="number" name="commission" class="form-control" 
+                       value="0.00" step="0.01" min="0" required onchange="calculateTotals()" oninput="calculateTotals()">
               </div>
             </div>
           </div>
@@ -107,7 +107,7 @@
                     <div class="col-md-2">
                       <label class="form-label">Quantity</label>
                       <input type="number" name="item_quantity" class="form-control" 
-                             value="1" step="0.01" min="0" required>
+                             value="1" step="0.01" min="0" required onchange="calculateTotals()" oninput="calculateTotals()">
                     </div>
                     <div class="col-md-2">
                       <label class="form-label">Unit</label>
@@ -125,7 +125,7 @@
                       <div class="input-group">
                         <span class="input-group-text">$</span>
                         <input type="number" name="item_unit_price" class="form-control" 
-                               step="0.01" min="0" required>
+                               step="0.01" min="0" required onchange="calculateTotals()" oninput="calculateTotals()">
                       </div>
                     </div>
                     <div class="col-md-1">
@@ -147,31 +147,118 @@
 
               <!-- Common Items Templates -->
               <div class="mt-3">
-                <h6>Quick Add Common Items:</h6>
+                <h6>Quick Add Common Materials:</h6>
                 <div class="row">
                   <div class="col-md-3 mb-2">
                     <button type="button" class="btn btn-sm btn-outline-secondary w-100"
-                            onclick="addCommonItem('3/4 Plywood', 'material', '1', 'sheets', '85.00')">
-                      3/4" Plywood Sheet
+                            onclick="addCommonItem('1 inch Plywood', 'material', '1', 'sheets', '120.00')">
+                      1" Plywood
                     </button>
                   </div>
                   <div class="col-md-3 mb-2">
                     <button type="button" class="btn btn-sm btn-outline-secondary w-100"
+                            onclick="addCommonItem('3/4 Plywood', 'material', '1', 'sheets', '85.00')">
+                      3/4" Plywood
+                    </button>
+                  </div>
+                  <div class="col-md-3 mb-2">
+                    <button type="button" class="btn btn-sm btn-outline-secondary w-100"
+                            onclick="addCommonItem('5/8 Plywood', 'material', '1', 'sheets', '75.00')">
+                      5/8" Plywood
+                    </button>
+                  </div>
+                  <div class="col-md-3 mb-2">
+                    <button type="button" class="btn btn-sm btn-outline-secondary w-100"
+                            onclick="addCommonItem('1/2 Plywood', 'material', '1', 'sheets', '65.00')">
+                      1/2" Plywood
+                    </button>
+                  </div>
+                  <div class="col-md-3 mb-2">
+                    <button type="button" class="btn btn-sm btn-outline-secondary w-100"
+                            onclick="addCommonItem('3/8 Plywood', 'material', '1', 'sheets', '55.00')">
+                      3/8" Plywood
+                    </button>
+                  </div>
+                  <div class="col-md-3 mb-2">
+                    <button type="button" class="btn btn-sm btn-outline-secondary w-100"
+                            onclick="addCommonItem('1/4 Plywood', 'material', '1', 'sheets', '45.00')">
+                      1/4" Plywood
+                    </button>
+                  </div>
+                  <div class="col-md-3 mb-2">
+                    <button type="button" class="btn btn-sm btn-outline-secondary w-100"
+                            onclick="addCommonItem('PVC Panel', 'material', '1', 'sheets', '95.00')">
+                      PVC Panel
+                    </button>
+                  </div>
+                  <div class="col-md-3 mb-2">
+                    <button type="button" class="btn btn-sm btn-outline-secondary w-100"
+                            onclick="addCommonItem('Laminate Sheet', 'material', '1', 'sheets', '125.00')">
+                      Laminate Sheet
+                    </button>
+                  </div>
+                </div>
+                
+                <h6 class="mt-3">Quick Add Hardware:</h6>
+                <div class="row">
+                  <div class="col-md-3 mb-2">
+                    <button type="button" class="btn btn-sm btn-outline-info w-100"
                             onclick="addCommonItem('European Hinges', 'hardware', '1', 'sets', '12.00')">
                       European Hinges
                     </button>
                   </div>
                   <div class="col-md-3 mb-2">
-                    <button type="button" class="btn btn-sm btn-outline-secondary w-100"
+                    <button type="button" class="btn btn-sm btn-outline-info w-100"
                             onclick="addCommonItem('Soft Close Slides', 'hardware', '1', 'sets', '25.00')">
                       Soft Close Slides
                     </button>
                   </div>
                   <div class="col-md-3 mb-2">
-                    <button type="button" class="btn btn-sm btn-outline-secondary w-100"
-                            onclick="addCommonItem('Installation Labor', 'labor', '8', 'hours', '50.00')">
-                      Installation Labor
+                    <button type="button" class="btn btn-sm btn-outline-info w-100"
+                            onclick="addCommonItem('Cabinet Pulls', 'hardware', '1', 'sets', '15.00')">
+                      Cabinet Pulls
                     </button>
+                  </div>
+                  <div class="col-md-3 mb-2">
+                    <button type="button" class="btn btn-sm btn-outline-info w-100"
+                            onclick="addCommonItem('Cabinet Knobs', 'hardware', '1', 'sets', '8.00')">
+                      Cabinet Knobs
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Estimate Summary -->
+          <div class="card mb-4">
+            <div class="card-header bg-success text-white">
+              <h5 class="mb-0"><i class="fas fa-calculator"></i> Estimate Summary</h5>
+            </div>
+            <div class="card-body">
+              <div class="row">
+                <div class="col-md-3">
+                  <div class="text-center">
+                    <h6>Materials & Installation</h6>
+                    <h4 class="text-primary">$<span id="materialsTotal">0.00</span></h4>
+                  </div>
+                </div>
+                <div class="col-md-3">
+                  <div class="text-center">
+                    <h6>Labor Fee</h6>
+                    <h4 class="text-info">$<span id="laborTotal">0.00</span></h4>
+                  </div>
+                </div>
+                <div class="col-md-3">
+                  <div class="text-center">
+                    <h6>Commission</h6>
+                    <h4 class="text-warning">$<span id="commissionTotal">0.00</span></h4>
+                  </div>
+                </div>
+                <div class="col-md-3">
+                  <div class="text-center">
+                    <h6>Grand Total</h6>
+                    <h3 class="text-success">$<span id="grandTotal">0.00</span></h3>
                   </div>
                 </div>
               </div>
@@ -219,7 +306,7 @@ function addLineItem() {
         <div class="col-md-2">
           <label class="form-label">Quantity</label>
           <input type="number" name="item_quantity" class="form-control" 
-                 value="1" step="0.01" min="0" required>
+                 value="1" step="0.01" min="0" required onchange="calculateTotals()" oninput="calculateTotals()">
         </div>
         <div class="col-md-2">
           <label class="form-label">Unit</label>
@@ -237,7 +324,7 @@ function addLineItem() {
           <div class="input-group">
             <span class="input-group-text">$</span>
             <input type="number" name="item_unit_price" class="form-control" 
-                   step="0.01" min="0" required>
+                   step="0.01" min="0" required onchange="calculateTotals()" oninput="calculateTotals()">
           </div>
         </div>
         <div class="col-md-1">
@@ -264,6 +351,7 @@ function addLineItem() {
 function removeLineItem(button) {
   const lineItem = button.closest('.line-item-row');
   lineItem.remove();
+  calculateTotals();
 }
 
 function addCommonItem(name, type, quantity, unit, unitPrice) {
@@ -274,6 +362,7 @@ function addCommonItem(name, type, quantity, unit, unitPrice) {
   lastItem.querySelector('input[name="item_quantity"]').value = quantity;
   lastItem.querySelector('select[name="item_unit"]').value = unit;
   lastItem.querySelector('input[name="item_unit_price"]').value = unitPrice;
+  calculateTotals();
 }
 
 function addSuggestedItem(name, type, quantity, unit, unitPrice, description) {
@@ -285,7 +374,49 @@ function addSuggestedItem(name, type, quantity, unit, unitPrice, description) {
   lastItem.querySelector('select[name="item_unit"]').value = unit;
   lastItem.querySelector('input[name="item_unit_price"]').value = unitPrice;
   lastItem.querySelector('input[name="item_description"]').value = description;
+  calculateTotals();
 }
+
+function calculateTotals() {
+  let materialsSubtotal = 0;
+  let hardwareSubtotal = 0;
+  
+  // Get all line items (materials and hardware only)
+  const lineItems = document.querySelectorAll('.line-item-row');
+  
+  lineItems.forEach(item => {
+    const type = item.querySelector('select[name="item_type"]').value;
+    const quantity = parseFloat(item.querySelector('input[name="item_quantity"]').value) || 0;
+    const unitPrice = parseFloat(item.querySelector('input[name="item_unit_price"]').value) || 0;
+    const lineTotal = quantity * unitPrice;
+    
+    if (type === 'material') {
+      materialsSubtotal += lineTotal;
+    } else if (type === 'hardware') {
+      hardwareSubtotal += lineTotal;
+    }
+    // Labor items from line items are now ignored since we have fixed labor fee
+  });
+  
+  // Get fixed fees
+  const laborFee = parseFloat(document.querySelector('input[name="labor_fee"]').value) || 0;
+  const commission = parseFloat(document.querySelector('input[name="commission"]').value) || 0;
+  
+  // Calculate grand total: Materials + Hardware + Labor Fee + Commission
+  const materialsAndInstallation = materialsSubtotal + hardwareSubtotal;
+  const grandTotal = materialsAndInstallation + laborFee + commission;
+  
+  // Update display
+  document.getElementById('materialsTotal').textContent = materialsAndInstallation.toFixed(2);
+  document.getElementById('laborTotal').textContent = laborFee.toFixed(2);
+  document.getElementById('commissionTotal').textContent = commission.toFixed(2);
+  document.getElementById('grandTotal').textContent = grandTotal.toFixed(2);
+}
+
+// Calculate totals on page load
+document.addEventListener('DOMContentLoaded', function() {
+  calculateTotals();
+});
 </script>
 
 {% endblock %}
