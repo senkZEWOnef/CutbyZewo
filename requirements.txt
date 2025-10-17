@@ -9,7 +9,7 @@ cycler==0.12.1
 deprecation==2.1.0
 Flask==3.1.1
 fonttools==4.58.4
-gotrue==2.12.2
+# gotrue==2.12.2  # Removed - Supabase auth
 gunicorn==23.0.0
 h11==0.16.0
 h2==4.2.0
@@ -28,7 +28,10 @@ numpy==2.3.0
 packaging==25.0
 pillow==11.2.1
 pluggy==1.6.0
-postgrest==1.1.1
+# postgrest==1.1.1  # Removed - Supabase REST API
+psycopg2-binary==2.9.11
+bcrypt==5.0.0
+# Core dependencies for Neon-based application
 pydantic==2.11.7
 pydantic_core==2.33.2
 Pygments==2.19.2
@@ -38,15 +41,15 @@ pytest==8.4.1
 pytest-mock==3.14.1
 python-dateutil==2.9.0.post0
 python-dotenv==1.1.1
-realtime==2.5.3
+# realtime==2.5.3  # Removed - Supabase realtime
 reportlab==4.4.2
 six==1.17.0
 sniffio==1.3.1
 SQLAlchemy==2.0.41
-storage3==0.12.0
+# storage3==0.12.0  # Removed - Supabase storage
 StrEnum==0.4.15
-supabase==2.16.0
-supafunc==0.10.1
+# supabase==2.16.0  # Removed - migrated to Neon
+# supafunc==0.10.1  # Removed - Supabase functions
 typing-inspection==0.4.1
 typing_extensions==4.14.0
 websockets==15.0.1

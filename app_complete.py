@@ -1,7 +1,7 @@
 # ✅ Complete Neon-based Flask Application
 from flask import Flask, render_template, request, redirect, url_for, flash, session, send_file, make_response, current_app 
 from werkzeug.utils import secure_filename
-from datetime import datetime, timedelta
+from datetime import datetime
 import os, uuid, shutil, glob
 from io import BytesIO
 from PIL import Image
@@ -242,6 +242,7 @@ def home():
                 fetch=True
             )
             
+            from datetime import datetime, timedelta
             today = datetime.now().date()
             urgent_threshold = today + timedelta(days=3)
             

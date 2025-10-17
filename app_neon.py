@@ -1,7 +1,7 @@
-# ✅ Complete Neon-based Flask Application
+# ✅ Imports
 from flask import Flask, render_template, request, redirect, url_for, flash, session, send_file, make_response, current_app 
 from werkzeug.utils import secure_filename
-from datetime import datetime, timedelta
+from datetime import datetime
 import os, uuid, shutil, glob
 from io import BytesIO
 from PIL import Image
@@ -16,7 +16,6 @@ from visualizer import draw_sheets_to_files
 from flask import jsonify
 from collections import defaultdict
 from dotenv import load_dotenv
-from local_storage_manager import LocalStorageManager
 import hashlib
 import bcrypt
 
@@ -24,7 +23,7 @@ load_dotenv()
 
 # ✅ Flask Init
 app = Flask(__name__)
-app.secret_key = "Poesie509$$$"
+app.secret_key = "Poesie509$$$"  # Consider moving to environment variable for production
 
 # ✅ Ensure folders exist
 os.makedirs("static/sheets", exist_ok=True)
@@ -57,10 +56,6 @@ def verify_password(password: str, hashed: str) -> bool:
 def inject_user():
     return {"user": current_user()}
 
-@app.context_processor
-def expose_helpers():
-    return {"has_endpoint": lambda name: name in app.view_functions}
-
 @app.route("/signup", methods=["GET", "POST"])
 def signup():
     if request.method == "POST":
@@ -69,11 +64,13 @@ def signup():
         username = request.form.get("username")
 
         try:
+            # Check if user already exists
             existing_user = execute_single("SELECT id FROM users WHERE email = %s", (email,))
             if existing_user:
                 flash("User with this email already exists.", "danger")
                 return redirect(url_for("signup"))
 
+            # Hash password and create user
             password_hash = hash_password(password)
             
             user_id = execute_single(
@@ -81,6 +78,7 @@ def signup():
                 (email, username, password_hash)
             )['id']
 
+            # Store session
             session["user_id"] = str(user_id)
             flash("Account created successfully!", "success")
             return redirect(url_for("home"))
@@ -127,16 +125,19 @@ def login():
         password = request.form.get("password")
 
         try:
+            # Find user by email
             user = execute_single("SELECT id, password_hash FROM users WHERE email = %s", (email,))
             
             if not user:
                 flash("Invalid email or password.", "danger")
                 return redirect(url_for("login"))
 
+            # Verify password
             if not verify_password(password, user['password_hash']):
                 flash("Invalid email or password.", "danger")
                 return redirect(url_for("login"))
 
+            # Store user_id in session
             session["user_id"] = str(user['id'])
             flash("Logged in successfully!", "success")
             return redirect(url_for("home"))
@@ -162,22 +163,27 @@ def calendar():
     user_id = session["user_id"]
 
     try:
+        # Get this user's jobs
         jobs_data = execute_query(
             "SELECT id, client_name FROM jobs WHERE user_id = %s",
             (user_id,),
             fetch=True
         )
-        job_ids = [str(j["id"]) for j in jobs_data]
+        job_ids = [j["id"] for j in jobs_data]
         job_name_map = {str(j["id"]): j["client_name"] or "Unnamed Job" for j in jobs_data}
 
+        # Get deadlines for those jobs
         deadlines = []
         if job_ids:
+            # Convert UUIDs to strings for the IN clause
+            job_ids_str = [str(jid) for jid in job_ids]
             deadlines = execute_query(
                 f"SELECT * FROM deadlines WHERE job_id = ANY(%s)",
-                (job_ids,),
+                (job_ids_str,),
                 fetch=True
             )
 
+        # Build calendar events
         events = []
         for d in deadlines:
             job_id = str(d["job_id"])
@@ -224,24 +230,29 @@ def home():
 
     if user_id:
         try:
+            # Get all jobs for statistics
             all_jobs = execute_query(
                 "SELECT id, client_name, final_price, status, created_at FROM jobs WHERE user_id = %s",
                 (user_id,),
                 fetch=True
             )
             
+            # Calculate statistics
             stats["total_jobs"] = len(all_jobs)
             stats["total_revenue"] = sum(float(job.get("final_price", 0) or 0) for job in all_jobs)
             stats["pending_quotes"] = len([job for job in all_jobs if not job.get("final_price")])
             stats["completed_jobs"] = len([job for job in all_jobs if job.get("status") == "completed"])
             stats["in_progress_jobs"] = len([job for job in all_jobs if job.get("status") == "in_progress"])
 
+            # Get hard deadlines for urgent jobs calculation
             deadlines = execute_query(
                 "SELECT job_id, hard_deadline FROM deadlines WHERE user_id = %s AND hard_deadline IS NOT NULL ORDER BY hard_deadline",
                 (user_id,),
                 fetch=True
             )
             
+            # Calculate urgent jobs (within 3 days)
+            from datetime import datetime, timedelta
             today = datetime.now().date()
             urgent_threshold = today + timedelta(days=3)
             
@@ -256,6 +267,7 @@ def home():
             
             stats["urgent_jobs"] = len(urgent_job_ids)
             
+            # Get upcoming deadlines for dashboard display (top 5)
             upcoming_deadlines = []
             for deadline in deadlines[:5]:
                 try:
@@ -269,6 +281,7 @@ def home():
                 except:
                     continue
 
+            # Get recent jobs for dashboard display (top 5 most recent)
             recent_jobs = []
             sorted_jobs = sorted(all_jobs, key=lambda x: x.get("created_at", datetime.min), reverse=True)
             for job in sorted_jobs[:5]:
@@ -282,6 +295,7 @@ def home():
         except Exception as e:
             print("Error loading home page:", e)
 
+    # Provide current date for templates
     current_date = datetime.now().date()
     
     return render_template("landing.html", jobs=upcoming_deadlines, recent_jobs=recent_jobs, stats=stats, current_date=current_date)
@@ -306,6 +320,7 @@ def create_job():
         soft_deadline = datetime.strptime(soft_deadline, "%Y-%m-%d").date() if soft_deadline else None
         hard_deadline = datetime.strptime(hard_deadline, "%Y-%m-%d").date() if hard_deadline else None
 
+        # Process parts in order while maintaining sheets by thickness
         panel_width = float(request.form.get("panel_width", 96))
         panel_height = float(request.form.get("panel_height", 48))
         
@@ -314,6 +329,7 @@ def create_job():
         os.makedirs(output_dir, exist_ok=True)
 
         try:
+            # Create job
             execute_query(
                 "INSERT INTO jobs (id, client_name, user_id) VALUES (%s, %s, %s)",
                 (job_uuid, client_name, user_id)
@@ -323,20 +339,25 @@ def create_job():
             flash("Job creation failed. Try again.", "danger")
             return redirect(url_for("create_job"))
 
+        # Track active sheets for each thickness
         sheets_by_thickness = {}
         all_parts = []
         
+        # Process parts in the order they were entered
         for w, h, q, t in zip(widths, heights, quantities, thicknesses):
             if w and h and q and t:
+                # Add each part (respecting quantity) to the thickness-specific optimization
                 parts_for_thickness = [(float(w), float(h))] * int(q)
                 all_parts.extend([(float(w), float(h), t) for _ in range(int(q))])
                 
                 if t not in sheets_by_thickness:
                     sheets_by_thickness[t] = []
                 
-                current_parts = [p[:2] for p in all_parts if p[2] == t]
+                # Optimize this thickness incrementally with new parts
+                current_parts = [p[:2] for p in all_parts if p[2] == t]  # Get all parts for this thickness so far
                 sheets_by_thickness[t] = optimize_cuts(panel_width, panel_height, current_parts)
 
+        # Generate images and collect paths
         sheet_images = []
         for t, sheets in sheets_by_thickness.items():
             subfolder = os.path.join(output_dir, t)
@@ -348,6 +369,7 @@ def create_job():
                 rel = f"sheets/{job_uuid}/{t}/sheet_{i+1}.png"
                 sheet_images.append((rel, t))
 
+        # Insert all parts into database
         try:
             for w, h, t in all_parts:
                 execute_query(
@@ -368,19 +390,26 @@ def create_job():
                 print("Deadline insert error:", e)
                 flash("Failed to save deadlines.", "warning")
 
+        # Handle file uploads - save to local storage
         if 'job_files' in request.files:
             files = request.files.getlist('job_files')
+            upload_dir = f"static/uploads/{job_uuid}"
+            os.makedirs(upload_dir, exist_ok=True)
+            
             for f in files:
                 if f.filename:
-                    storage_path = LocalStorageManager.upload_file(f, job_uuid)
-                    if storage_path:
-                        try:
-                            execute_query(
-                                "INSERT INTO files (job_id, filename, storage_path, user_id) VALUES (%s, %s, %s, %s)",
-                                (job_uuid, secure_filename(f.filename), storage_path, user_id)
-                            )
-                        except Exception as e:
-                            print("Error saving file record:", e)
+                    filename = secure_filename(f.filename)
+                    file_path = os.path.join(upload_dir, filename)
+                    f.save(file_path)
+                    
+                    # Save file record to database
+                    try:
+                        execute_query(
+                            "INSERT INTO files (job_id, filename, storage_path, user_id) VALUES (%s, %s, %s, %s)",
+                            (job_uuid, filename, file_path, user_id)
+                        )
+                    except Exception as e:
+                        print("Error saving file record:", e)
 
         return render_template(
             "result.html",
@@ -391,6 +420,7 @@ def create_job():
 
     return render_template("index.html")
 
+# Continue with other routes...
 @app.route("/jobs")
 def jobs():
     if "user_id" not in session:
@@ -399,6 +429,7 @@ def jobs():
     user_id = session["user_id"]
 
     try:
+        # Jobs for this user
         job_data = execute_query(
             "SELECT id, client_name, final_price, status, created_at FROM jobs WHERE user_id = %s ORDER BY created_at DESC",
             (user_id,),
@@ -406,6 +437,7 @@ def jobs():
         )
         job_ids = [str(j["id"]) for j in job_data]
 
+        # Parts aggregation
         counts = {jid: {"3/4": 0, "1/2": 0, "1/4": 0, "Other": 0, "total": 0} for jid in job_ids}
         if job_ids:
             parts_data = execute_query(
@@ -421,6 +453,7 @@ def jobs():
                     counts[jid][key] += 1
                     counts[jid]["total"] += 1
 
+        # Attach counts to each job
         for j in job_data:
             j["part_counts"] = counts.get(str(j["id"]), {"3/4": 0, "1/2": 0, "1/4": 0, "Other": 0, "total": 0})
 
@@ -435,63 +468,6 @@ def jobs():
 @app.route("/help")
 def help():
     return render_template("help.html")
-
-@app.route("/dashboard")
-def dashboard():
-    if "user_id" not in session:
-        flash("Please log in to view your dashboard.", "warning")
-        return redirect(url_for("login"))
-    return render_template("dashboard.html")
-
-@app.route("/robots.txt")
-def robots_txt():
-    return app.send_static_file("robots.txt")
-
-@app.route("/stocks", endpoint="view_stocks")
-def view_stocks():
-    user_id = session.get("user_id")
-
-    if not user_id:
-        return redirect(url_for("login"))
-
-    try:
-        stocks = execute_query(
-            "SELECT * FROM stocks WHERE user_id = %s ORDER BY created_at DESC",
-            (user_id,),
-            fetch=True
-        )
-    except Exception as e:
-        print("Error loading stocks:", e)
-        stocks = []
-        flash("Failed to load stock inventory.", "danger")
-
-    return render_template("stocks.html", stocks=stocks)
-
-@app.route("/stocks/add", methods=["POST"])
-def add_stock():
-    user_id = session.get("user_id")
-
-    if not user_id:
-        return redirect(url_for("login"))
-
-    name = request.form.get("name")
-    category = request.form.get("category") or "Uncategorized"
-    quantity = int(request.form.get("quantity") or 0)
-    unit = request.form.get("unit")
-    code = request.form.get("code") or None
-    color = request.form.get("color") or None
-
-    try:
-        execute_query(
-            "INSERT INTO stocks (user_id, name, category, quantity, unit, code, color) VALUES (%s, %s, %s, %s, %s, %s, %s)",
-            (user_id, name, category, quantity, unit, code, color)
-        )
-        flash("Stock item added.")
-    except Exception as e:
-        print("Error adding stock:", e)
-        flash("Failed to add stock item.", "danger")
-
-    return redirect(url_for("view_stocks"))
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=10000)
