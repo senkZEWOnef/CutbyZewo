@@ -1,0 +1,1324 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Enhanced Cabinet Designer - Cut byZewo</title>
+    <style>
+        body { 
+            margin: 0; 
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; 
+            background: #f8f9fa; 
+            overflow: hidden;
+        }
+        
+        .designer-header { 
+            background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%); 
+            color: white; 
+            padding: 12px 20px; 
+            display: flex; 
+            justify-content: between; 
+            align-items: center; 
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        
+        .designer-header h1 { 
+            margin: 0; 
+            font-size: 1.5rem; 
+            font-weight: 600;
+        }
+        
+        .designer-header .job-info { 
+            font-size: 0.9rem; 
+            opacity: 0.9; 
+        }
+        
+        .toolbar { 
+            background: white; 
+            border-bottom: 1px solid #dee2e6; 
+            padding: 8px 15px; 
+            display: flex; 
+            gap: 10px; 
+            align-items: center; 
+            flex-wrap: wrap;
+            height: 50px;
+        }
+        
+        .main-container { 
+            display: flex; 
+            height: calc(100vh - 110px); 
+        }
+        
+        .canvas-area { 
+            flex: 1; 
+            display: flex; 
+            flex-direction: column; 
+            background: #f8f9fa;
+        }
+        
+        .view-tabs {
+            display: flex;
+            background: white;
+            border-bottom: 1px solid #dee2e6;
+        }
+        
+        .view-tab {
+            padding: 10px 20px;
+            cursor: pointer;
+            border-bottom: 3px solid transparent;
+            transition: all 0.2s;
+        }
+        
+        .view-tab.active {
+            border-bottom-color: #007bff;
+            background: #f8f9fa;
+            font-weight: 600;
+        }
+        
+        .view-tab:hover {
+            background: #f8f9fa;
+        }
+        
+        .canvas-container { 
+            flex: 1; 
+            position: relative; 
+            background: white;
+        }
+        
+        .canvas-2d, .canvas-3d { 
+            width: 100%; 
+            height: 100%; 
+            position: absolute; 
+            top: 0; 
+            left: 0;
+        }
+        
+        .canvas-2d {
+            background: 
+                repeating-linear-gradient(
+                    0deg,
+                    transparent,
+                    transparent 48px,
+                    #e9ecef 48px,
+                    #e9ecef 50px
+                ),
+                repeating-linear-gradient(
+                    90deg,
+                    transparent,
+                    transparent 48px,
+                    #e9ecef 48px,
+                    #e9ecef 50px
+                );
+        }
+        
+        .controls-panel { 
+            width: 350px; 
+            background: white; 
+            border-left: 1px solid #dee2e6; 
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+        }
+        
+        .control-section { 
+            padding: 15px; 
+            border-bottom: 1px solid #f1f3f4;
+        }
+        
+        .control-section h4 { 
+            margin: 0 0 12px 0; 
+            font-size: 0.95rem; 
+            font-weight: 600; 
+            color: #495057;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        
+        .btn { 
+            padding: 8px 16px; 
+            border: 1px solid #ddd; 
+            border-radius: 6px; 
+            cursor: pointer; 
+            font-size: 0.85rem; 
+            font-weight: 500;
+            background: white;
+            color: #495057;
+            transition: all 0.2s;
+            margin: 2px;
+        }
+        
+        .btn:hover { 
+            background: #f8f9fa; 
+            border-color: #007bff;
+        }
+        
+        .btn.active { 
+            background: #007bff; 
+            color: white; 
+            border-color: #007bff;
+        }
+        
+        .btn-primary { 
+            background: #007bff; 
+            color: white; 
+            border-color: #007bff;
+        }
+        
+        .btn-primary:hover { 
+            background: #0056b3; 
+        }
+        
+        .btn-success { 
+            background: #28a745; 
+            color: white; 
+            border-color: #28a745;
+        }
+        
+        .btn-danger { 
+            background: #dc3545; 
+            color: white; 
+            border-color: #dc3545;
+        }
+        
+        .cabinet-library { 
+            display: grid; 
+            grid-template-columns: 1fr 1fr; 
+            gap: 8px;
+        }
+        
+        .cabinet-type { 
+            padding: 12px; 
+            border: 2px solid #e9ecef; 
+            border-radius: 8px; 
+            cursor: pointer; 
+            text-align: center; 
+            background: white;
+            transition: all 0.2s;
+        }
+        
+        .cabinet-type:hover { 
+            border-color: #007bff; 
+            background: #f8f9fa;
+        }
+        
+        .cabinet-type.selected { 
+            border-color: #007bff; 
+            background: #e3f2fd;
+        }
+        
+        .cabinet-type .icon { 
+            font-size: 1.5rem; 
+            margin-bottom: 5px; 
+            display: block;
+        }
+        
+        .cabinet-type .name { 
+            font-weight: 600; 
+            font-size: 0.8rem; 
+            margin-bottom: 2px;
+        }
+        
+        .cabinet-type .size { 
+            font-size: 0.7rem; 
+            color: #6c757d;
+        }
+        
+        .form-group { 
+            margin-bottom: 15px;
+        }
+        
+        .form-group label { 
+            display: block; 
+            margin-bottom: 5px; 
+            font-weight: 500; 
+            font-size: 0.85rem; 
+            color: #495057;
+        }
+        
+        .form-control, .form-select { 
+            width: 100%; 
+            padding: 8px 12px; 
+            border: 1px solid #ced4da; 
+            border-radius: 4px; 
+            font-size: 0.85rem;
+            background: white;
+        }
+        
+        .form-control:focus, .form-select:focus { 
+            outline: none; 
+            border-color: #007bff; 
+            box-shadow: 0 0 0 2px rgba(0,123,255,0.25);
+        }
+        
+        .form-range { 
+            width: 100%; 
+            margin: 8px 0;
+        }
+        
+        .measurement-display { 
+            background: #f8f9fa; 
+            padding: 8px; 
+            border-radius: 4px; 
+            font-family: monospace; 
+            font-size: 0.8rem; 
+            text-align: center; 
+            margin-top: 5px;
+        }
+        
+        .properties-panel { 
+            background: #f8f9fa; 
+            padding: 12px; 
+            border-radius: 6px; 
+            margin-top: 10px;
+        }
+        
+        .properties-panel h5 { 
+            margin: 0 0 10px 0; 
+            font-size: 0.9rem; 
+            color: #495057;
+        }
+        
+        .property-row { 
+            display: flex; 
+            justify-content: space-between; 
+            margin-bottom: 8px; 
+            font-size: 0.8rem;
+        }
+        
+        .status-bar {
+            background: #e9ecef;
+            padding: 8px 15px;
+            font-size: 0.8rem;
+            color: #6c757d;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        
+        .coordinates {
+            font-family: monospace;
+        }
+        
+        .zoom-controls {
+            display: flex;
+            gap: 5px;
+            align-items: center;
+        }
+        
+        .mode-indicator {
+            background: #007bff;
+            color: white;
+            padding: 4px 8px;
+            border-radius: 12px;
+            font-size: 0.7rem;
+            font-weight: 600;
+        }
+        
+        /* Custom scrollbar */
+        .controls-panel::-webkit-scrollbar {
+            width: 6px;
+        }
+        
+        .controls-panel::-webkit-scrollbar-track {
+            background: #f1f1f1;
+        }
+        
+        .controls-panel::-webkit-scrollbar-thumb {
+            background: #c1c1c1;
+            border-radius: 3px;
+        }
+        
+        .controls-panel::-webkit-scrollbar-thumb:hover {
+            background: #a8a8a8;
+        }
+    </style>
+</head>
+<body>
+    <div class="designer-header">
+        <div>
+            <h1>🏠 Enhanced Cabinet Designer</h1>
+            <div class="job-info">
+                {% if job %}
+                    {{ job.client_name }} - Created {{ job.created_at.strftime('%m/%d/%Y') if job.created_at else 'Unknown' }}
+                {% else %}
+                    New Design Project
+                {% endif %}
+            </div>
+        </div>
+    </div>
+    
+    <div class="toolbar">
+        <button class="btn" id="selectMode" onclick="setMode('select')">📍 Select</button>
+        <button class="btn" id="cabinetMode" onclick="setMode('cabinet')">🗄️ Add Cabinet</button>
+        <button class="btn" id="measureMode" onclick="setMode('measure')">📏 Measure</button>
+        <button class="btn" id="dimensionMode" onclick="setMode('dimension')">📐 Dimension</button>
+        
+        <div style="border-left: 1px solid #ddd; height: 30px; margin: 0 10px;"></div>
+        
+        <button class="btn btn-success" onclick="saveDesign()">💾 Save Design</button>
+        <button class="btn" onclick="exportDesign()">📤 Export</button>
+        <button class="btn" onclick="generateCutList()">📋 Cut List</button>
+        
+        <div style="margin-left: auto; display: flex; align-items: center; gap: 10px;">
+            <label style="font-size: 0.8rem; color: #6c757d;">
+                <input type="checkbox" id="snapToGrid"> Snap to Grid
+            </label>
+            <label style="font-size: 0.8rem; color: #6c757d;">
+                <input type="checkbox" id="showDimensions" checked> Show Dimensions
+            </label>
+        </div>
+    </div>
+    
+    <div class="main-container">
+        <div class="canvas-area">
+            <div class="view-tabs">
+                <div class="view-tab active" onclick="switchView('2d')">2D Floor Plan</div>
+                <div class="view-tab" onclick="switchView('3d')">3D Perspective</div>
+                <div class="view-tab" onclick="switchView('elevation')">Front Elevation</div>
+            </div>
+            
+            <div class="canvas-container">
+                <canvas class="canvas-2d" id="canvas2d"></canvas>
+                <div class="canvas-3d" id="canvas3d" style="display: none;"></div>
+            </div>
+            
+            <div class="status-bar">
+                <div>
+                    <span class="mode-indicator" id="modeIndicator">Select Mode</span>
+                    <span class="coordinates" id="coordinates">X: 0, Y: 0</span>
+                </div>
+                <div class="zoom-controls">
+                    <button class="btn" onclick="zoomOut()">−</button>
+                    <span id="zoomLevel">100%</span>
+                    <button class="btn" onclick="zoomIn()">+</button>
+                    <button class="btn" onclick="zoomFit()">Fit</button>
+                </div>
+            </div>
+        </div>
+        
+        <div class="controls-panel">
+            <!-- Room Setup -->
+            <div class="control-section">
+                <h4>🏠 Room Setup</h4>
+                <div class="form-group">
+                    <label>Room Width (inches)</label>
+                    <input type="range" class="form-range" id="roomWidth" min="96" max="240" value="144" oninput="updateRoom()">
+                    <div class="measurement-display" id="roomWidthDisplay">144"</div>
+                </div>
+                <div class="form-group">
+                    <label>Room Depth (inches)</label>
+                    <input type="range" class="form-range" id="roomDepth" min="96" max="240" value="120" oninput="updateRoom()">
+                    <div class="measurement-display" id="roomDepthDisplay">120"</div>
+                </div>
+                <div class="form-group">
+                    <label>Ceiling Height (inches)</label>
+                    <input type="range" class="form-range" id="ceilingHeight" min="96" max="120" value="96" oninput="updateRoom()">
+                    <div class="measurement-display" id="ceilingHeightDisplay">96"</div>
+                </div>
+            </div>
+            
+            <!-- Cabinet Library -->
+            <div class="control-section">
+                <h4>🗄️ Cabinet Library</h4>
+                <div class="cabinet-library">
+                    <div class="cabinet-type" onclick="selectCabinet('base', 18, 34.5, 24)">
+                        <span class="icon">📦</span>
+                        <div class="name">Base 18"</div>
+                        <div class="size">18"W × 34.5"H</div>
+                    </div>
+                    <div class="cabinet-type" onclick="selectCabinet('base', 24, 34.5, 24)">
+                        <span class="icon">📦</span>
+                        <div class="name">Base 24"</div>
+                        <div class="size">24"W × 34.5"H</div>
+                    </div>
+                    <div class="cabinet-type" onclick="selectCabinet('base', 30, 34.5, 24)">
+                        <span class="icon">📦</span>
+                        <div class="name">Base 30"</div>
+                        <div class="size">30"W × 34.5"H</div>
+                    </div>
+                    <div class="cabinet-type" onclick="selectCabinet('base', 36, 34.5, 24)">
+                        <span class="icon">📦</span>
+                        <div class="name">Base 36"</div>
+                        <div class="size">36"W × 34.5"H</div>
+                    </div>
+                    <div class="cabinet-type" onclick="selectCabinet('wall', 24, 30, 12)">
+                        <span class="icon">🔲</span>
+                        <div class="name">Wall 24"</div>
+                        <div class="size">24"W × 30"H</div>
+                    </div>
+                    <div class="cabinet-type" onclick="selectCabinet('wall', 30, 30, 12)">
+                        <span class="icon">🔲</span>
+                        <div class="name">Wall 30"</div>
+                        <div class="size">30"W × 30"H</div>
+                    </div>
+                    <div class="cabinet-type" onclick="selectCabinet('wall', 36, 30, 12)">
+                        <span class="icon">🔲</span>
+                        <div class="name">Wall 36"</div>
+                        <div class="size">36"W × 30"H</div>
+                    </div>
+                    <div class="cabinet-type" onclick="selectCabinet('tall', 24, 84, 24)">
+                        <span class="icon">🏢</span>
+                        <div class="name">Tall 24"</div>
+                        <div class="size">24"W × 84"H</div>
+                    </div>
+                    <div class="cabinet-type" onclick="selectCabinet('corner_base', 36, 34.5, 24)">
+                        <span class="icon">📐</span>
+                        <div class="name">Corner Base</div>
+                        <div class="size">36"W × 34.5"H</div>
+                    </div>
+                    <div class="cabinet-type" onclick="selectCabinet('sink_base', 30, 34.5, 24)">
+                        <span class="icon">🚿</span>
+                        <div class="name">Sink Base</div>
+                        <div class="size">30"W × 34.5"H</div>
+                    </div>
+                    <div class="cabinet-type" onclick="selectCabinet('lazy_susan', 33, 34.5, 24)">
+                        <span class="icon">🔄</span>
+                        <div class="name">Lazy Susan</div>
+                        <div class="size">33"W × 34.5"H</div>
+                    </div>
+                    <div class="cabinet-type" onclick="selectCabinet('drawer_base', 24, 34.5, 24)">
+                        <span class="icon">📊</span>
+                        <div class="name">Drawer Base</div>
+                        <div class="size">24"W × 34.5"H</div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Selected Cabinet Properties -->
+            <div class="control-section" id="cabinetProperties" style="display: none;">
+                <h4>🎯 Selected Cabinet</h4>
+                <div class="properties-panel">
+                    <h5 id="selectedCabinetTitle">Base Cabinet 24"</h5>
+                    <div class="form-group">
+                        <label>Width (inches)</label>
+                        <input type="number" class="form-control" id="cabinetWidth" min="6" max="60" step="0.5" oninput="updateSelectedCabinet()">
+                    </div>
+                    <div class="form-group">
+                        <label>Height (inches)</label>
+                        <input type="number" class="form-control" id="cabinetHeight" min="12" max="96" step="0.5" oninput="updateSelectedCabinet()">
+                    </div>
+                    <div class="form-group">
+                        <label>Depth (inches)</label>
+                        <input type="number" class="form-control" id="cabinetDepth" min="6" max="30" step="0.5" oninput="updateSelectedCabinet()">
+                    </div>
+                    <div class="form-group">
+                        <label>Position X (inches)</label>
+                        <input type="number" class="form-control" id="cabinetX" step="0.5" oninput="updateSelectedCabinet()">
+                    </div>
+                    <div class="form-group">
+                        <label>Position Y (inches)</label>
+                        <input type="number" class="form-control" id="cabinetY" step="0.5" oninput="updateSelectedCabinet()">
+                    </div>
+                    <button class="btn btn-danger" onclick="deleteSelectedCabinet()">🗑️ Delete</button>
+                    <button class="btn" onclick="duplicateCabinet()">📋 Duplicate</button>
+                </div>
+            </div>
+            
+            <!-- Materials & Finish -->
+            <div class="control-section">
+                <h4>🎨 Materials & Finish</h4>
+                <div class="form-group">
+                    <label>Cabinet Material</label>
+                    <select class="form-select" id="cabinetMaterial" onchange="updateMaterials()">
+                        <option value="plywood">Plywood</option>
+                        <option value="mdf">MDF</option>
+                        <option value="particleboard">Particleboard</option>
+                        <option value="solid_wood">Solid Wood</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>Wood Species</label>
+                    <select class="form-select" id="woodSpecies" onchange="updateMaterials()">
+                        <option value="oak">Oak</option>
+                        <option value="maple">Maple</option>
+                        <option value="cherry">Cherry</option>
+                        <option value="birch">Birch</option>
+                        <option value="pine">Pine</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>Door Style</label>
+                    <select class="form-select" id="doorStyle" onchange="updateMaterials()">
+                        <option value="shaker">Shaker</option>
+                        <option value="raised_panel">Raised Panel</option>
+                        <option value="flat_panel">Flat Panel</option>
+                        <option value="glass">Glass Front</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>Hardware</label>
+                    <select class="form-select" id="hardware" onchange="updateMaterials()">
+                        <option value="brushed_nickel">Brushed Nickel</option>
+                        <option value="oil_rubbed_bronze">Oil Rubbed Bronze</option>
+                        <option value="black">Matte Black</option>
+                        <option value="brass">Brass</option>
+                        <option value="chrome">Chrome</option>
+                    </select>
+                </div>
+            </div>
+            
+            <!-- Project Summary -->
+            <div class="control-section">
+                <h4>📊 Project Summary</h4>
+                <div class="properties-panel">
+                    <div class="property-row">
+                        <span>Total Cabinets:</span>
+                        <span id="totalCabinets">0</span>
+                    </div>
+                    <div class="property-row">
+                        <span>Linear Feet:</span>
+                        <span id="linearFeet">0'</span>
+                    </div>
+                    <div class="property-row">
+                        <span>Total Cost:</span>
+                        <span id="totalCost">$0</span>
+                    </div>
+                    <div class="property-row">
+                        <span>Sheet Usage:</span>
+                        <span id="sheetUsage">0 sheets</span>
+                    </div>
+                </div>
+            </div>
+            
+            {% if job and parts %}
+            <div class="control-section">
+                <h4>📋 Job Integration</h4>
+                <button class="btn btn-primary" onclick="buildFromJobParts()">📐 Build from Job Parts</button>
+                <div style="font-size: 0.8rem; margin-top: 8px; color: #6c757d;">
+                    Will analyze your {{ parts|length }} parts and create cabinet layout
+                </div>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/build/three.min.js"></script>
+    <script>
+        // Global variables
+        let canvas2d, ctx2d, canvas3d;
+        let currentMode = 'select';
+        let currentView = '2d';
+        let selectedCabinet = null;
+        let cabinets = [];
+        let measurements = [];
+        let dimensions = [];
+        
+        // Room settings
+        let roomWidth = 144;
+        let roomDepth = 120;
+        let ceilingHeight = 96;
+        
+        // Canvas settings
+        let scale = 2; // pixels per inch
+        let offsetX = 0;
+        let offsetY = 0;
+        let zoom = 1;
+        
+        // Mouse interaction
+        let isDragging = false;
+        let dragOffset = { x: 0, y: 0 };
+        let mousePos = { x: 0, y: 0 };
+        
+        // Job data
+        const jobParts = {{ parts | tojson if parts else '[]' }};
+        
+        // Cabinet templates
+        const cabinetTemplates = {
+            base: { type: 'base', width: 24, height: 34.5, depth: 24, color: '#8B4513' },
+            wall: { type: 'wall', width: 24, height: 30, depth: 12, color: '#A0522D' },
+            tall: { type: 'tall', width: 24, height: 84, depth: 24, color: '#654321' },
+            corner_base: { type: 'corner_base', width: 36, height: 34.5, depth: 24, color: '#8B4513' },
+            sink_base: { type: 'sink_base', width: 30, height: 34.5, depth: 24, color: '#8B4513' },
+            lazy_susan: { type: 'lazy_susan', width: 33, height: 34.5, depth: 24, color: '#8B4513' },
+            drawer_base: { type: 'drawer_base', width: 24, height: 34.5, depth: 24, color: '#8B4513' }
+        };
+        
+        let selectedCabinetType = null;
+        
+        // Initialize the designer
+        function init() {
+            console.log('🎨 Initializing Enhanced Cabinet Designer...');
+            
+            // Setup 2D canvas
+            setup2DCanvas();
+            
+            // Setup 3D scene
+            setup3DCanvas();
+            
+            // Initial render
+            render2D();
+            
+            // Update room display
+            updateRoomDisplays();
+            
+            // Set initial mode
+            setMode('select');
+            
+            console.log('✅ Designer ready!');
+        }
+        
+        function setup2DCanvas() {
+            canvas2d = document.getElementById('canvas2d');
+            ctx2d = canvas2d.getContext('2d');
+            
+            // Setup canvas size
+            resizeCanvas();
+            
+            // Mouse events
+            canvas2d.addEventListener('mousedown', onMouseDown);
+            canvas2d.addEventListener('mousemove', onMouseMove);
+            canvas2d.addEventListener('mouseup', onMouseUp);
+            canvas2d.addEventListener('wheel', onWheel);
+            
+            // Prevent context menu
+            canvas2d.addEventListener('contextmenu', e => e.preventDefault());
+        }
+        
+        function setup3DCanvas() {
+            // Will implement 3D scene setup
+            console.log('3D canvas setup placeholder');
+        }
+        
+        function resizeCanvas() {
+            const container = canvas2d.parentElement;
+            canvas2d.width = container.clientWidth;
+            canvas2d.height = container.clientHeight;
+            
+            // Center the room
+            offsetX = canvas2d.width / 2 - (roomWidth * scale) / 2;
+            offsetY = canvas2d.height / 2 - (roomDepth * scale) / 2;
+        }
+        
+        function render2D() {
+            // Clear canvas
+            ctx2d.clearRect(0, 0, canvas2d.width, canvas2d.height);
+            
+            // Draw grid
+            drawGrid();
+            
+            // Draw room outline
+            drawRoom();
+            
+            // Draw cabinets
+            cabinets.forEach(cabinet => drawCabinet(cabinet));
+            
+            // Draw measurements
+            if (document.getElementById('showDimensions').checked) {
+                drawDimensions();
+            }
+            
+            // Draw selection highlight
+            if (selectedCabinet) {
+                highlightCabinet(selectedCabinet);
+            }
+        }
+        
+        function drawGrid() {
+            const gridSize = 12 * scale * zoom; // 12 inch grid
+            
+            ctx2d.strokeStyle = '#e9ecef';
+            ctx2d.lineWidth = 1;
+            ctx2d.setLineDash([]);
+            
+            // Vertical lines
+            for (let x = offsetX % gridSize; x < canvas2d.width; x += gridSize) {
+                ctx2d.beginPath();
+                ctx2d.moveTo(x, 0);
+                ctx2d.lineTo(x, canvas2d.height);
+                ctx2d.stroke();
+            }
+            
+            // Horizontal lines
+            for (let y = offsetY % gridSize; y < canvas2d.height; y += gridSize) {
+                ctx2d.beginPath();
+                ctx2d.moveTo(0, y);
+                ctx2d.lineTo(canvas2d.width, y);
+                ctx2d.stroke();
+            }
+        }
+        
+        function drawRoom() {
+            const x = offsetX;
+            const y = offsetY;
+            const w = roomWidth * scale * zoom;
+            const h = roomDepth * scale * zoom;
+            
+            // Room outline
+            ctx2d.strokeStyle = '#495057';
+            ctx2d.lineWidth = 3;
+            ctx2d.setLineDash([]);
+            ctx2d.strokeRect(x, y, w, h);
+            
+            // Room fill
+            ctx2d.fillStyle = '#f8f9fa';
+            ctx2d.fillRect(x, y, w, h);
+            
+            // Room label
+            ctx2d.fillStyle = '#6c757d';
+            ctx2d.font = '14px sans-serif';
+            ctx2d.textAlign = 'center';
+            ctx2d.fillText(`${roomWidth}" × ${roomDepth}"`, x + w/2, y - 10);
+        }
+        
+        function drawCabinet(cabinet) {
+            const x = offsetX + cabinet.x * scale * zoom;
+            const y = offsetY + cabinet.y * scale * zoom;
+            const w = cabinet.width * scale * zoom;
+            const h = cabinet.depth * scale * zoom;
+            
+            // Cabinet body
+            ctx2d.fillStyle = cabinet.color;
+            ctx2d.fillRect(x, y, w, h);
+            
+            // Cabinet outline
+            ctx2d.strokeStyle = '#343a40';
+            ctx2d.lineWidth = 2;
+            ctx2d.setLineDash([]);
+            ctx2d.strokeRect(x, y, w, h);
+            
+            // Cabinet label
+            ctx2d.fillStyle = 'white';
+            ctx2d.font = '12px sans-serif';
+            ctx2d.textAlign = 'center';
+            ctx2d.fillText(
+                `${cabinet.type.replace('_', ' ').toUpperCase()}`,
+                x + w/2, 
+                y + h/2 - 5
+            );
+            ctx2d.fillText(
+                `${cabinet.width}" × ${cabinet.height}"`,
+                x + w/2, 
+                y + h/2 + 10
+            );
+        }
+        
+        function highlightCabinet(cabinet) {
+            const x = offsetX + cabinet.x * scale * zoom;
+            const y = offsetY + cabinet.y * scale * zoom;
+            const w = cabinet.width * scale * zoom;
+            const h = cabinet.depth * scale * zoom;
+            
+            // Selection highlight
+            ctx2d.strokeStyle = '#007bff';
+            ctx2d.lineWidth = 3;
+            ctx2d.setLineDash([5, 5]);
+            ctx2d.strokeRect(x - 2, y - 2, w + 4, h + 4);
+            
+            // Selection handles
+            const handleSize = 8;
+            ctx2d.fillStyle = '#007bff';
+            ctx2d.setLineDash([]);
+            
+            // Corner handles
+            ctx2d.fillRect(x - handleSize/2, y - handleSize/2, handleSize, handleSize);
+            ctx2d.fillRect(x + w - handleSize/2, y - handleSize/2, handleSize, handleSize);
+            ctx2d.fillRect(x - handleSize/2, y + h - handleSize/2, handleSize, handleSize);
+            ctx2d.fillRect(x + w - handleSize/2, y + h - handleSize/2, handleSize, handleSize);
+        }
+        
+        function drawDimensions() {
+            // Draw dimensions for selected cabinet
+            if (selectedCabinet) {
+                drawCabinetDimensions(selectedCabinet);
+            }
+            
+            // Draw room dimensions
+            drawRoomDimensions();
+        }
+        
+        function drawCabinetDimensions(cabinet) {
+            const x = offsetX + cabinet.x * scale * zoom;
+            const y = offsetY + cabinet.y * scale * zoom;
+            const w = cabinet.width * scale * zoom;
+            const h = cabinet.depth * scale * zoom;
+            
+            ctx2d.strokeStyle = '#007bff';
+            ctx2d.fillStyle = '#007bff';
+            ctx2d.lineWidth = 1;
+            ctx2d.font = '11px sans-serif';
+            ctx2d.textAlign = 'center';
+            
+            // Width dimension
+            ctx2d.beginPath();
+            ctx2d.moveTo(x, y - 20);
+            ctx2d.lineTo(x + w, y - 20);
+            ctx2d.stroke();
+            
+            // Width arrows
+            ctx2d.beginPath();
+            ctx2d.moveTo(x, y - 25);
+            ctx2d.lineTo(x, y - 15);
+            ctx2d.moveTo(x + w, y - 25);
+            ctx2d.lineTo(x + w, y - 15);
+            ctx2d.stroke();
+            
+            // Width text
+            ctx2d.fillText(`${cabinet.width}"`, x + w/2, y - 25);
+            
+            // Height dimension
+            ctx2d.beginPath();
+            ctx2d.moveTo(x - 20, y);
+            ctx2d.lineTo(x - 20, y + h);
+            ctx2d.stroke();
+            
+            // Height arrows
+            ctx2d.beginPath();
+            ctx2d.moveTo(x - 25, y);
+            ctx2d.lineTo(x - 15, y);
+            ctx2d.moveTo(x - 25, y + h);
+            ctx2d.lineTo(x - 15, y + h);
+            ctx2d.stroke();
+            
+            // Height text (rotated)
+            ctx2d.save();
+            ctx2d.translate(x - 30, y + h/2);
+            ctx2d.rotate(-Math.PI/2);
+            ctx2d.fillText(`${cabinet.depth}"`, 0, 0);
+            ctx2d.restore();
+        }
+        
+        function drawRoomDimensions() {
+            const x = offsetX;
+            const y = offsetY;
+            const w = roomWidth * scale * zoom;
+            const h = roomDepth * scale * zoom;
+            
+            ctx2d.strokeStyle = '#6c757d';
+            ctx2d.fillStyle = '#6c757d';
+            ctx2d.lineWidth = 1;
+            ctx2d.font = '12px sans-serif';
+            ctx2d.textAlign = 'center';
+            
+            // Room width
+            ctx2d.fillText(`${roomWidth}"`, x + w/2, y - 30);
+            
+            // Room depth
+            ctx2d.save();
+            ctx2d.translate(x - 40, y + h/2);
+            ctx2d.rotate(-Math.PI/2);
+            ctx2d.fillText(`${roomDepth}"`, 0, 0);
+            ctx2d.restore();
+        }
+        
+        // Mouse event handlers
+        function onMouseDown(e) {
+            const rect = canvas2d.getBoundingClientRect();
+            const x = e.clientX - rect.left;
+            const y = e.clientY - rect.top;
+            
+            mousePos = { x, y };
+            
+            if (currentMode === 'select') {
+                const cabinet = getCabinetAtPosition(x, y);
+                if (cabinet) {
+                    selectCabinet(cabinet);
+                    isDragging = true;
+                    dragOffset = {
+                        x: x - (offsetX + cabinet.x * scale * zoom),
+                        y: y - (offsetY + cabinet.y * scale * zoom)
+                    };
+                } else {
+                    selectCabinet(null);
+                }
+            } else if (currentMode === 'cabinet' && selectedCabinetType) {
+                placeCabinet(x, y);
+            }
+        }
+        
+        function onMouseMove(e) {
+            const rect = canvas2d.getBoundingClientRect();
+            const x = e.clientX - rect.left;
+            const y = e.clientY - rect.top;
+            
+            mousePos = { x, y };
+            
+            // Update coordinates display
+            const worldX = Math.round((x - offsetX) / (scale * zoom));
+            const worldY = Math.round((y - offsetY) / (scale * zoom));
+            document.getElementById('coordinates').textContent = `X: ${worldX}, Y: ${worldY}`;
+            
+            if (isDragging && selectedCabinet) {
+                // Move selected cabinet
+                selectedCabinet.x = Math.round((x - offsetX - dragOffset.x) / (scale * zoom));
+                selectedCabinet.y = Math.round((y - offsetY - dragOffset.y) / (scale * zoom));
+                
+                // Snap to grid if enabled
+                if (document.getElementById('snapToGrid').checked) {
+                    selectedCabinet.x = Math.round(selectedCabinet.x / 6) * 6;
+                    selectedCabinet.y = Math.round(selectedCabinet.y / 6) * 6;
+                }
+                
+                updateSelectedCabinetProperties();
+                render2D();
+            }
+        }
+        
+        function onMouseUp(e) {
+            isDragging = false;
+        }
+        
+        function onWheel(e) {
+            e.preventDefault();
+            
+            const delta = e.deltaY > 0 ? 0.9 : 1.1;
+            zoom *= delta;
+            zoom = Math.max(0.1, Math.min(3, zoom));
+            
+            document.getElementById('zoomLevel').textContent = `${Math.round(zoom * 100)}%`;
+            render2D();
+        }
+        
+        function getCabinetAtPosition(x, y) {
+            for (let i = cabinets.length - 1; i >= 0; i--) {
+                const cabinet = cabinets[i];
+                const cx = offsetX + cabinet.x * scale * zoom;
+                const cy = offsetY + cabinet.y * scale * zoom;
+                const cw = cabinet.width * scale * zoom;
+                const ch = cabinet.depth * scale * zoom;
+                
+                if (x >= cx && x <= cx + cw && y >= cy && y <= cy + ch) {
+                    return cabinet;
+                }
+            }
+            return null;
+        }
+        
+        function placeCabinet(x, y) {
+            const worldX = Math.round((x - offsetX) / (scale * zoom));
+            const worldY = Math.round((y - offsetY) / (scale * zoom));
+            
+            const cabinet = {
+                id: Date.now(),
+                type: selectedCabinetType.type,
+                width: selectedCabinetType.width,
+                height: selectedCabinetType.height,
+                depth: selectedCabinetType.depth,
+                x: worldX,
+                y: worldY,
+                color: selectedCabinetType.color
+            };
+            
+            // Snap to grid if enabled
+            if (document.getElementById('snapToGrid').checked) {
+                cabinet.x = Math.round(cabinet.x / 6) * 6;
+                cabinet.y = Math.round(cabinet.y / 6) * 6;
+            }
+            
+            cabinets.push(cabinet);
+            selectCabinet(cabinet);
+            updateProjectSummary();
+            render2D();
+            
+            console.log('Cabinet placed:', cabinet);
+        }
+        
+        // Mode functions
+        function setMode(mode) {
+            currentMode = mode;
+            
+            // Update toolbar
+            document.querySelectorAll('.toolbar .btn').forEach(btn => btn.classList.remove('active'));
+            document.getElementById(mode + 'Mode').classList.add('active');
+            
+            // Update mode indicator
+            const modeNames = {
+                select: 'Select Mode',
+                cabinet: 'Add Cabinet',
+                measure: 'Measure Mode',
+                dimension: 'Dimension Mode'
+            };
+            document.getElementById('modeIndicator').textContent = modeNames[mode] || mode;
+            
+            // Clear cabinet type selection if not in cabinet mode
+            if (mode !== 'cabinet') {
+                selectedCabinetType = null;
+                document.querySelectorAll('.cabinet-type').forEach(btn => btn.classList.remove('selected'));
+            }
+        }
+        
+        function selectCabinetType(type, width, height, depth) {
+            selectedCabinetType = cabinetTemplates[type] || { type, width, height, depth, color: '#8B4513' };
+            setMode('cabinet');
+            
+            // Update UI
+            document.querySelectorAll('.cabinet-type').forEach(btn => btn.classList.remove('selected'));
+            event.target.closest('.cabinet-type').classList.add('selected');
+        }
+        
+        function selectCabinet(cabinet) {
+            selectedCabinet = cabinet;
+            
+            if (cabinet) {
+                document.getElementById('cabinetProperties').style.display = 'block';
+                updateSelectedCabinetProperties();
+            } else {
+                document.getElementById('cabinetProperties').style.display = 'none';
+            }
+            
+            render2D();
+        }
+        
+        function updateSelectedCabinetProperties() {
+            if (!selectedCabinet) return;
+            
+            document.getElementById('selectedCabinetTitle').textContent = 
+                selectedCabinet.type.replace('_', ' ').toUpperCase() + ' Cabinet';
+            document.getElementById('cabinetWidth').value = selectedCabinet.width;
+            document.getElementById('cabinetHeight').value = selectedCabinet.height;
+            document.getElementById('cabinetDepth').value = selectedCabinet.depth;
+            document.getElementById('cabinetX').value = selectedCabinet.x;
+            document.getElementById('cabinetY').value = selectedCabinet.y;
+        }
+        
+        function updateSelectedCabinet() {
+            if (!selectedCabinet) return;
+            
+            selectedCabinet.width = parseFloat(document.getElementById('cabinetWidth').value);
+            selectedCabinet.height = parseFloat(document.getElementById('cabinetHeight').value);
+            selectedCabinet.depth = parseFloat(document.getElementById('cabinetDepth').value);
+            selectedCabinet.x = parseFloat(document.getElementById('cabinetX').value);
+            selectedCabinet.y = parseFloat(document.getElementById('cabinetY').value);
+            
+            updateProjectSummary();
+            render2D();
+        }
+        
+        // View switching
+        function switchView(view) {
+            currentView = view;
+            
+            // Update tabs
+            document.querySelectorAll('.view-tab').forEach(tab => tab.classList.remove('active'));
+            event.target.classList.add('active');
+            
+            // Show/hide canvases
+            if (view === '2d' || view === 'elevation') {
+                document.getElementById('canvas2d').style.display = 'block';
+                document.getElementById('canvas3d').style.display = 'none';
+                render2D();
+            } else if (view === '3d') {
+                document.getElementById('canvas2d').style.display = 'none';
+                document.getElementById('canvas3d').style.display = 'block';
+                // Would render 3D scene here
+            }
+        }
+        
+        // Room functions
+        function updateRoom() {
+            roomWidth = parseInt(document.getElementById('roomWidth').value);
+            roomDepth = parseInt(document.getElementById('roomDepth').value);
+            ceilingHeight = parseInt(document.getElementById('ceilingHeight').value);
+            
+            updateRoomDisplays();
+            render2D();
+        }
+        
+        function updateRoomDisplays() {
+            document.getElementById('roomWidthDisplay').textContent = roomWidth + '"';
+            document.getElementById('roomDepthDisplay').textContent = roomDepth + '"';
+            document.getElementById('ceilingHeightDisplay').textContent = ceilingHeight + '"';
+        }
+        
+        // Cabinet functions
+        function selectCabinet(type, width, height, depth) {
+            selectCabinetType(type, width, height, depth);
+        }
+        
+        function deleteSelectedCabinet() {
+            if (!selectedCabinet) return;
+            
+            const index = cabinets.findIndex(c => c.id === selectedCabinet.id);
+            if (index > -1) {
+                cabinets.splice(index, 1);
+                selectCabinet(null);
+                updateProjectSummary();
+                render2D();
+            }
+        }
+        
+        function duplicateCabinet() {
+            if (!selectedCabinet) return;
+            
+            const newCabinet = {
+                ...selectedCabinet,
+                id: Date.now(),
+                x: selectedCabinet.x + 36,
+                y: selectedCabinet.y
+            };
+            
+            cabinets.push(newCabinet);
+            selectCabinet(newCabinet);
+            updateProjectSummary();
+            render2D();
+        }
+        
+        // Project functions
+        function updateProjectSummary() {
+            const totalCabinets = cabinets.length;
+            const linearFeet = cabinets.reduce((sum, cabinet) => sum + cabinet.width, 0) / 12;
+            const totalCost = cabinets.reduce((sum, cabinet) => {
+                const sqft = (cabinet.width * cabinet.height) / 144;
+                return sum + (sqft * 150); // $150 per sq ft estimate
+            }, 0);
+            
+            document.getElementById('totalCabinets').textContent = totalCabinets;
+            document.getElementById('linearFeet').textContent = linearFeet.toFixed(1) + "'";
+            document.getElementById('totalCost').textContent = '$' + Math.round(totalCost).toLocaleString();
+            document.getElementById('sheetUsage').textContent = Math.ceil(totalCabinets * 2.5) + ' sheets';
+        }
+        
+        // Zoom functions
+        function zoomIn() {
+            zoom *= 1.2;
+            zoom = Math.min(3, zoom);
+            document.getElementById('zoomLevel').textContent = `${Math.round(zoom * 100)}%`;
+            render2D();
+        }
+        
+        function zoomOut() {
+            zoom *= 0.8;
+            zoom = Math.max(0.1, zoom);
+            document.getElementById('zoomLevel').textContent = `${Math.round(zoom * 100)}%`;
+            render2D();
+        }
+        
+        function zoomFit() {
+            const margin = 50;
+            const availableWidth = canvas2d.width - 2 * margin;
+            const availableHeight = canvas2d.height - 2 * margin;
+            
+            const scaleX = availableWidth / (roomWidth * scale);
+            const scaleY = availableHeight / (roomDepth * scale);
+            
+            zoom = Math.min(scaleX, scaleY, 1);
+            document.getElementById('zoomLevel').textContent = `${Math.round(zoom * 100)}%`;
+            
+            // Center the room
+            offsetX = (canvas2d.width - roomWidth * scale * zoom) / 2;
+            offsetY = (canvas2d.height - roomDepth * scale * zoom) / 2;
+            
+            render2D();
+        }
+        
+        // Export functions
+        function saveDesign() {
+            const design = {
+                room: { width: roomWidth, depth: roomDepth, height: ceilingHeight },
+                cabinets: cabinets,
+                materials: {
+                    cabinet: document.getElementById('cabinetMaterial').value,
+                    wood: document.getElementById('woodSpecies').value,
+                    door: document.getElementById('doorStyle').value,
+                    hardware: document.getElementById('hardware').value
+                },
+                created: new Date().toISOString()
+            };
+            
+            console.log('💾 Saving design:', design);
+            alert('Design saved! (In production, this would save to your database)');
+        }
+        
+        function exportDesign() {
+            // Export as image
+            const link = document.createElement('a');
+            link.download = 'cabinet-design.png';
+            link.href = canvas2d.toDataURL();
+            link.click();
+        }
+        
+        function generateCutList() {
+            if (cabinets.length === 0) {
+                alert('No cabinets to generate cut list from.');
+                return;
+            }
+            
+            // Redirect to the cut planning page with cabinet data
+            const cabinetData = cabinets.map(cabinet => ({
+                width: cabinet.width,
+                height: cabinet.height,
+                thickness: '0.75' // Default thickness
+            }));
+            
+            // In a real implementation, this would POST the data or navigate with parameters
+            console.log('📋 Generating cut list for:', cabinetData);
+            alert(`Cut list would be generated for ${cabinets.length} cabinets. This would integrate with your existing cut planning feature.`);
+        }
+        
+        function buildFromJobParts() {
+            if (!jobParts || jobParts.length === 0) return;
+            
+            console.log('🔨 Building from job parts:', jobParts);
+            
+            // Clear existing cabinets
+            cabinets = [];
+            
+            // Analyze parts and create cabinet layout
+            let currentX = 24; // Start 24" from left wall
+            let currentY = 24; // Start 24" from back wall
+            let currentRow = 0;
+            const maxRowWidth = roomWidth - 48; // Leave 24" on each side
+            
+            jobParts.forEach((part, index) => {
+                if (!part.width || !part.height) return;
+                
+                const width = parseFloat(part.width);
+                const height = parseFloat(part.height);
+                
+                // Determine cabinet type based on dimensions
+                let cabinetType = 'base';
+                let cabinetHeight = 34.5;
+                let cabinetDepth = 24;
+                
+                if (height > 60) {
+                    cabinetType = 'tall';
+                    cabinetHeight = 84;
+                } else if (height < 20) {
+                    cabinetType = 'wall';
+                    cabinetHeight = 30;
+                    cabinetDepth = 12;
+                }
+                
+                // Check if cabinet fits in current row
+                if (currentX + width > maxRowWidth) {
+                    currentX = 24;
+                    currentY += cabinetDepth + 12; // Move to next row
+                    currentRow++;
+                }
+                
+                const cabinet = {
+                    id: Date.now() + index,
+                    type: cabinetType,
+                    width: width,
+                    height: cabinetHeight,
+                    depth: cabinetDepth,
+                    x: currentX,
+                    y: currentY,
+                    color: cabinetTemplates[cabinetType]?.color || '#8B4513'
+                };
+                
+                cabinets.push(cabinet);
+                currentX += width + 3; // Add 3" gap between cabinets
+            });
+            
+            updateProjectSummary();
+            render2D();
+            zoomFit();
+            
+            console.log(`✅ Created ${cabinets.length} cabinets from job parts`);
+        }
+        
+        function updateMaterials() {
+            // Update all cabinets with new material settings
+            render2D();
+        }
+        
+        // Window resize handler
+        window.addEventListener('resize', () => {
+            resizeCanvas();
+            render2D();
+        });
+        
+        // Initialize when DOM is loaded
+        document.addEventListener('DOMContentLoaded', init);
+    </script>
+</body>
+</html>

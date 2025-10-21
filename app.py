@@ -493,5 +493,89 @@ def add_stock():
 
     return redirect(url_for("view_stocks"))
 
+@app.route("/cabinet-designer")
+def cabinet_designer():
+    """iPad-optimized cabinet designer"""
+    if "user_id" not in session:
+        flash("Please log in to use the cabinet designer.", "warning")
+        return redirect(url_for("login"))
+    
+    return render_template("ipad_cabinet_designer.html")
+
+@app.route("/cabinet-designer/<int:job_id>")
+def cabinet_designer_job(job_id):
+    """Cabinet designer with specific job data"""
+    if "user_id" not in session:
+        flash("Please log in to use the cabinet designer.", "warning")
+        return redirect(url_for("login"))
+    
+    user_id = session["user_id"]
+    
+    try:
+        # Get job details
+        job = execute_single(
+            "SELECT * FROM jobs WHERE id = %s AND user_id = %s",
+            (job_id, user_id)
+        )
+        
+        if not job:
+            flash("Job not found.", "danger")
+            return redirect(url_for("jobs"))
+        
+        # Get job parts
+        parts = execute_query(
+            "SELECT * FROM parts WHERE job_id = %s",
+            (job_id,),
+            fetch=True
+        )
+        
+        return render_template("ipad_cabinet_designer.html", job=job, parts=parts)
+    
+    except Exception as e:
+        print("Error loading job for cabinet designer:", e)
+        flash("Could not load job data.", "danger")
+        return redirect(url_for("jobs"))
+
+@app.route("/simple-designer")
+def simple_designer():
+    """Simple cabinet designer (fallback)"""
+    if "user_id" not in session:
+        flash("Please log in to use the cabinet designer.", "warning")
+        return redirect(url_for("login"))
+    
+    return render_template("simple_cabinet_designer.html")
+
+@app.route("/simple-designer/<int:job_id>")
+def simple_designer_job(job_id):
+    """Simple cabinet designer with job data"""
+    if "user_id" not in session:
+        flash("Please log in to use the cabinet designer.", "warning")
+        return redirect(url_for("login"))
+    
+    user_id = session["user_id"]
+    
+    try:
+        job = execute_single(
+            "SELECT * FROM jobs WHERE id = %s AND user_id = %s",
+            (job_id, user_id)
+        )
+        
+        if not job:
+            flash("Job not found.", "danger")
+            return redirect(url_for("jobs"))
+        
+        parts = execute_query(
+            "SELECT * FROM parts WHERE job_id = %s",
+            (job_id,),
+            fetch=True
+        )
+        
+        return render_template("simple_cabinet_designer.html", job=job, parts=parts)
+    
+    except Exception as e:
+        print("Error loading job for simple designer:", e)
+        flash("Could not load job data.", "danger")
+        return redirect(url_for("jobs"))
+
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=10000)

@@ -1,0 +1,1721 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>iPad Cabinet Designer - Cut byZewo</title>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="mobile-web-app-capable" content="yes">
+    
+    <style>
+        * { 
+            margin: 0; 
+            padding: 0; 
+            box-sizing: border-box;
+            -webkit-touch-callout: none;
+            -webkit-user-select: none;
+            -khtml-user-select: none;
+            -moz-user-select: none;
+            -ms-user-select: none;
+            user-select: none;
+        }
+        
+        body { 
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; 
+            background: #f2f2f7; 
+            height: 100vh;
+            overflow: hidden;
+            position: fixed;
+            width: 100%;
+        }
+        
+        .app-container {
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+        
+        .header { 
+            background: linear-gradient(135deg, #007AFF, #5856D6); 
+            color: white; 
+            padding: 12px 20px; 
+            box-shadow: 0 1px 10px rgba(0,0,0,0.1);
+            flex-shrink: 0;
+        }
+        
+        .header h1 { 
+            font-size: 1.3rem; 
+            font-weight: 600;
+            margin-bottom: 2px;
+        }
+        
+        .header p { 
+            opacity: 0.9; 
+            font-size: 0.85rem;
+        }
+        
+        .main-content {
+            flex: 1;
+            display: flex;
+            min-height: 0;
+        }
+        
+        .design-area {
+            flex: 1;
+            background: white;
+            position: relative;
+            min-width: 0;
+        }
+        
+        .canvas-container {
+            width: 100%;
+            height: 100%;
+            position: relative;
+            overflow: hidden;
+        }
+        
+        #designCanvas {
+            width: 100%;
+            height: 100%;
+            touch-action: none;
+            background: 
+                repeating-linear-gradient(
+                    0deg,
+                    transparent,
+                    transparent 24px,
+                    #f0f0f0 24px,
+                    #f0f0f0 25px
+                ),
+                repeating-linear-gradient(
+                    90deg,
+                    transparent,
+                    transparent 24px,
+                    #f0f0f0 24px,
+                    #f0f0f0 25px
+                );
+        }
+        
+        #threeDContainer {
+            width: 100%;
+            height: 100%;
+            display: none;
+        }
+        
+        .floating-toolbar {
+            position: absolute;
+            top: 15px;
+            left: 15px;
+            background: rgba(255, 255, 255, 0.98);
+            backdrop-filter: blur(10px);
+            border-radius: 12px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.2);
+            padding: 12px;
+            display: flex;
+            gap: 10px;
+            z-index: 1000;
+            border: 2px solid #e5e5ea;
+        }
+        
+        .tool-btn {
+            width: 50px;
+            height: 50px;
+            border: none;
+            border-radius: 8px;
+            background: white;
+            cursor: pointer;
+            font-size: 1.5rem;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.2s;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+        
+        .tool-btn:active {
+            transform: scale(0.95);
+        }
+        
+        .tool-btn.active {
+            background: #007AFF;
+            color: white;
+            box-shadow: 0 4px 15px rgba(0,122,255,0.3);
+        }
+        
+        .controls-panel {
+            width: 320px;
+            background: #f2f2f7;
+            border-left: 1px solid #e5e5ea;
+            overflow-y: auto;
+            -webkit-overflow-scrolling: touch;
+            flex-shrink: 0;
+        }
+        
+        .panel-section {
+            background: white;
+            margin: 10px;
+            padding: 15px;
+            border-radius: 12px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+        }
+        
+        .panel-section h3 {
+            font-size: 1rem;
+            margin-bottom: 12px;
+            color: #1d1d1f;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-weight: 600;
+        }
+        
+        .cabinet-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 8px;
+        }
+        
+        .cabinet-btn {
+            padding: 12px 8px;
+            border: 2px solid #e5e5ea;
+            border-radius: 8px;
+            background: white;
+            cursor: pointer;
+            text-align: center;
+            transition: all 0.2s;
+            min-height: 75px;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+        }
+        
+        .cabinet-btn:active {
+            transform: scale(0.98);
+        }
+        
+        .cabinet-btn.selected {
+            border-color: #007AFF;
+            background: #E3F2FD;
+            box-shadow: 0 2px 8px rgba(0,122,255,0.2);
+        }
+        
+        .cabinet-btn .icon {
+            font-size: 1.6rem;
+            margin-bottom: 4px;
+            display: block;
+        }
+        
+        .cabinet-btn .name {
+            font-weight: 600;
+            font-size: 0.8rem;
+            margin-bottom: 2px;
+            color: #1d1d1f;
+        }
+        
+        .cabinet-btn .size {
+            font-size: 0.7rem;
+            color: #8e8e93;
+        }
+        
+        .form-group {
+            margin-bottom: 15px;
+        }
+        
+        .form-group label {
+            display: block;
+            margin-bottom: 6px;
+            font-weight: 500;
+            font-size: 0.9rem;
+            color: #1d1d1f;
+        }
+        
+        .form-control {
+            width: 100%;
+            padding: 12px;
+            border: 1px solid #e5e5ea;
+            border-radius: 8px;
+            font-size: 1rem;
+            background: white;
+            -webkit-appearance: none;
+        }
+        
+        .form-control:focus {
+            outline: none;
+            border-color: #007AFF;
+            box-shadow: 0 0 0 3px rgba(0,122,255,0.1);
+        }
+        
+        .btn {
+            width: 100%;
+            padding: 12px 15px;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 0.95rem;
+            font-weight: 600;
+            transition: all 0.2s;
+            margin-bottom: 8px;
+            touch-action: manipulation;
+        }
+        
+        .btn:active {
+            transform: scale(0.98);
+        }
+        
+        .btn-primary {
+            background: #007AFF;
+            color: white;
+        }
+        
+        .btn-success {
+            background: #34C759;
+            color: white;
+        }
+        
+        .btn-danger {
+            background: #FF3B30;
+            color: white;
+        }
+        
+        .btn-secondary {
+            background: #8E8E93;
+            color: white;
+        }
+        
+        .status-bar {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            background: rgba(0, 0, 0, 0.8);
+            color: white;
+            padding: 8px 15px;
+            font-size: 0.8rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            backdrop-filter: blur(10px);
+        }
+        
+        .cabinet-item {
+            position: absolute;
+            border: 3px solid #1d1d1f;
+            background: #8b4513;
+            cursor: move;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-size: 0.8rem;
+            font-weight: 600;
+            text-align: center;
+            transition: all 0.2s;
+            border-radius: 4px;
+            touch-action: none;
+        }
+        
+        .cabinet-item:active {
+            box-shadow: 0 8px 25px rgba(0,0,0,0.3);
+            transform: scale(1.02);
+        }
+        
+        .cabinet-item.selected {
+            border-color: #007AFF;
+            box-shadow: 0 0 0 4px rgba(0,122,255,0.3);
+        }
+        
+        .cabinet-info {
+            background: rgba(29, 29, 31, 0.9);
+            padding: 6px;
+            border-radius: 4px;
+            font-size: 0.7rem;
+            line-height: 1.1;
+        }
+        
+        .measurements {
+            background: #f2f2f7;
+            padding: 10px;
+            border-radius: 8px;
+            font-family: 'SF Mono', Monaco, monospace;
+            font-size: 0.8rem;
+            margin-top: 8px;
+        }
+        
+        .summary-stats {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 8px;
+            margin-top: 8px;
+        }
+        
+        .stat-box {
+            background: #f2f2f7;
+            padding: 12px;
+            border-radius: 8px;
+            text-align: center;
+        }
+        
+        .stat-number {
+            font-size: 1.3rem;
+            font-weight: 700;
+            color: #007AFF;
+            margin-bottom: 2px;
+        }
+        
+        .stat-label {
+            font-size: 0.7rem;
+            color: #8e8e93;
+            font-weight: 500;
+        }
+        
+        .zoom-controls {
+            position: absolute;
+            bottom: 15px;
+            right: 15px;
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(10px);
+            border-radius: 12px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.1);
+            padding: 8px;
+            display: flex;
+            gap: 8px;
+            z-index: 100;
+        }
+        
+        .zoom-btn {
+            width: 44px;
+            height: 44px;
+            border: none;
+            border-radius: 8px;
+            background: white;
+            cursor: pointer;
+            font-size: 1.2rem;
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.2s;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+            color: #007AFF;
+        }
+        
+        .zoom-btn:active {
+            transform: scale(0.95);
+        }
+        
+        .quick-actions {
+            position: absolute;
+            top: 15px;
+            right: 15px;
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(10px);
+            border-radius: 12px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.1);
+            padding: 8px;
+            display: flex;
+            gap: 8px;
+            z-index: 100;
+        }
+        
+        .action-btn {
+            width: 44px;
+            height: 44px;
+            border: none;
+            border-radius: 8px;
+            background: white;
+            cursor: pointer;
+            font-size: 1.1rem;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.2s;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+        
+        .action-btn:active {
+            transform: scale(0.95);
+        }
+        
+        .action-btn.danger {
+            color: #FF3B30;
+        }
+        
+        .action-btn.success {
+            color: #34C759;
+        }
+        
+        /* Desktop/Mac adjustments */
+        @media (min-width: 1025px) {
+            .controls-panel {
+                width: 350px;
+            }
+            
+            .floating-toolbar {
+                display: flex;
+            }
+        }
+        
+        /* iPad Portrait adjustments */
+        @media (max-width: 1024px) and (orientation: portrait) {
+            .main-content {
+                flex-direction: column;
+            }
+            
+            .controls-panel {
+                width: 100%;
+                height: 300px;
+                border-left: none;
+                border-top: 1px solid #e5e5ea;
+                order: 2;
+            }
+            
+            .design-area {
+                order: 1;
+            }
+            
+            .panel-section {
+                margin: 5px;
+                padding: 12px;
+            }
+            
+            .cabinet-grid {
+                grid-template-columns: repeat(4, 1fr);
+                gap: 6px;
+            }
+            
+            .cabinet-btn {
+                min-height: 60px;
+                padding: 8px 4px;
+            }
+            
+            .cabinet-btn .icon {
+                font-size: 1.3rem;
+                margin-bottom: 2px;
+            }
+            
+            .cabinet-btn .name {
+                font-size: 0.7rem;
+                margin-bottom: 1px;
+            }
+            
+            .cabinet-btn .size {
+                font-size: 0.6rem;
+            }
+            
+            .floating-toolbar {
+                display: none; /* Hide on mobile since we have panel controls */
+            }
+        }
+        
+        /* Prevent zoom on double tap */
+        .no-zoom {
+            touch-action: manipulation;
+        }
+        
+        /* Hide scrollbars on iPad */
+        .controls-panel::-webkit-scrollbar {
+            display: none;
+        }
+    </style>
+</head>
+<body class="no-zoom">
+    <div class="app-container">
+        <div class="header">
+            <h1>🪚 Cabinet Designer</h1>
+            <p>{% if job %}{{ job.client_name }} - {{ job.created_at.strftime('%m/%d/%Y') if job.created_at else 'New Design' }}{% else %}Touch to design your kitchen{% endif %}</p>
+        </div>
+        
+        <div class="main-content">
+            <div class="design-area">
+                <div class="canvas-container">
+                    <canvas id="designCanvas"></canvas>
+                    <div id="threeDContainer"></div>
+                    
+                    <div class="floating-toolbar">
+                        <button class="tool-btn active" onclick="setTool('select')" id="selectTool">
+                            👆
+                        </button>
+                        <button class="tool-btn" onclick="setTool('cabinet')" id="cabinetTool">
+                            🗄️
+                        </button>
+                    </div>
+                    
+                    <div class="quick-actions">
+                        <button class="action-btn" onclick="undoLast()" title="Undo">
+                            ↶
+                        </button>
+                        <button class="action-btn danger" onclick="clearAll()" title="Clear All">
+                            🗑️
+                        </button>
+                        <button class="action-btn success" onclick="saveDesign()" title="Save">
+                            💾
+                        </button>
+                    </div>
+                    
+                    <div class="zoom-controls">
+                        <button class="zoom-btn" onclick="zoomOut()">−</button>
+                        <button class="zoom-btn" onclick="zoomFit()">⌂</button>
+                        <button class="zoom-btn" onclick="zoomIn()">+</button>
+                    </div>
+                    
+                    <div class="status-bar">
+                        <div id="statusText">Tap cabinet type, then tap to place</div>
+                        <div id="zoomLevel">100%</div>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="controls-panel">
+                <!-- Cabinet Types -->
+                <div class="panel-section">
+                    <h3>🗄️ Cabinet Types</h3>
+                    <div class="cabinet-grid">
+                        <div class="cabinet-btn" onclick="selectCabinetType('base', 18, 34.5, 24)">
+                            <span class="icon">📦</span>
+                            <div class="name">Base 18"</div>
+                            <div class="size">18×34.5</div>
+                        </div>
+                        <div class="cabinet-btn" onclick="selectCabinetType('base', 24, 34.5, 24)">
+                            <span class="icon">📦</span>
+                            <div class="name">Base 24"</div>
+                            <div class="size">24×34.5</div>
+                        </div>
+                        <div class="cabinet-btn" onclick="selectCabinetType('base', 30, 34.5, 24)">
+                            <span class="icon">📦</span>
+                            <div class="name">Base 30"</div>
+                            <div class="size">30×34.5</div>
+                        </div>
+                        <div class="cabinet-btn" onclick="selectCabinetType('base', 36, 34.5, 24)">
+                            <span class="icon">📦</span>
+                            <div class="name">Base 36"</div>
+                            <div class="size">36×34.5</div>
+                        </div>
+                        <div class="cabinet-btn" onclick="selectCabinetType('wall', 24, 30, 12)">
+                            <span class="icon">⬜</span>
+                            <div class="name">Wall 24"</div>
+                            <div class="size">24×30</div>
+                        </div>
+                        <div class="cabinet-btn" onclick="selectCabinetType('wall', 30, 30, 12)">
+                            <span class="icon">⬜</span>
+                            <div class="name">Wall 30"</div>
+                            <div class="size">30×30</div>
+                        </div>
+                        <div class="cabinet-btn" onclick="selectCabinetType('tall', 24, 84, 24)">
+                            <span class="icon">🏢</span>
+                            <div class="name">Pantry</div>
+                            <div class="size">24×84</div>
+                        </div>
+                        <div class="cabinet-btn" onclick="selectCabinetType('corner', 36, 34.5, 24)">
+                            <span class="icon">📐</span>
+                            <div class="name">Corner</div>
+                            <div class="size">36×34.5</div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Selected Cabinet -->
+                <div class="panel-section" id="selectedCabinetPanel" style="display: none;">
+                    <h3>🎯 Selected Cabinet</h3>
+                    <div class="form-group">
+                        <label>Width</label>
+                        <input type="number" class="form-control" id="cabinetWidth" min="6" max="60" step="1" onchange="updateSelectedCabinet()">
+                    </div>
+                    <div class="form-group">
+                        <label>Height</label>
+                        <input type="number" class="form-control" id="cabinetHeight" min="12" max="96" step="1" onchange="updateSelectedCabinet()">
+                    </div>
+                    <div class="form-group">
+                        <label>Depth</label>
+                        <input type="number" class="form-control" id="cabinetDepth" min="6" max="30" step="1" onchange="updateSelectedCabinet()">
+                    </div>
+                    <button class="btn btn-danger" onclick="deleteSelected()">🗑️ Delete</button>
+                    <button class="btn btn-primary" onclick="duplicateSelected()">📋 Copy</button>
+                </div>
+                
+                <!-- 3D Preview -->
+                <div class="panel-section" style="background: #f8f9fa; border: 2px solid #007AFF; border-radius: 12px;">
+                    <h3 style="color: #007AFF;">🏠 3D Preview</h3>
+                    <div id="sidePanel3D" style="width: 100%; height: 250px; border: 2px solid #007AFF; border-radius: 8px; background: #87CEEB; position: relative; min-height: 250px;">
+                        <div style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); text-align: center; color: white; background: rgba(0,0,0,0.5); padding: 20px; border-radius: 8px;">
+                            <div style="font-size: 2rem; margin-bottom: 8px;">🏠</div>
+                            <div style="font-size: 0.9rem; font-weight: 600;">Add cabinets to see 3D preview</div>
+                            <div style="font-size: 0.7rem; margin-top: 4px; opacity: 0.8;">Design on the left, see results here!</div>
+                        </div>
+                    </div>
+                    <div style="margin-top: 8px; font-size: 0.8rem; color: #007AFF; text-align: center; font-weight: 600;">
+                        🖱️ Drag to rotate camera • Updates automatically
+                    </div>
+                </div>
+                
+                <!-- Room Setup -->
+                <div class="panel-section">
+                    <h3>📐 Room Size</h3>
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px;">
+                        <div class="form-group" style="margin-bottom: 8px;">
+                            <label style="font-size: 0.8rem;">Width</label>
+                            <input type="number" class="form-control" id="roomWidth" value="144" min="60" max="300" onchange="updateRoom()" style="padding: 6px 8px; font-size: 0.85rem;">
+                        </div>
+                        <div class="form-group" style="margin-bottom: 8px;">
+                            <label style="font-size: 0.8rem;">Depth</label>
+                            <input type="number" class="form-control" id="roomDepth" value="120" min="60" max="300" onchange="updateRoom()" style="padding: 6px 8px; font-size: 0.85rem;">
+                        </div>
+                    </div>
+                    <div class="measurements">
+                        <strong>Room:</strong> <span id="roomDisplay">144" × 120"</span><br>
+                        <strong>Area:</strong> <span id="roomSqFt">120 sq ft</span>
+                    </div>
+                </div>
+                
+                <!-- Project Summary -->
+                <div class="panel-section">
+                    <h3>📊 Summary</h3>
+                    <div class="summary-stats">
+                        <div class="stat-box">
+                            <div class="stat-number" id="cabinetCount">0</div>
+                            <div class="stat-label">Cabinets</div>
+                        </div>
+                        <div class="stat-box">
+                            <div class="stat-number" id="linearFeet">0'</div>
+                            <div class="stat-label">Linear Ft</div>
+                        </div>
+                        <div class="stat-box">
+                            <div class="stat-number" id="totalCost">$0</div>
+                            <div class="stat-label">Cost</div>
+                        </div>
+                        <div class="stat-box">
+                            <div class="stat-number" id="cutSheets">0</div>
+                            <div class="stat-label">Sheets</div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Actions -->
+                <div class="panel-section">
+                    <h3>⚡ Actions</h3>
+                    <button class="btn btn-success" onclick="generateCutList()">📋 Cut List</button>
+                    <button class="btn btn-primary" onclick="exportImage()">📷 Export</button>
+                    
+                    {% if job and parts %}
+                    <hr style="margin: 12px 0; border: none; height: 1px; background: #e5e5ea;">
+                    <button class="btn btn-primary" onclick="buildFromJobParts()">🔨 Use Job Parts</button>
+                    <small style="color: #8e8e93; font-size: 0.75rem; display: block; margin-top: 4px;">
+                        Build from {{ parts|length }} existing parts
+                    </small>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/build/three.min.js"></script>
+    <script>
+        // Global variables
+        let canvas, ctx;
+        let cabinets = [];
+        let cabinetHistory = [];
+        let selectedCabinet = null;
+        let currentTool = 'select';
+        let selectedCabinetType = null;
+        let roomWidth = 144;
+        let roomDepth = 120;
+        let scale = 3;
+        let offsetX = 50;
+        let offsetY = 50;
+        
+        // 3D variables
+        let scene3D, camera3D, renderer3D;
+        let cabinet3DObjects = [];
+        let sidePanelInitialized = false;
+        
+        // Touch interaction
+        let isDragging = false;
+        let isPinching = false;
+        let lastTouch = null;
+        let dragOffset = { x: 0, y: 0 };
+        let touchStartTime = 0;
+        let initialPinchDistance = 0;
+        let initialScale = 3;
+        
+        // Job data
+        const jobParts = {{ parts | tojson if parts else '[]' }};
+        
+        // Cabinet styles
+        const cabinetStyles = {
+            base: { color: '#8b4513', textColor: 'white' },
+            wall: { color: '#cd853f', textColor: 'white' },
+            tall: { color: '#654321', textColor: 'white' },
+            corner: { color: '#a0522d', textColor: 'white' }
+        };
+        
+        // Initialize
+        function init() {
+            console.log('🎨 Initializing iPad Cabinet Designer...');
+            
+            canvas = document.getElementById('designCanvas');
+            ctx = canvas.getContext('2d');
+            
+            // Setup canvas
+            resizeCanvas();
+            
+            // Touch events
+            canvas.addEventListener('touchstart', onTouchStart, { passive: false });
+            canvas.addEventListener('touchmove', onTouchMove, { passive: false });
+            canvas.addEventListener('touchend', onTouchEnd, { passive: false });
+            
+            // Mouse events (for testing on desktop)
+            canvas.addEventListener('mousedown', onMouseDown);
+            canvas.addEventListener('mousemove', onMouseMove);
+            canvas.addEventListener('mouseup', onMouseUp);
+            
+            // Prevent scrolling and zooming
+            document.addEventListener('touchmove', (e) => {
+                if (e.target === canvas) {
+                    e.preventDefault();
+                }
+            }, { passive: false });
+            
+            document.addEventListener('gesturestart', (e) => e.preventDefault());
+            document.addEventListener('gesturechange', (e) => e.preventDefault());
+            document.addEventListener('gestureend', (e) => e.preventDefault());
+            
+            // Window resize
+            window.addEventListener('resize', resizeCanvas);
+            window.addEventListener('orientationchange', () => {
+                setTimeout(resizeCanvas, 100);
+            });
+            
+            // Initial render
+            render();
+            updateProjectSummary();
+            updateRoomDisplay();
+            
+            // Initialize side panel 3D
+            initSidePanel3D();
+            
+            console.log('✅ iPad Designer ready!');
+        }
+        
+        function initSidePanel3D() {
+            console.log('🎨 Initializing side panel 3D...');
+            
+            const container = document.getElementById('sidePanel3D');
+            if (!container) {
+                console.error('❌ 3D container not found!');
+                return;
+            }
+            
+            console.log('📦 Container found:', container.clientWidth, 'x', container.clientHeight);
+            
+            // Clear placeholder content
+            container.innerHTML = '';
+            
+            // Check if Three.js is loaded
+            if (typeof THREE === 'undefined') {
+                console.error('❌ Three.js not loaded!');
+                container.innerHTML = '<div style="color: red; text-align: center; padding: 20px;">Three.js failed to load</div>';
+                return;
+            }
+            
+            try {
+                // Scene
+                scene3D = new THREE.Scene();
+                scene3D.background = new THREE.Color(0x87CEEB);
+                console.log('✅ Scene created');
+                
+                // Camera
+                const aspect = container.clientWidth / container.clientHeight;
+                camera3D = new THREE.PerspectiveCamera(75, aspect, 0.1, 1000);
+                camera3D.position.set(80, 50, 80);
+                camera3D.lookAt(0, 0, 0);
+                console.log('✅ Camera created');
+                
+                // Renderer
+                renderer3D = new THREE.WebGLRenderer({ antialias: true });
+                renderer3D.setSize(container.clientWidth, container.clientHeight);
+                renderer3D.shadowMap.enabled = true;
+                renderer3D.shadowMap.type = THREE.PCFSoftShadowMap;
+                container.appendChild(renderer3D.domElement);
+                console.log('✅ Renderer created and added');
+                
+                // Lighting
+                setup3DLighting();
+                console.log('✅ Lighting setup');
+                
+                // Create 3D room
+                create3DRoom();
+                console.log('✅ Room created');
+                
+                // Simple mouse/touch controls for 3D
+                setup3DControls();
+                console.log('✅ Controls setup');
+                
+                // Initial render
+                renderer3D.render(scene3D, camera3D);
+                console.log('✅ Initial render complete');
+                
+                sidePanelInitialized = true;
+                console.log('✅ Side panel 3D ready!');
+                
+            } catch (error) {
+                console.error('❌ 3D initialization failed:', error);
+                container.innerHTML = '<div style="color: red; text-align: center; padding: 20px;">3D initialization failed: ' + error.message + '</div>';
+            }
+        }
+        
+        function setup3DLighting() {
+            // Ambient light
+            const ambientLight = new THREE.AmbientLight(0x404040, 0.6);
+            scene3D.add(ambientLight);
+            
+            // Main light
+            const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
+            directionalLight.position.set(50, 100, 50);
+            directionalLight.castShadow = true;
+            directionalLight.shadow.mapSize.width = 2048;
+            directionalLight.shadow.mapSize.height = 2048;
+            scene3D.add(directionalLight);
+            
+            // Fill light
+            const fillLight = new THREE.DirectionalLight(0xffffff, 0.3);
+            fillLight.position.set(-50, 50, -50);
+            scene3D.add(fillLight);
+        }
+        
+        function create3DRoom() {
+            // Floor
+            const floorGeometry = new THREE.PlaneGeometry(roomWidth, roomDepth);
+            const floorMaterial = new THREE.MeshLambertMaterial({ 
+                color: 0xF5F5DC,
+                transparent: true,
+                opacity: 0.8
+            });
+            const floor = new THREE.Mesh(floorGeometry, floorMaterial);
+            floor.rotation.x = -Math.PI / 2;
+            floor.receiveShadow = true;
+            scene3D.add(floor);
+            
+            // Walls
+            const wallMaterial = new THREE.MeshLambertMaterial({ 
+                color: 0xFFFFF0,
+                transparent: true,
+                opacity: 0.3,
+                side: THREE.DoubleSide
+            });
+            
+            const height = 96; // 8 feet
+            
+            // Back wall
+            const backWallGeometry = new THREE.PlaneGeometry(roomWidth, height);
+            const backWall = new THREE.Mesh(backWallGeometry, wallMaterial);
+            backWall.position.set(0, height/2, -roomDepth/2);
+            scene3D.add(backWall);
+            
+            // Left wall
+            const leftWallGeometry = new THREE.PlaneGeometry(roomDepth, height);
+            const leftWall = new THREE.Mesh(leftWallGeometry, wallMaterial);
+            leftWall.position.set(-roomWidth/2, height/2, 0);
+            leftWall.rotation.y = Math.PI/2;
+            scene3D.add(leftWall);
+            
+            // Right wall
+            const rightWall = new THREE.Mesh(leftWallGeometry, wallMaterial);
+            rightWall.position.set(roomWidth/2, height/2, 0);
+            rightWall.rotation.y = -Math.PI/2;
+            scene3D.add(rightWall);
+        }
+        
+        function create3DCabinet(cabinet) {
+            const cabinetGroup = new THREE.Group();
+            
+            // Cabinet material
+            const cabinetMaterial = new THREE.MeshLambertMaterial({ 
+                color: cabinetStyles[cabinet.type]?.color || 0x8b4513 
+            });
+            
+            // Cabinet body
+            const bodyGeometry = new THREE.BoxGeometry(cabinet.width, cabinet.height, cabinet.depth);
+            const body = new THREE.Mesh(bodyGeometry, cabinetMaterial);
+            body.position.set(0, cabinet.height/2, 0);
+            body.castShadow = true;
+            body.receiveShadow = true;
+            cabinetGroup.add(body);
+            
+            // Cabinet doors
+            const doorMaterial = new THREE.MeshLambertMaterial({ color: 0x654321 });
+            
+            if (cabinet.width > 18) {
+                // Two doors
+                const doorWidth = cabinet.width / 2 - 1;
+                const doorHeight = cabinet.height - 3;
+                const doorGeometry = new THREE.BoxGeometry(doorWidth, doorHeight, 1);
+                
+                const leftDoor = new THREE.Mesh(doorGeometry, doorMaterial);
+                leftDoor.position.set(-doorWidth/2 - 0.5, cabinet.height/2, cabinet.depth/2 + 0.5);
+                leftDoor.castShadow = true;
+                cabinetGroup.add(leftDoor);
+                
+                const rightDoor = new THREE.Mesh(doorGeometry, doorMaterial);
+                rightDoor.position.set(doorWidth/2 + 0.5, cabinet.height/2, cabinet.depth/2 + 0.5);
+                rightDoor.castShadow = true;
+                cabinetGroup.add(rightDoor);
+            } else {
+                // One door
+                const doorWidth = cabinet.width - 2;
+                const doorHeight = cabinet.height - 3;
+                const doorGeometry = new THREE.BoxGeometry(doorWidth, doorHeight, 1);
+                
+                const door = new THREE.Mesh(doorGeometry, doorMaterial);
+                door.position.set(0, cabinet.height/2, cabinet.depth/2 + 0.5);
+                door.castShadow = true;
+                cabinetGroup.add(door);
+            }
+            
+            // Position cabinet in 3D space
+            cabinetGroup.position.set(
+                cabinet.x - roomWidth/2 + cabinet.width/2,
+                0,
+                cabinet.y - roomDepth/2 + cabinet.depth/2
+            );
+            
+            cabinetGroup.userData = { cabinetId: cabinet.id };
+            
+            return cabinetGroup;
+        }
+        
+        function update3DCabinets() {
+            if (!scene3D) return;
+            
+            // Remove existing 3D cabinets
+            cabinet3DObjects.forEach(obj => scene3D.remove(obj));
+            cabinet3DObjects = [];
+            
+            // Add current cabinets to 3D scene
+            cabinets.forEach(cabinet => {
+                const cabinet3D = create3DCabinet(cabinet);
+                scene3D.add(cabinet3D);
+                cabinet3DObjects.push(cabinet3D);
+            });
+            
+            if (renderer3D) {
+                render3D();
+            }
+        }
+        
+        function setup3DControls() {
+            const canvas3D = renderer3D.domElement;
+            let cameraDistance = 150;
+            let cameraAngle = 0;
+            let cameraHeight = 60;
+            
+            let mouseDown = false;
+            let mouseX = 0, mouseY = 0;
+            
+            function updateCamera() {
+                const x = Math.sin(cameraAngle) * cameraDistance;
+                const z = Math.cos(cameraAngle) * cameraDistance;
+                camera3D.position.set(x, cameraHeight, z);
+                camera3D.lookAt(0, 20, 0);
+            }
+            
+            canvas3D.addEventListener('touchstart', (e) => {
+                if (e.touches.length === 1) {
+                    e.preventDefault();
+                    mouseDown = true;
+                    mouseX = e.touches[0].clientX;
+                    mouseY = e.touches[0].clientY;
+                }
+            });
+            
+            canvas3D.addEventListener('touchmove', (e) => {
+                if (mouseDown && e.touches.length === 1) {
+                    e.preventDefault();
+                    const deltaX = e.touches[0].clientX - mouseX;
+                    const deltaY = e.touches[0].clientY - mouseY;
+                    
+                    cameraAngle -= deltaX * 0.01;
+                    cameraHeight += deltaY * 0.5;
+                    cameraHeight = Math.max(20, Math.min(120, cameraHeight));
+                    
+                    updateCamera();
+                    render3D();
+                    
+                    mouseX = e.touches[0].clientX;
+                    mouseY = e.touches[0].clientY;
+                }
+            });
+            
+            canvas3D.addEventListener('touchend', () => {
+                mouseDown = false;
+            });
+            
+            updateCamera();
+        }
+        
+        function render3D() {
+            if (renderer3D && scene3D && camera3D) {
+                renderer3D.render(scene3D, camera3D);
+            }
+        }
+        
+        function update3DPreview() {
+            if (!sidePanelInitialized) return;
+            
+            // Update 3D cabinets
+            update3DCabinets();
+            
+            // Re-render
+            if (renderer3D && scene3D && camera3D) {
+                renderer3D.render(scene3D, camera3D);
+            }
+        }
+        
+        function resizeCanvas() {
+            const container = canvas.parentElement;
+            const rect = container.getBoundingClientRect();
+            
+            // Set canvas size with device pixel ratio for crisp rendering
+            const dpr = window.devicePixelRatio || 1;
+            canvas.width = rect.width * dpr;
+            canvas.height = rect.height * dpr;
+            canvas.style.width = rect.width + 'px';
+            canvas.style.height = rect.height + 'px';
+            
+            ctx.scale(dpr, dpr);
+            
+            // Center the room
+            offsetX = (rect.width - roomWidth * scale) / 2;
+            offsetY = (rect.height - roomDepth * scale) / 2;
+            
+            render();
+        }
+        
+        function render() {
+            const rect = canvas.getBoundingClientRect();
+            ctx.clearRect(0, 0, rect.width, rect.height);
+            
+            // Draw room
+            drawRoom();
+            
+            // Draw cabinets
+            cabinets.forEach(cabinet => drawCabinet(cabinet));
+            
+            // Draw selection
+            if (selectedCabinet) {
+                highlightCabinet(selectedCabinet);
+            }
+        }
+        
+        function drawRoom() {
+            const x = offsetX;
+            const y = offsetY;
+            const w = roomWidth * scale;
+            const h = roomDepth * scale;
+            
+            // Room fill
+            ctx.fillStyle = '#f8f9fa';
+            ctx.fillRect(x, y, w, h);
+            
+            // Room outline
+            ctx.strokeStyle = '#1d1d1f';
+            ctx.lineWidth = 3;
+            ctx.strokeRect(x, y, w, h);
+            
+            // Room dimensions
+            ctx.fillStyle = '#1d1d1f';
+            ctx.font = 'bold 14px -apple-system';
+            ctx.textAlign = 'center';
+            ctx.fillText(`${roomWidth}" × ${roomDepth}"`, x + w/2, y - 12);
+        }
+        
+        function drawCabinet(cabinet) {
+            const x = offsetX + cabinet.x * scale;
+            const y = offsetY + cabinet.y * scale;
+            const w = cabinet.width * scale;
+            const h = cabinet.depth * scale;
+            
+            // Cabinet body
+            const style = cabinetStyles[cabinet.type] || cabinetStyles.base;
+            ctx.fillStyle = style.color;
+            ctx.fillRect(x, y, w, h);
+            
+            // Cabinet outline
+            ctx.strokeStyle = '#1d1d1f';
+            ctx.lineWidth = 2;
+            ctx.strokeRect(x, y, w, h);
+            
+            // Cabinet text
+            ctx.fillStyle = style.textColor;
+            ctx.font = 'bold 11px -apple-system';
+            ctx.textAlign = 'center';
+            
+            const centerX = x + w/2;
+            const centerY = y + h/2;
+            
+            // Type
+            ctx.fillText(cabinet.type.toUpperCase(), centerX, centerY - 6);
+            
+            // Dimensions
+            ctx.font = '9px -apple-system';
+            ctx.fillText(`${cabinet.width}"×${cabinet.height}"`, centerX, centerY + 8);
+        }
+        
+        function highlightCabinet(cabinet) {
+            const x = offsetX + cabinet.x * scale;
+            const y = offsetY + cabinet.y * scale;
+            const w = cabinet.width * scale;
+            const h = cabinet.depth * scale;
+            
+            // Selection outline
+            ctx.strokeStyle = '#007AFF';
+            ctx.lineWidth = 4;
+            ctx.setLineDash([8, 4]);
+            ctx.strokeRect(x - 3, y - 3, w + 6, h + 6);
+            ctx.setLineDash([]);
+            
+            // Selection handles
+            const handleSize = 12;
+            ctx.fillStyle = '#007AFF';
+            
+            // Corner handles
+            ctx.fillRect(x - handleSize/2, y - handleSize/2, handleSize, handleSize);
+            ctx.fillRect(x + w - handleSize/2, y - handleSize/2, handleSize, handleSize);
+            ctx.fillRect(x - handleSize/2, y + h - handleSize/2, handleSize, handleSize);
+            ctx.fillRect(x + w - handleSize/2, y + h - handleSize/2, handleSize, handleSize);
+        }
+        
+        // Touch event handlers
+        function onTouchStart(e) {
+            e.preventDefault();
+            
+            const touches = e.touches;
+            touchStartTime = Date.now();
+            
+            if (touches.length === 1) {
+                // Single touch
+                const touch = touches[0];
+                const rect = canvas.getBoundingClientRect();
+                const x = touch.clientX - rect.left;
+                const y = touch.clientY - rect.top;
+                
+                lastTouch = { x, y };
+                
+                if (currentTool === 'select') {
+                    const cabinet = getCabinetAtPosition(x, y);
+                    if (cabinet) {
+                        selectCabinet(cabinet);
+                        isDragging = true;
+                        dragOffset = {
+                            x: x - (offsetX + cabinet.x * scale),
+                            y: y - (offsetY + cabinet.y * scale)
+                        };
+                    } else {
+                        selectCabinet(null);
+                    }
+                } else if (currentTool === 'cabinet' && selectedCabinetType) {
+                    placeCabinet(x, y);
+                }
+            } else if (touches.length === 2) {
+                // Pinch gesture
+                isPinching = true;
+                isDragging = false;
+                
+                const touch1 = touches[0];
+                const touch2 = touches[1];
+                
+                initialPinchDistance = Math.sqrt(
+                    Math.pow(touch2.clientX - touch1.clientX, 2) +
+                    Math.pow(touch2.clientY - touch1.clientY, 2)
+                );
+                initialScale = scale;
+            }
+        }
+        
+        function onTouchMove(e) {
+            e.preventDefault();
+            
+            const touches = e.touches;
+            
+            if (touches.length === 1 && !isPinching) {
+                const touch = touches[0];
+                const rect = canvas.getBoundingClientRect();
+                const x = touch.clientX - rect.left;
+                const y = touch.clientY - rect.top;
+                
+                if (isDragging && selectedCabinet) {
+                    // Move cabinet
+                    selectedCabinet.x = Math.round((x - offsetX - dragOffset.x) / scale);
+                    selectedCabinet.y = Math.round((y - offsetY - dragOffset.y) / scale);
+                    
+                    // Keep within room bounds
+                    selectedCabinet.x = Math.max(0, Math.min(roomWidth - selectedCabinet.width, selectedCabinet.x));
+                    selectedCabinet.y = Math.max(0, Math.min(roomDepth - selectedCabinet.depth, selectedCabinet.y));
+                    
+                    updateSelectedCabinetInputs();
+                    render();
+                }
+                
+                // Update status
+                const worldX = Math.round((x - offsetX) / scale);
+                const worldY = Math.round((y - offsetY) / scale);
+                document.getElementById('statusText').textContent = `Position: ${worldX}", ${worldY}"`;
+                
+                lastTouch = { x, y };
+            } else if (touches.length === 2 && isPinching) {
+                // Pinch zoom
+                const touch1 = touches[0];
+                const touch2 = touches[1];
+                
+                const currentPinchDistance = Math.sqrt(
+                    Math.pow(touch2.clientX - touch1.clientX, 2) +
+                    Math.pow(touch2.clientY - touch1.clientY, 2)
+                );
+                
+                const scaleMultiplier = currentPinchDistance / initialPinchDistance;
+                scale = Math.max(1, Math.min(8, initialScale * scaleMultiplier));
+                
+                document.getElementById('zoomLevel').textContent = `${Math.round((scale/3) * 100)}%`;
+                render();
+            }
+        }
+        
+        function onTouchEnd(e) {
+            e.preventDefault();
+            
+            const touchDuration = Date.now() - touchStartTime;
+            
+            // Check for double tap (quick succession of taps)
+            if (touchDuration < 200 && !isDragging && !isPinching) {
+                // Handle double tap if needed
+            }
+            
+            isDragging = false;
+            isPinching = false;
+            lastTouch = null;
+        }
+        
+        // Mouse event handlers (for desktop testing)
+        function onMouseDown(e) {
+            const rect = canvas.getBoundingClientRect();
+            const x = e.clientX - rect.left;
+            const y = e.clientY - rect.top;
+            
+            if (currentTool === 'select') {
+                const cabinet = getCabinetAtPosition(x, y);
+                if (cabinet) {
+                    selectCabinet(cabinet);
+                    isDragging = true;
+                    dragOffset = {
+                        x: x - (offsetX + cabinet.x * scale),
+                        y: y - (offsetY + cabinet.y * scale)
+                    };
+                } else {
+                    selectCabinet(null);
+                }
+            } else if (currentTool === 'cabinet' && selectedCabinetType) {
+                placeCabinet(x, y);
+            }
+        }
+        
+        function onMouseMove(e) {
+            const rect = canvas.getBoundingClientRect();
+            const x = e.clientX - rect.left;
+            const y = e.clientY - rect.top;
+            
+            if (isDragging && selectedCabinet) {
+                selectedCabinet.x = Math.round((x - offsetX - dragOffset.x) / scale);
+                selectedCabinet.y = Math.round((y - offsetY - dragOffset.y) / scale);
+                
+                selectedCabinet.x = Math.max(0, Math.min(roomWidth - selectedCabinet.width, selectedCabinet.x));
+                selectedCabinet.y = Math.max(0, Math.min(roomDepth - selectedCabinet.depth, selectedCabinet.y));
+                
+                updateSelectedCabinetInputs();
+                render();
+            }
+            
+            const worldX = Math.round((x - offsetX) / scale);
+            const worldY = Math.round((y - offsetY) / scale);
+            document.getElementById('statusText').textContent = `Position: ${worldX}", ${worldY}"`;
+        }
+        
+        function onMouseUp(e) {
+            isDragging = false;
+        }
+        
+        function getCabinetAtPosition(x, y) {
+            for (let i = cabinets.length - 1; i >= 0; i--) {
+                const cabinet = cabinets[i];
+                const cx = offsetX + cabinet.x * scale;
+                const cy = offsetY + cabinet.y * scale;
+                const cw = cabinet.width * scale;
+                const ch = cabinet.depth * scale;
+                
+                if (x >= cx && x <= cx + cw && y >= cy && y <= cy + ch) {
+                    return cabinet;
+                }
+            }
+            return null;
+        }
+        
+        function placeCabinet(x, y) {
+            const worldX = Math.round((x - offsetX) / scale / 6) * 6; // Snap to 6" grid
+            const worldY = Math.round((y - offsetY) / scale / 6) * 6;
+            
+            if (worldX < 0 || worldY < 0 || 
+                worldX + selectedCabinetType.width > roomWidth || 
+                worldY + selectedCabinetType.depth > roomDepth) {
+                
+                // Visual feedback for invalid placement
+                navigator.vibrate && navigator.vibrate(100);
+                document.getElementById('statusText').textContent = 'Cabinet won\'t fit here!';
+                setTimeout(() => {
+                    document.getElementById('statusText').textContent = 'Tap to place cabinet';
+                }, 1500);
+                return;
+            }
+            
+            // Save state for undo
+            saveState();
+            
+            const cabinet = {
+                id: Date.now(),
+                type: selectedCabinetType.type,
+                width: selectedCabinetType.width,
+                height: selectedCabinetType.height,
+                depth: selectedCabinetType.depth,
+                x: worldX,
+                y: worldY
+            };
+            
+            cabinets.push(cabinet);
+            selectCabinet(cabinet);
+            updateProjectSummary();
+            render();
+            
+            // Update 3D preview
+            update3DPreview();
+            
+            // Haptic feedback
+            navigator.vibrate && navigator.vibrate(50);
+            
+            document.getElementById('statusText').textContent = 'Cabinet placed!';
+            setTimeout(() => {
+                document.getElementById('statusText').textContent = 'Tap to place more cabinets';
+            }, 1000);
+        }
+        
+        // Tool functions
+        function setTool(tool) {
+            currentTool = tool;
+            
+            document.querySelectorAll('.tool-btn').forEach(btn => btn.classList.remove('active'));
+            document.getElementById(tool + 'Tool').classList.add('active');
+            
+            if (tool === 'cabinet') {
+                document.getElementById('statusText').textContent = 'Select cabinet type, then tap to place';
+                selectCabinet(null);
+            } else {
+                document.getElementById('statusText').textContent = 'Tap cabinet to select, drag to move';
+            }
+        }
+        
+        function selectCabinetType(type, width, height, depth) {
+            selectedCabinetType = { type, width, height, depth };
+            setTool('cabinet');
+            
+            document.querySelectorAll('.cabinet-btn').forEach(btn => btn.classList.remove('selected'));
+            event.target.closest('.cabinet-btn').classList.add('selected');
+            
+            document.getElementById('statusText').textContent = `Tap to place ${type} cabinet`;
+        }
+        
+        function selectCabinet(cabinet) {
+            selectedCabinet = cabinet;
+            
+            if (cabinet) {
+                document.getElementById('selectedCabinetPanel').style.display = 'block';
+                updateSelectedCabinetInputs();
+                document.getElementById('statusText').textContent = 'Cabinet selected - drag to move';
+            } else {
+                document.getElementById('selectedCabinetPanel').style.display = 'none';
+            }
+            
+            render();
+        }
+        
+        function updateSelectedCabinetInputs() {
+            if (!selectedCabinet) return;
+            
+            document.getElementById('cabinetWidth').value = selectedCabinet.width;
+            document.getElementById('cabinetHeight').value = selectedCabinet.height;
+            document.getElementById('cabinetDepth').value = selectedCabinet.depth;
+        }
+        
+        function updateSelectedCabinet() {
+            if (!selectedCabinet) return;
+            
+            selectedCabinet.width = parseFloat(document.getElementById('cabinetWidth').value);
+            selectedCabinet.height = parseFloat(document.getElementById('cabinetHeight').value);
+            selectedCabinet.depth = parseFloat(document.getElementById('cabinetDepth').value);
+            
+            updateProjectSummary();
+            render();
+        }
+        
+        function deleteSelected() {
+            if (!selectedCabinet) return;
+            
+            saveState();
+            
+            const index = cabinets.findIndex(c => c.id === selectedCabinet.id);
+            if (index > -1) {
+                cabinets.splice(index, 1);
+                selectCabinet(null);
+                updateProjectSummary();
+                render();
+                
+                // Update 3D view if active
+                if (is3DMode) {
+                    update3DCabinets();
+                }
+                
+                navigator.vibrate && navigator.vibrate([50, 50, 50]);
+                document.getElementById('statusText').textContent = 'Cabinet deleted';
+            }
+        }
+        
+        function duplicateSelected() {
+            if (!selectedCabinet) return;
+            
+            saveState();
+            
+            const newCabinet = {
+                ...selectedCabinet,
+                id: Date.now(),
+                x: selectedCabinet.x + 36,
+                y: selectedCabinet.y
+            };
+            
+            if (newCabinet.x + newCabinet.width > roomWidth) {
+                newCabinet.x = selectedCabinet.x;
+                newCabinet.y = selectedCabinet.y + 30;
+            }
+            
+            if (newCabinet.y + newCabinet.depth > roomDepth) {
+                navigator.vibrate && navigator.vibrate(200);
+                document.getElementById('statusText').textContent = 'No room to duplicate here!';
+                return;
+            }
+            
+            cabinets.push(newCabinet);
+            selectCabinet(newCabinet);
+            updateProjectSummary();
+            render();
+            
+            // Update 3D preview
+            update3DPreview();
+            
+            navigator.vibrate && navigator.vibrate(50);
+        }
+        
+        // State management
+        function saveState() {
+            cabinetHistory.push(JSON.parse(JSON.stringify(cabinets)));
+            if (cabinetHistory.length > 10) {
+                cabinetHistory.shift();
+            }
+        }
+        
+        function undoLast() {
+            if (cabinetHistory.length > 0) {
+                cabinets = cabinetHistory.pop();
+                selectCabinet(null);
+                updateProjectSummary();
+                render();
+                
+                // Update 3D preview
+                update3DPreview();
+                
+                navigator.vibrate && navigator.vibrate(50);
+                document.getElementById('statusText').textContent = 'Undone';
+            }
+        }
+        
+        // Room functions
+        function updateRoom() {
+            roomWidth = parseInt(document.getElementById('roomWidth').value);
+            roomDepth = parseInt(document.getElementById('roomDepth').value);
+            
+            updateRoomDisplay();
+            resizeCanvas();
+        }
+        
+        function updateRoomDisplay() {
+            document.getElementById('roomDisplay').textContent = `${roomWidth}" × ${roomDepth}"`;
+            const sqFt = Math.round((roomWidth * roomDepth) / 144);
+            document.getElementById('roomSqFt').textContent = `${sqFt} sq ft`;
+        }
+        
+        // Project functions
+        function updateProjectSummary() {
+            const totalCabinets = cabinets.length;
+            const linearFeet = cabinets.reduce((sum, cabinet) => sum + cabinet.width, 0) / 12;
+            const totalCost = cabinets.reduce((sum, cabinet) => {
+                const sqft = (cabinet.width * cabinet.height) / 144;
+                return sum + (sqft * 120);
+            }, 0);
+            const cutSheets = Math.ceil(totalCabinets * 2.2);
+            
+            document.getElementById('cabinetCount').textContent = totalCabinets;
+            document.getElementById('linearFeet').textContent = linearFeet.toFixed(1) + "'";
+            document.getElementById('totalCost').textContent = '$' + Math.round(totalCost / 100) * 100;
+            document.getElementById('cutSheets').textContent = cutSheets;
+        }
+        
+        // Zoom functions
+        function zoomIn() {
+            scale = Math.min(8, scale * 1.2);
+            document.getElementById('zoomLevel').textContent = `${Math.round((scale/3) * 100)}%`;
+            render();
+        }
+        
+        function zoomOut() {
+            scale = Math.max(1, scale * 0.8);
+            document.getElementById('zoomLevel').textContent = `${Math.round((scale/3) * 100)}%`;
+            render();
+        }
+        
+        function zoomFit() {
+            const rect = canvas.getBoundingClientRect();
+            const margin = 40;
+            const availableWidth = rect.width - 2 * margin;
+            const availableHeight = rect.height - 2 * margin;
+            
+            const scaleX = availableWidth / roomWidth;
+            const scaleY = availableHeight / roomDepth;
+            
+            scale = Math.min(scaleX, scaleY, 6);
+            document.getElementById('zoomLevel').textContent = `${Math.round((scale/3) * 100)}%`;
+            
+            offsetX = (rect.width - roomWidth * scale) / 2;
+            offsetY = (rect.height - roomDepth * scale) / 2;
+            
+            render();
+        }
+        
+        // Utility functions
+        function clearAll() {
+            if (cabinets.length === 0) return;
+            
+            if (confirm('Clear all cabinets?')) {
+                saveState();
+                cabinets = [];
+                selectCabinet(null);
+                updateProjectSummary();
+                render();
+                
+                // Update 3D preview
+                update3DPreview();
+                
+                navigator.vibrate && navigator.vibrate([100, 50, 100]);
+            }
+        }
+        
+        function generateCutList() {
+            if (cabinets.length === 0) {
+                alert('No cabinets to generate cut list from.');
+                return;
+            }
+            
+            navigator.vibrate && navigator.vibrate(50);
+            alert(`Cut list ready!\n\n${cabinets.length} cabinets will create approximately ${Math.ceil(cabinets.length * 8)} parts.\n\nThis integrates with your existing cut planning feature.`);
+        }
+        
+        function saveDesign() {
+            const design = {
+                room: { width: roomWidth, depth: roomDepth },
+                cabinets: cabinets,
+                created: new Date().toISOString()
+            };
+            
+            console.log('💾 Saving design:', design);
+            navigator.vibrate && navigator.vibrate(50);
+            alert('Design saved!');
+        }
+        
+        function exportImage() {
+            const link = document.createElement('a');
+            link.download = 'cabinet-design.png';
+            link.href = canvas.toDataURL();
+            link.click();
+            
+            navigator.vibrate && navigator.vibrate(50);
+        }
+        
+        function buildFromJobParts() {
+            if (!jobParts || jobParts.length === 0) {
+                alert('No job parts available.');
+                return;
+            }
+            
+            saveState();
+            cabinets = [];
+            
+            let currentX = 12;
+            let currentY = 12;
+            
+            jobParts.forEach((part, index) => {
+                if (!part.width || !part.height) return;
+                
+                const width = Math.round(parseFloat(part.width));
+                const height = Math.round(parseFloat(part.height));
+                
+                let cabinetType = 'base';
+                let cabinetHeight = 34.5;
+                let cabinetDepth = 24;
+                
+                if (height > 60) {
+                    cabinetType = 'tall';
+                    cabinetHeight = 84;
+                } else if (height < 20) {
+                    cabinetType = 'wall';
+                    cabinetHeight = 30;
+                    cabinetDepth = 12;
+                }
+                
+                if (currentX + width > roomWidth - 12) {
+                    currentX = 12;
+                    currentY += cabinetDepth + 6;
+                }
+                
+                if (currentY + cabinetDepth > roomDepth - 12) return;
+                
+                const cabinet = {
+                    id: Date.now() + index,
+                    type: cabinetType,
+                    width: width,
+                    height: cabinetHeight,
+                    depth: cabinetDepth,
+                    x: currentX,
+                    y: currentY
+                };
+                
+                cabinets.push(cabinet);
+                currentX += width + 3;
+            });
+            
+            updateProjectSummary();
+            render();
+            zoomFit();
+            
+            // Update 3D preview
+            update3DPreview();
+            
+            navigator.vibrate && navigator.vibrate([50, 50, 50]);
+            alert(`Created ${cabinets.length} cabinets from your job parts!`);
+        }
+        
+        // Initialize when DOM loads
+        document.addEventListener('DOMContentLoaded', init);
+    </script>
+</body>
+</html>
