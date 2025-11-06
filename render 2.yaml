@@ -1,0 +1,15 @@
+services:
+  - type: web
+    name: cutbyzewo
+    env: python
+    plan: starter
+    buildCommand: ""
+    startCommand: gunicorn app:app
+    autoDeploy: true
+    envVars:
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_KEY
+        sync: false
+      - key: SECRET_KEY
+        sync: false
