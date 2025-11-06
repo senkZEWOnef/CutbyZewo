@@ -3,13 +3,13 @@ services:
     name: cutbyzewo
     env: python
     plan: starter
-    buildCommand: ""
-    startCommand: gunicorn app:app
+    buildCommand: "pip install -r requirements.txt"
+    startCommand: "gunicorn app:app --bind 0.0.0.0:$PORT"
     autoDeploy: true
     envVars:
-      - key: SUPABASE_URL
-        sync: false
-      - key: SUPABASE_KEY
+      - key: NEON_DATABASE_URL
         sync: false
       - key: SECRET_KEY
         sync: false
+      - key: FLASK_ENV
+        value: production

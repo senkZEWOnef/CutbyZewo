@@ -24,7 +24,7 @@ load_dotenv()
 
 # ✅ Flask Init
 app = Flask(__name__)
-app.secret_key = "Poesie509$$$"
+app.secret_key = os.environ.get('SECRET_KEY', 'dev-key-change-in-production')
 
 # ✅ Ensure folders exist
 os.makedirs("static/sheets", exist_ok=True)
