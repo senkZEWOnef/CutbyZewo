@@ -212,8 +212,7 @@ def home():
 
     current_date = datetime.now().date()
     
-    user = current_user() if user_id else None
-    return render_template("landing.html", user=user, jobs=upcoming_deadlines, recent_jobs=recent_jobs, stats=stats, current_date=current_date)
+    return render_template("landing.html", jobs=upcoming_deadlines, recent_jobs=recent_jobs, stats=stats, current_date=current_date)
 
 # ===== JOB ROUTES =====
 
