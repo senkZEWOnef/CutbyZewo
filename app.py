@@ -869,17 +869,82 @@ def save_estimate(job_id):
     if "user_id" not in session:
         return redirect(url_for("login"))
     
-    # This is a simplified version - you can expand based on your needs
+    user_id = session["user_id"]
+    
     try:
-        estimate_data = request.get_json()
+        # Verify job ownership
+        job = execute_single(
+            "SELECT * FROM jobs WHERE id = %s AND user_id = %s",
+            (job_id, user_id)
+        )
         
-        # Save estimate logic here
+        if not job:
+            flash("Job not found.", "danger")
+            return redirect(url_for("jobs"))
+        
+        # Get form data from the estimate modal
+        amount = request.form.get("amount", 0)
+        lf = request.form.get("lf", 0)
+        
+        # Create a simple estimate record
+        estimate_id = str(uuid.uuid4())
+        execute_query(
+            "INSERT INTO estimates (id, job_id, name, description, amount) VALUES (%s, %s, %s, %s, %s)",
+            (estimate_id, job_id, f"Estimate for {job.get('client_name', 'Job')}", "Auto-generated estimate", float(amount) if amount else 0),
+            fetch=False
+        )
+        
+        # Add main line items
+        if lf:
+            execute_query(
+                "INSERT INTO estimate_items (estimate_id, item_type, name, quantity, unit_price, total_price) VALUES (%s, %s, %s, %s, %s, %s)",
+                (estimate_id, "labor", "Linear Feet", float(lf), 150, float(lf) * 150),
+                fetch=False
+            )
+        
+        # Handle accessories
+        acc_names = request.form.getlist("acc_name[]")
+        acc_qtys = request.form.getlist("acc_qty[]")
+        acc_units = request.form.getlist("acc_unit[]")
+        
+        for i, name in enumerate(acc_names):
+            if name and i < len(acc_qtys) and i < len(acc_units):
+                try:
+                    qty = float(acc_qtys[i]) if acc_qtys[i] else 0
+                    unit_price = float(acc_units[i]) if acc_units[i] else 0
+                    if qty > 0 and unit_price > 0:
+                        execute_query(
+                            "INSERT INTO estimate_items (estimate_id, item_type, name, quantity, unit_price, total_price) VALUES (%s, %s, %s, %s, %s, %s)",
+                            (estimate_id, "hardware", name, qty, unit_price, qty * unit_price),
+                            fetch=False
+                        )
+                except ValueError:
+                    continue
+        
+        # Handle commissions
+        com_names = request.form.getlist("com_name[]")
+        com_amounts = request.form.getlist("com_amount[]")
+        
+        for i, name in enumerate(com_names):
+            if name and i < len(com_amounts):
+                try:
+                    amount_val = float(com_amounts[i]) if com_amounts[i] else 0
+                    if amount_val > 0:
+                        execute_query(
+                            "INSERT INTO estimate_items (estimate_id, item_type, name, quantity, unit_price, total_price) VALUES (%s, %s, %s, %s, %s, %s)",
+                            (estimate_id, "labor", f"Commission: {name}", 1, amount_val, amount_val),
+                            fetch=False
+                        )
+                except ValueError:
+                    continue
+        
         flash("Estimate saved successfully!", "success")
-        return jsonify({"success": True})
+        return redirect(url_for("job_details", job_id=job_id))
         
     except Exception as e:
         print("Error saving estimate:", e)
-        return jsonify({"success": False, "error": str(e)})
+        flash("Could not save estimate.", "danger")
+        return redirect(url_for("job_details", job_id=job_id))
 
 # ===== PDF EXPORT =====
 
