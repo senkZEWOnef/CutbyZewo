@@ -355,7 +355,7 @@ def create_job():
         print("DEBUG: Panel dimensions:", panel_width, "x", panel_height)
         
         try:
-            optimized = optimize_cuts(panel_width, panel_height, parts_data)
+            optimized = optimize_cuts(panel_width, panel_height, [(w, h) for w, h, *_ in parts_data])
             print("DEBUG: Optimization result:", optimized)
             sheet_images = draw_sheets_to_files(optimized, f"static/sheets/{job_uuid}")
             print("DEBUG: Generated sheet images:", sheet_images)
