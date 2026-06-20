@@ -906,12 +906,18 @@ def view_estimate(estimate_id):
             fetch=True
         )
         
-        # Group items by type
+        # Group items by type and compute totals per category
         grouped_items = defaultdict(list)
+        totals = {"material": 0.0, "hardware": 0.0, "labor": 0.0}
         for item in items:
             grouped_items[item["item_type"]].append(item)
-        
-        return render_template("view_estimate.html", estimate=estimate, grouped_items=dict(grouped_items))
+            if item["item_type"] in totals:
+                totals[item["item_type"]] += float(item.get("total_price") or 0)
+
+        # Build a minimal job object the template expects
+        job = {"id": str(estimate["job_id"]), "client_name": estimate["client_name"]}
+
+        return render_template("view_estimate.html", estimate=estimate, grouped_items=dict(grouped_items), job=job, totals=totals)
         
     except Exception as e:
         print("Error viewing estimate:", e)
@@ -1186,7 +1192,7 @@ def cabinet_designer():
         return redirect(url_for("login"))
     return render_template("ipad_cabinet_designer.html")
 
-@app.route("/cabinet-designer/<int:job_id>")
+@app.route("/cabinet-designer/<job_id>")
 def cabinet_designer_job(job_id):
     if "user_id" not in session:
         flash("Please log in to access the cabinet designer.", "warning")
@@ -1219,7 +1225,7 @@ def cabinet_designer_job(job_id):
         flash("Could not load cabinet designer.", "danger")
         return redirect(url_for("jobs"))
 
-@app.route("/simple-designer/<int:job_id>")  
+@app.route("/simple-designer/<job_id>")  
 def simple_designer_job(job_id):
     if "user_id" not in session:
         flash("Please log in to access the designer.", "warning")

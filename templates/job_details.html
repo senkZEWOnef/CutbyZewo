@@ -596,7 +596,7 @@ function clearCanvas() {
 
 function saveSketch() {
   const dataURL = canvas.toDataURL('image/png');
-  const jobId = {{ job.id }};
+  const jobId = "{{ job.id }}";
   
   // Create a temporary download link
   const link = document.createElement('a');
@@ -625,7 +625,7 @@ function saveSketch() {
 }
 
 function loadSavedSketches() {
-  const jobId = {{ job.id }};
+  const jobId = "{{ job.id }}";
   const savedSketches = JSON.parse(localStorage.getItem(`sketches_${jobId}`) || '[]');
   const gallery = document.getElementById('sketchGallery');
   const container = document.getElementById('savedSketches');
@@ -672,7 +672,7 @@ function loadSketch(dataURL) {
 
 function deleteSketch(index) {
   if (confirm('Delete this sketch?')) {
-    const jobId = {{ job.id }};
+    const jobId = "{{ job.id }}";
     const savedSketches = JSON.parse(localStorage.getItem(`sketches_${jobId}`) || '[]');
     savedSketches.splice(index, 1);
     localStorage.setItem(`sketches_${jobId}`, JSON.stringify(savedSketches));
