@@ -268,47 +268,101 @@ def create_job():
                     fetch=False
                 )
 
-        # Process parts data
+        # Process parts data - handle both array and indexed formats
         parts_data = []
-        part_index = 0
-        while True:
-            width_key = f"width_{part_index}"
-            height_key = f"height_{part_index}"
-            thickness_key = f"thickness_{part_index}"
-            material_key = f"material_{part_index}"
-            
-            if width_key not in request.form:
-                break
-            
-            width = request.form.get(width_key)
-            height = request.form.get(height_key)
-            thickness = request.form.get(thickness_key, "3/4")
-            material = request.form.get(material_key, "Plywood")
-            
-            if width and height:
-                try:
-                    w = float(width)
-                    h = float(height)
-                    parts_data.append((w, h, thickness))
+        
+        # Debug: Print form data
+        print("DEBUG: Form data received:", dict(request.form))
+        
+        # Try array format first (current form)
+        widths = request.form.getlist('widths')
+        heights = request.form.getlist('heights')
+        quantities = request.form.getlist('quantities')
+        thicknesses = request.form.getlist('thicknesses')
+        
+        print("DEBUG: Parsed arrays - widths:", widths, "heights:", heights, "quantities:", quantities, "thicknesses:", thicknesses)
+        
+        if widths and heights:
+            # Process array format
+            for i in range(len(widths)):
+                if i < len(heights):
+                    width = widths[i]
+                    height = heights[i]
+                    quantity = int(quantities[i]) if i < len(quantities) and quantities[i] else 1
+                    thickness = thicknesses[i] if i < len(thicknesses) else "3/4"
                     
-                    # Save to database
-                    execute_query(
-                        "INSERT INTO parts (job_id, width, height, thickness, material) VALUES (%s, %s, %s, %s, %s)",
-                        (job_uuid, w, h, thickness, material),
-                        fetch=False
-                    )
-                except ValueError:
-                    continue
-            
-            part_index += 1
+                    if width and height:
+                        try:
+                            w = float(width)
+                            h = float(height)
+                            
+                            # Create multiple parts based on quantity
+                            for _ in range(quantity):
+                                parts_data.append((w, h, thickness))
+                                
+                                # Save to database
+                                execute_query(
+                                    "INSERT INTO parts (job_id, width, height, thickness, material) VALUES (%s, %s, %s, %s, %s)",
+                                    (job_uuid, w, h, thickness, "Plywood"),
+                                    fetch=False
+                                )
+                        except ValueError:
+                            continue
+        else:
+            # Fallback to indexed format
+            part_index = 0
+            while True:
+                width_key = f"width_{part_index}"
+                height_key = f"height_{part_index}"
+                thickness_key = f"thickness_{part_index}"
+                material_key = f"material_{part_index}"
+                
+                if width_key not in request.form:
+                    break
+                
+                width = request.form.get(width_key)
+                height = request.form.get(height_key)
+                thickness = request.form.get(thickness_key, "3/4")
+                material = request.form.get(material_key, "Plywood")
+                
+                if width and height:
+                    try:
+                        w = float(width)
+                        h = float(height)
+                        parts_data.append((w, h, thickness))
+                        
+                        # Save to database
+                        execute_query(
+                            "INSERT INTO parts (job_id, width, height, thickness, material) VALUES (%s, %s, %s, %s, %s)",
+                            (job_uuid, w, h, thickness, material),
+                            fetch=False
+                        )
+                    except ValueError:
+                        continue
+                
+                part_index += 1
 
         if not parts_data:
+            print("DEBUG: No parts data found!")
             flash("No valid parts found. Please add at least one part.", "warning")
             return redirect(url_for("create_job"))
 
+        print("DEBUG: Parts data:", parts_data)
+
         # Generate optimized cuts
-        optimized = optimize_cuts(parts_data)
-        sheet_images = draw_sheets_to_files(optimized, job_uuid)
+        panel_width = float(request.form.get('panel_width', 96))
+        panel_height = float(request.form.get('panel_height', 48))
+        print("DEBUG: Panel dimensions:", panel_width, "x", panel_height)
+        
+        try:
+            optimized = optimize_cuts(panel_width, panel_height, parts_data)
+            print("DEBUG: Optimization result:", optimized)
+            sheet_images = draw_sheets_to_files(optimized, f"static/sheets/{job_uuid}")
+            print("DEBUG: Generated sheet images:", sheet_images)
+        except Exception as e:
+            print("ERROR in cut optimization:", e)
+            flash(f"Error generating cuts: {e}", "danger")
+            return redirect(url_for("create_job"))
 
         return render_template(
             "result.html",
