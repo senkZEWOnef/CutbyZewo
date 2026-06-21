@@ -29,6 +29,21 @@ app.secret_key = os.environ.get('SECRET_KEY', 'dev-key-change-in-production')
 os.makedirs("static/sheets", exist_ok=True)
 os.makedirs("static/uploads", exist_ok=True)
 
+# Ensure cut_sheets table exists (safe to run on every startup)
+try:
+    execute_query("""
+        CREATE TABLE IF NOT EXISTS cut_sheets (
+            id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+            job_id UUID NOT NULL REFERENCES jobs(id) ON DELETE CASCADE,
+            src VARCHAR(500) NOT NULL,
+            label VARCHAR(100),
+            sheet_number INTEGER,
+            created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+        )
+    """, fetch=False)
+except Exception as _e:
+    print("Warning: could not ensure cut_sheets table:", _e)
+
 # ✅ Session helper (Neon-based)
 def current_user():
     uid = session.get("user_id")
@@ -359,6 +374,14 @@ def create_job():
             print("DEBUG: Optimization result:", optimized)
             sheet_images = draw_sheets_to_files(optimized, f"static/sheets/{job_uuid}")
             print("DEBUG: Generated sheet images:", sheet_images)
+
+            # Persist cut sheet paths so job_details can display them
+            for sheet_number, (src, label) in enumerate(sheet_images, start=1):
+                execute_query(
+                    "INSERT INTO cut_sheets (job_id, src, label, sheet_number) VALUES (%s, %s, %s, %s)",
+                    (job_uuid, src, label, sheet_number),
+                    fetch=False
+                )
         except Exception as e:
             print("ERROR in cut optimization:", e)
             flash(f"Error generating cuts: {e}", "danger")
@@ -464,8 +487,28 @@ def job_details(job_id):
             (job_id,),
             fetch=True
         )
-        
-        return render_template("job_details.html", job=job, parts=parts, deadline=deadline, files=files, estimates=estimates)
+
+        # Get cut sheets; regenerate PNGs if missing from disk (ephemeral filesystem)
+        cut_sheet_rows = execute_query(
+            "SELECT * FROM cut_sheets WHERE job_id = %s ORDER BY sheet_number",
+            (job_id,),
+            fetch=True
+        )
+        sheet_images = []
+        if cut_sheet_rows:
+            files_missing = any(
+                not os.path.exists(f"static/{row['src']}") for row in cut_sheet_rows
+            )
+            if files_missing and parts:
+                try:
+                    parts_xy = [(float(p['width']), float(p['height'])) for p in parts]
+                    optimized = optimize_cuts(96, 48, parts_xy)
+                    draw_sheets_to_files(optimized, f"static/sheets/{job_id}")
+                except Exception as _regen_err:
+                    print("Error regenerating cut sheets:", _regen_err)
+            sheet_images = [{"src": row["src"], "label": row["label"]} for row in cut_sheet_rows]
+
+        return render_template("job_details.html", job=job, parts=parts, deadline=deadline, files=files, estimates=estimates, sheet_images=sheet_images)
         
     except Exception as e:
         print("Error loading job details:", e)

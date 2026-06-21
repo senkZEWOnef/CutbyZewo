@@ -86,6 +86,16 @@ CREATE TABLE files (
     uploaded_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
+-- Cut sheets table (generated cut plan images)
+CREATE TABLE IF NOT EXISTS cut_sheets (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    job_id UUID NOT NULL REFERENCES jobs(id) ON DELETE CASCADE,
+    src VARCHAR(500) NOT NULL,
+    label VARCHAR(100),
+    sheet_number INTEGER,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
 -- Stocks table (inventory management)
 CREATE TABLE stocks (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
