@@ -1,0 +1,138 @@
+{% extends "base.html" %}
+{% block title %}{{ job.client_name }} — Accessories{% endblock %}
+{% block content %}
+
+<div class="mb-4">
+  <h2 class="fw-bold">{{ job.client_name }}</h2>
+  <p class="text-muted mb-0">Job #{{ job.id[:8] }}</p>
+</div>
+
+<!-- Step indicator -->
+<div class="d-flex align-items-center gap-2 mb-4 p-3 bg-light rounded">
+  <span class="badge bg-success rounded-pill px-3 py-2">✓</span>
+  <span class="text-muted">Client Info</span>
+  <span class="text-muted mx-1">›</span>
+  <span class="badge bg-success rounded-pill px-3 py-2">✓</span>
+  <span class="text-muted">Parts</span>
+  <span class="text-muted mx-1">›</span>
+  <span class="badge bg-primary rounded-pill px-3 py-2">3</span>
+  <span class="fw-bold">Accessories</span>
+  <span class="text-muted mx-1">›</span>
+  <span class="badge bg-secondary rounded-pill px-3 py-2">4</span>
+  <span class="text-muted">Estimate</span>
+</div>
+
+{% if accessories %}
+<div class="card mb-4 border-success">
+  <div class="card-header bg-success bg-opacity-10 text-success fw-semibold">
+    {{ accessories|length }} accessory item{{ 's' if accessories|length != 1 }} already saved
+  </div>
+  <div class="card-body p-0">
+    <table class="table table-sm mb-0">
+      <thead class="table-light">
+        <tr><th>Item</th><th>Qty</th><th>Unit</th><th>Unit Price</th></tr>
+      </thead>
+      <tbody>
+        {% for a in accessories %}
+        <tr>
+          <td>{{ a.name }}</td>
+          <td>{{ a.quantity }}</td>
+          <td>{{ a.unit }}</td>
+          <td>${{ "%.2f"|format(a.unit_price) }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endif %}
+
+<div class="card shadow-sm">
+  <div class="card-body p-4">
+
+    <!-- Quick-add buttons -->
+    <p class="fw-semibold mb-2">Quick Add</p>
+    <div class="d-flex flex-wrap gap-2 mb-4">
+      <button type="button" class="btn btn-outline-secondary btn-sm" onclick="quickAdd('European Hinges', 'sets', '12.00')">European Hinges</button>
+      <button type="button" class="btn btn-outline-secondary btn-sm" onclick="quickAdd('Soft Close Slides', 'sets', '25.00')">Soft Close Slides</button>
+      <button type="button" class="btn btn-outline-secondary btn-sm" onclick="quickAdd('Cabinet Pulls', 'sets', '15.00')">Cabinet Pulls</button>
+      <button type="button" class="btn btn-outline-secondary btn-sm" onclick="quickAdd('Cabinet Knobs', 'sets', '8.00')">Cabinet Knobs</button>
+      <button type="button" class="btn btn-outline-secondary btn-sm" onclick="quickAdd('Shelf Pins', 'bags', '5.00')">Shelf Pins</button>
+      <button type="button" class="btn btn-outline-secondary btn-sm" onclick="quickAdd('Drawer Box', 'pieces', '18.00')">Drawer Box</button>
+      <button type="button" class="btn btn-outline-secondary btn-sm" onclick="quickAdd('Door Hinge Plate', 'pieces', '3.00')">Hinge Plate</button>
+    </div>
+
+    <form method="POST">
+
+      <div id="acc-list">
+        <!-- rows injected here -->
+      </div>
+
+      <button type="button" class="btn btn-outline-secondary btn-sm mb-4" onclick="addRow()">
+        + Add Item
+      </button>
+
+      <div class="d-flex gap-2 justify-content-end">
+        <a href="{{ url_for('job_details', job_id=job.id) }}" class="btn btn-outline-secondary px-4">
+          Save &amp; Exit
+        </a>
+        <button type="submit" name="action" value="save_exit" class="btn btn-outline-primary px-4">
+          Save &amp; Exit
+        </button>
+        <button type="submit" name="action" value="next" class="btn btn-primary px-4">
+          Next: Estimate ›
+        </button>
+      </div>
+
+    </form>
+  </div>
+</div>
+
+<script>
+  function rowHTML(name, qty, unit, price) {
+    return `
+      <div class="row g-2 mb-2 align-items-end acc-row">
+        <div class="col">
+          <input type="text" name="acc_name" class="form-control" placeholder="Item name" value="${name || ''}" />
+        </div>
+        <div class="col-2">
+          <input type="number" step="any" min="0" name="acc_quantity" class="form-control" placeholder="Qty" value="${qty || 1}" />
+        </div>
+        <div class="col-2">
+          <select name="acc_unit" class="form-select">
+            <option value="pieces" ${unit==='pieces'?'selected':''}>pieces</option>
+            <option value="sets" ${unit==='sets'?'selected':''}>sets</option>
+            <option value="bags" ${unit==='bags'?'selected':''}>bags</option>
+            <option value="pairs" ${unit==='pairs'?'selected':''}>pairs</option>
+            <option value="ft" ${unit==='ft'?'selected':''}>ft</option>
+          </select>
+        </div>
+        <div class="col">
+          <div class="input-group">
+            <span class="input-group-text">$</span>
+            <input type="number" step="0.01" min="0" name="acc_unit_price" class="form-control" placeholder="Unit price" value="${price || ''}" />
+          </div>
+        </div>
+        <div class="col-auto">
+          <button type="button" class="btn btn-outline-danger btn-sm" onclick="removeRow(this)">✕</button>
+        </div>
+      </div>`;
+  }
+
+  function addRow(name, qty, unit, price) {
+    document.getElementById('acc-list').insertAdjacentHTML('beforeend', rowHTML(name, qty, unit, price));
+  }
+
+  function quickAdd(name, unit, price) {
+    addRow(name, 1, unit, price);
+  }
+
+  function removeRow(btn) {
+    btn.closest('.acc-row').remove();
+  }
+
+  // Start with one empty row
+  addRow();
+</script>
+
+{% endblock %}

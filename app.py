@@ -2,7 +2,7 @@
 from flask import Flask, render_template, request, redirect, url_for, flash, session, send_file, make_response, current_app, jsonify
 from werkzeug.utils import secure_filename
 from datetime import datetime, timedelta
-import os, uuid, shutil, glob, json
+import os, uuid, shutil, glob, json, math
 from io import BytesIO
 from PIL import Image
 
@@ -43,6 +43,21 @@ try:
     """, fetch=False)
 except Exception as _e:
     print("Warning: could not ensure cut_sheets table:", _e)
+
+try:
+    execute_query("""
+        CREATE TABLE IF NOT EXISTS job_accessories (
+            id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+            job_id UUID NOT NULL REFERENCES jobs(id) ON DELETE CASCADE,
+            name VARCHAR(255) NOT NULL,
+            quantity DECIMAL(10,2) DEFAULT 1,
+            unit VARCHAR(50) DEFAULT 'pieces',
+            unit_price DECIMAL(10,2) DEFAULT 0,
+            created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+        )
+    """, fetch=False)
+except Exception as _e:
+    print("Warning: could not ensure job_accessories table:", _e)
 
 # ✅ Session helper (Neon-based)
 def current_user():
@@ -242,162 +257,169 @@ def create_job():
         return render_template("index.html")
 
     user_id = session["user_id"]
-    
+
     try:
-        # Get form data
         client_name = request.form.get("client_name", "").strip()
         soft_deadline = request.form.get("soft_deadline")
         hard_deadline = request.form.get("hard_deadline")
-        
-        # Create job
+
+        if not client_name:
+            flash("Client name is required.", "warning")
+            return render_template("index.html")
+
         job_uuid = str(uuid.uuid4())
         execute_query(
             "INSERT INTO jobs (id, user_id, client_name, status) VALUES (%s, %s, %s, %s)",
             (job_uuid, user_id, client_name, "draft"),
             fetch=False
         )
-        
-        # Add deadlines if provided
+
         if soft_deadline or hard_deadline:
             execute_query(
                 "INSERT INTO deadlines (job_id, user_id, soft_deadline, hard_deadline, job_name) VALUES (%s, %s, %s, %s, %s)",
-                (job_uuid, user_id, 
+                (job_uuid, user_id,
                  datetime.strptime(soft_deadline, '%Y-%m-%d').date() if soft_deadline else None,
                  datetime.strptime(hard_deadline, '%Y-%m-%d').date() if hard_deadline else None,
                  client_name),
                 fetch=False
             )
-        
-        # Handle file uploads
-        uploaded_files = request.files.getlist('job_files')
-        for file in uploaded_files:
-            if file and file.filename:
-                filename = secure_filename(file.filename)
-                file_path = f"static/uploads/{job_uuid}/{filename}"
-                os.makedirs(os.path.dirname(file_path), exist_ok=True)
-                file.save(file_path)
-                
-                execute_query(
-                    "INSERT INTO files (job_id, user_id, filename, storage_path, subfolder) VALUES (%s, %s, %s, %s, %s)",
-                    (job_uuid, user_id, filename, file_path, job_uuid),
-                    fetch=False
-                )
 
-        # Process parts data - handle both array and indexed formats
-        parts_data = []
-        
-        # Debug: Print form data
-        print("DEBUG: Form data received:", dict(request.form))
-        
-        # Try array format first (current form)
-        widths = request.form.getlist('widths')
-        heights = request.form.getlist('heights')
-        quantities = request.form.getlist('quantities')
-        thicknesses = request.form.getlist('thicknesses')
-        
-        print("DEBUG: Parsed arrays - widths:", widths, "heights:", heights, "quantities:", quantities, "thicknesses:", thicknesses)
-        
-        if widths and heights:
-            # Process array format
-            for i in range(len(widths)):
-                if i < len(heights):
-                    width = widths[i]
-                    height = heights[i]
-                    quantity = int(quantities[i]) if i < len(quantities) and quantities[i] else 1
-                    thickness = thicknesses[i] if i < len(thicknesses) else "3/4"
-                    
-                    if width and height:
-                        try:
-                            w = float(width)
-                            h = float(height)
-                            
-                            # Create multiple parts based on quantity
-                            for _ in range(quantity):
-                                parts_data.append((w, h, thickness))
-                                
-                                # Save to database
-                                execute_query(
-                                    "INSERT INTO parts (job_id, width, height, thickness, material) VALUES (%s, %s, %s, %s, %s)",
-                                    (job_uuid, w, h, thickness, "Plywood"),
-                                    fetch=False
-                                )
-                        except ValueError:
-                            continue
-        else:
-            # Fallback to indexed format
-            part_index = 0
-            while True:
-                width_key = f"width_{part_index}"
-                height_key = f"height_{part_index}"
-                thickness_key = f"thickness_{part_index}"
-                material_key = f"material_{part_index}"
-                
-                if width_key not in request.form:
-                    break
-                
-                width = request.form.get(width_key)
-                height = request.form.get(height_key)
-                thickness = request.form.get(thickness_key, "3/4")
-                material = request.form.get(material_key, "Plywood")
-                
-                if width and height:
-                    try:
-                        w = float(width)
-                        h = float(height)
-                        parts_data.append((w, h, thickness))
-                        
-                        # Save to database
-                        execute_query(
-                            "INSERT INTO parts (job_id, width, height, thickness, material) VALUES (%s, %s, %s, %s, %s)",
-                            (job_uuid, w, h, thickness, material),
-                            fetch=False
-                        )
-                    except ValueError:
-                        continue
-                
-                part_index += 1
+        action = request.form.get('action', 'next')
+        if action == 'save_exit':
+            flash(f"Job for {client_name} created.", "success")
+            return redirect(url_for('job_details', job_id=job_uuid))
+        return redirect(url_for('job_step_parts', job_id=job_uuid))
 
-        if not parts_data:
-            print("DEBUG: No parts data found!")
-            flash("No valid parts found. Please add at least one part.", "warning")
-            return redirect(url_for("create_job"))
-
-        print("DEBUG: Parts data:", parts_data)
-
-        # Generate optimized cuts
-        panel_width = float(request.form.get('panel_width', 96))
-        panel_height = float(request.form.get('panel_height', 48))
-        print("DEBUG: Panel dimensions:", panel_width, "x", panel_height)
-        
-        try:
-            optimized = optimize_cuts(panel_width, panel_height, [(w, h) for w, h, *_ in parts_data])
-            print("DEBUG: Optimization result:", optimized)
-            sheet_images = draw_sheets_to_files(optimized, f"static/sheets/{job_uuid}")
-            print("DEBUG: Generated sheet images:", sheet_images)
-
-            # Persist cut sheet paths so job_details can display them
-            for sheet_number, (src, label) in enumerate(sheet_images, start=1):
-                execute_query(
-                    "INSERT INTO cut_sheets (job_id, src, label, sheet_number) VALUES (%s, %s, %s, %s)",
-                    (job_uuid, src, label, sheet_number),
-                    fetch=False
-                )
-        except Exception as e:
-            print("ERROR in cut optimization:", e)
-            flash(f"Error generating cuts: {e}", "danger")
-            return redirect(url_for("create_job"))
-
-        return render_template(
-            "result.html",
-            parts=parts_data,
-            sheet_images=sheet_images,
-            job_id=job_uuid
-        )
-        
     except Exception as e:
         print("Error creating job:", e)
         flash("Error creating job. Please try again.", "danger")
         return redirect(url_for("create_job"))
+
+
+@app.route("/job/<job_id>/step/parts", methods=["GET", "POST"])
+def job_step_parts(job_id):
+    if "user_id" not in session:
+        return redirect(url_for("login"))
+
+    user_id = session["user_id"]
+    job = execute_single("SELECT * FROM jobs WHERE id = %s AND user_id = %s", (job_id, user_id))
+    if not job:
+        flash("Job not found.", "danger")
+        return redirect(url_for("jobs"))
+
+    if request.method == "GET":
+        existing_parts = execute_query(
+            "SELECT * FROM parts WHERE job_id = %s ORDER BY created_at",
+            (job_id,), fetch=True
+        )
+        return render_template("job_parts.html", job=job, parts=existing_parts)
+
+    # POST — save files + parts, regenerate cut sheets
+    uploaded_files = request.files.getlist('job_files')
+    for file in uploaded_files:
+        if file and file.filename:
+            filename = secure_filename(file.filename)
+            file_path = f"static/uploads/{job_id}/{filename}"
+            os.makedirs(os.path.dirname(file_path), exist_ok=True)
+            file.save(file_path)
+            execute_query(
+                "INSERT INTO files (job_id, user_id, filename, storage_path, subfolder) VALUES (%s, %s, %s, %s, %s)",
+                (job_id, user_id, filename, file_path, job_id),
+                fetch=False
+            )
+
+    widths = request.form.getlist('widths')
+    heights = request.form.getlist('heights')
+    quantities = request.form.getlist('quantities')
+    thicknesses = request.form.getlist('thicknesses')
+    panel_width = float(request.form.get('panel_width', 96))
+    panel_height = float(request.form.get('panel_height', 48))
+
+    new_parts = []
+    for i in range(len(widths)):
+        if i < len(heights) and widths[i] and heights[i]:
+            try:
+                w, h = float(widths[i]), float(heights[i])
+                qty = int(quantities[i]) if i < len(quantities) and quantities[i] else 1
+                thickness = thicknesses[i] if i < len(thicknesses) and thicknesses[i] else "3/4"
+                for _ in range(qty):
+                    new_parts.append((w, h, thickness))
+                    execute_query(
+                        "INSERT INTO parts (job_id, width, height, thickness, material) VALUES (%s, %s, %s, %s, %s)",
+                        (job_id, w, h, thickness, "Plywood"),
+                        fetch=False
+                    )
+            except ValueError:
+                continue
+
+    # Regenerate cut sheets from all parts for this job
+    all_parts = execute_query("SELECT * FROM parts WHERE job_id = %s", (job_id,), fetch=True)
+    if all_parts:
+        try:
+            parts_xy = [(float(p['width']), float(p['height'])) for p in all_parts]
+            optimized = optimize_cuts(panel_width, panel_height, parts_xy)
+            execute_query("DELETE FROM cut_sheets WHERE job_id = %s", (job_id,), fetch=False)
+            sheet_images = draw_sheets_to_files(optimized, f"static/sheets/{job_id}")
+            for sheet_number, (src, label) in enumerate(sheet_images, start=1):
+                execute_query(
+                    "INSERT INTO cut_sheets (job_id, src, label, sheet_number) VALUES (%s, %s, %s, %s)",
+                    (job_id, src, label, sheet_number),
+                    fetch=False
+                )
+        except Exception as e:
+            print("Error generating cut sheets:", e)
+            flash(f"Parts saved but cut sheet generation failed: {e}", "warning")
+
+    action = request.form.get('action', 'next')
+    if action == 'save_exit':
+        flash("Parts saved.", "success")
+        return redirect(url_for('job_details', job_id=job_id))
+    return redirect(url_for('job_step_accessories', job_id=job_id))
+
+
+@app.route("/job/<job_id>/step/accessories", methods=["GET", "POST"])
+def job_step_accessories(job_id):
+    if "user_id" not in session:
+        return redirect(url_for("login"))
+
+    user_id = session["user_id"]
+    job = execute_single("SELECT * FROM jobs WHERE id = %s AND user_id = %s", (job_id, user_id))
+    if not job:
+        flash("Job not found.", "danger")
+        return redirect(url_for("jobs"))
+
+    if request.method == "GET":
+        accessories = execute_query(
+            "SELECT * FROM job_accessories WHERE job_id = %s ORDER BY created_at",
+            (job_id,), fetch=True
+        )
+        return render_template("job_accessories.html", job=job, accessories=accessories)
+
+    names = request.form.getlist('acc_name')
+    quantities = request.form.getlist('acc_quantity')
+    units = request.form.getlist('acc_unit')
+    prices = request.form.getlist('acc_unit_price')
+
+    for i in range(len(names)):
+        if names[i].strip():
+            try:
+                qty = float(quantities[i]) if i < len(quantities) and quantities[i] else 1
+                unit = units[i] if i < len(units) and units[i] else 'pieces'
+                price = float(prices[i]) if i < len(prices) and prices[i] else 0
+                execute_query(
+                    "INSERT INTO job_accessories (job_id, name, quantity, unit, unit_price) VALUES (%s, %s, %s, %s, %s)",
+                    (job_id, names[i].strip(), qty, unit, price),
+                    fetch=False
+                )
+            except ValueError:
+                continue
+
+    action = request.form.get('action', 'next')
+    if action == 'save_exit':
+        flash("Accessories saved.", "success")
+        return redirect(url_for('job_details', job_id=job_id))
+    return redirect(url_for('create_detailed_estimate', job_id=job_id))
+
 
 @app.route("/jobs")
 def jobs():
@@ -839,87 +861,124 @@ def calendar():
 
 # ===== ESTIMATE ROUTES =====
 
+SHEET_PRICES = {'3/4': 85.0, '1/2': 65.0, '1/4': 45.0}
+
 @app.route("/create_detailed_estimate/<job_id>", methods=["GET", "POST"])
 def create_detailed_estimate(job_id):
     if "user_id" not in session:
         return redirect(url_for("login"))
-    
+
     user_id = session["user_id"]
-    
+
     try:
         job = execute_single(
             "SELECT * FROM jobs WHERE id = %s AND user_id = %s",
             (job_id, user_id)
         )
-        
+
         if not job:
             flash("Job not found.", "danger")
             return redirect(url_for("jobs"))
-        
+
         if request.method == "POST":
-            # Get form data
             estimate_name = request.form.get("estimate_name")
             description = request.form.get("description")
-            labor_rate = request.form.get("labor_rate")
-            markup_percentage = request.form.get("markup_percentage")
-            
-            # Create estimate
+            labor_fee = float(request.form.get("labor_fee") or 0)
+            commission = float(request.form.get("commission") or 0)
+
             estimate_id = str(uuid.uuid4())
             execute_query(
                 "INSERT INTO estimates (id, job_id, name, description, labor_rate, markup_percentage, amount) VALUES (%s, %s, %s, %s, %s, %s, %s)",
-                (estimate_id, job_id, estimate_name, description, float(labor_rate or 0), float(markup_percentage or 0), 0),
+                (estimate_id, job_id, estimate_name, description, labor_fee, commission, 0),
                 fetch=False
             )
-            
-            # Process estimate items
-            total_amount = 0
-            item_index = 0
-            
-            while True:
-                item_type_key = f"item_type_{item_index}"
-                if item_type_key not in request.form:
-                    break
-                
-                item_type = request.form.get(item_type_key)
-                name = request.form.get(f"item_name_{item_index}")
-                description = request.form.get(f"item_description_{item_index}")
-                quantity = request.form.get(f"quantity_{item_index}")
-                unit = request.form.get(f"unit_{item_index}")
-                unit_price = request.form.get(f"unit_price_{item_index}")
-                
-                if name and quantity and unit_price:
-                    try:
-                        qty = float(quantity)
-                        price = float(unit_price)
-                        total_price = qty * price
-                        total_amount += total_price
-                        
-                        execute_query(
-                            "INSERT INTO estimate_items (estimate_id, item_type, name, description, quantity, unit, unit_price, total_price) VALUES (%s, %s, %s, %s, %s, %s, %s, %s)",
-                            (estimate_id, item_type, name, description, qty, unit, price, total_price),
-                            fetch=False
-                        )
-                    except ValueError:
-                        pass
-                
-                item_index += 1
-            
-            # Apply markup
-            markup_multiplier = 1 + (float(markup_percentage or 0) / 100)
-            final_amount = total_amount * markup_multiplier
-            
-            # Update estimate total
+
+            # Read parallel lists — field names match the template exactly
+            item_types = request.form.getlist('item_type')
+            item_names = request.form.getlist('item_name')
+            item_quantities = request.form.getlist('item_quantity')
+            item_units = request.form.getlist('item_unit')
+            item_prices = request.form.getlist('item_unit_price')
+            item_descriptions = request.form.getlist('item_description')
+
+            line_total = 0
+            for i in range(len(item_names)):
+                name = item_names[i].strip() if i < len(item_names) else ''
+                if not name:
+                    continue
+                try:
+                    itype = item_types[i] if i < len(item_types) else 'material'
+                    qty = float(item_quantities[i]) if i < len(item_quantities) and item_quantities[i] else 1
+                    unit = item_units[i] if i < len(item_units) and item_units[i] else 'pieces'
+                    price = float(item_prices[i]) if i < len(item_prices) and item_prices[i] else 0
+                    desc = item_descriptions[i] if i < len(item_descriptions) else ''
+                    row_total = qty * price
+                    line_total += row_total
+                    execute_query(
+                        "INSERT INTO estimate_items (estimate_id, item_type, name, description, quantity, unit, unit_price, total_price) VALUES (%s, %s, %s, %s, %s, %s, %s, %s)",
+                        (estimate_id, itype, name, desc, qty, unit, price, row_total),
+                        fetch=False
+                    )
+                except ValueError:
+                    continue
+
+            final_amount = line_total + labor_fee + commission
             execute_query(
                 "UPDATE estimates SET amount = %s WHERE id = %s",
                 (final_amount, estimate_id),
                 fetch=False
             )
-            
+
             flash("Estimate created successfully!", "success")
             return redirect(url_for("view_estimate", estimate_id=estimate_id))
-        
-        return render_template("create_detailed_estimate.html", job=job)
-        
+
+        # --- GET: build pre-filled line items from parts + accessories ---
+
+        # Material line items: group parts by thickness, estimate sheets needed
+        parts = execute_query(
+            "SELECT thickness, width, height FROM parts WHERE job_id = %s",
+            (job_id,), fetch=True
+        )
+        thickness_areas = {}
+        for p in parts:
+            t = p['thickness'] or '3/4'
+            area = float(p['width']) * float(p['height'])
+            thickness_areas[t] = thickness_areas.get(t, 0) + area
+
+        sheet_area = 96.0 * 48.0
+        prefill_items = []
+        for thickness in sorted(thickness_areas):
+            sheets = math.ceil(thickness_areas[thickness] / sheet_area * 1.15)  # 15% waste
+            prefill_items.append({
+                'type': 'material',
+                'name': f'{thickness}" Plywood',
+                'quantity': sheets,
+                'unit': 'sheets',
+                'unit_price': SHEET_PRICES.get(thickness, 85.0),
+                'description': f'{thickness}" plywood — {sheets} sheet(s) estimated'
+            })
+
+        # Hardware line items: from accessories step
+        accessories = execute_query(
+            "SELECT * FROM job_accessories WHERE job_id = %s ORDER BY created_at",
+            (job_id,), fetch=True
+        )
+        for acc in accessories:
+            prefill_items.append({
+                'type': 'hardware',
+                'name': acc['name'],
+                'quantity': float(acc['quantity']),
+                'unit': acc['unit'],
+                'unit_price': float(acc['unit_price']),
+                'description': ''
+            })
+
+        return render_template(
+            "create_detailed_estimate.html",
+            job=job,
+            prefill_items=prefill_items
+        )
+
     except Exception as e:
         print("Error creating estimate:", e)
         flash("Could not create estimate.", "danger")

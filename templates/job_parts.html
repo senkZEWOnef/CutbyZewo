@@ -1,0 +1,161 @@
+{% extends "base.html" %}
+{% block title %}{{ job.client_name }} — Add Parts{% endblock %}
+{% block content %}
+
+<div class="mb-4">
+  <h2 class="fw-bold">{{ job.client_name }}</h2>
+  <p class="text-muted mb-0">Job #{{ job.id[:8] }}</p>
+</div>
+
+<!-- Step indicator -->
+<div class="d-flex align-items-center gap-2 mb-4 p-3 bg-light rounded">
+  <span class="badge bg-success rounded-pill px-3 py-2">✓</span>
+  <span class="text-muted">Client Info</span>
+  <span class="text-muted mx-1">›</span>
+  <span class="badge bg-primary rounded-pill px-3 py-2">2</span>
+  <span class="fw-bold">Parts</span>
+  <span class="text-muted mx-1">›</span>
+  <span class="badge bg-secondary rounded-pill px-3 py-2">3</span>
+  <span class="text-muted">Accessories</span>
+  <span class="text-muted mx-1">›</span>
+  <span class="badge bg-secondary rounded-pill px-3 py-2">4</span>
+  <span class="text-muted">Estimate</span>
+</div>
+
+{% if parts %}
+<div class="card mb-4 border-success">
+  <div class="card-header bg-success bg-opacity-10 text-success fw-semibold">
+    {{ parts|length }} part{{ 's' if parts|length != 1 }} already saved
+  </div>
+  <div class="card-body p-0">
+    <table class="table table-sm mb-0">
+      <thead class="table-light">
+        <tr>
+          <th>Width</th>
+          <th>Height</th>
+          <th>Thickness</th>
+          <th>Material</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for p in parts %}
+        <tr>
+          <td>{{ p.width }}"</td>
+          <td>{{ p.height }}"</td>
+          <td>{{ p.thickness }}</td>
+          <td>{{ p.material }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endif %}
+
+<div class="card shadow-sm">
+  <div class="card-body p-4">
+    <form method="POST" enctype="multipart/form-data">
+
+      <h5 class="fw-semibold mb-3">Add Parts</h5>
+
+      <div id="parts-list">
+        <div class="row g-2 mb-2 align-items-end part-row">
+          <div class="col">
+            <label class="form-label small text-muted mb-1">Width (in)</label>
+            <input type="number" step="any" min="0" name="widths" class="form-control" placeholder="e.g. 24" />
+          </div>
+          <div class="col">
+            <label class="form-label small text-muted mb-1">Height (in)</label>
+            <input type="number" step="any" min="0" name="heights" class="form-control" placeholder="e.g. 30" />
+          </div>
+          <div class="col-2">
+            <label class="form-label small text-muted mb-1">Qty</label>
+            <input type="number" step="1" min="1" name="quantities" value="1" class="form-control" />
+          </div>
+          <div class="col">
+            <label class="form-label small text-muted mb-1">Thickness</label>
+            <select name="thicknesses" class="form-select">
+              <option value="3/4">3/4"</option>
+              <option value="1/2">1/2"</option>
+              <option value="1/4">1/4"</option>
+            </select>
+          </div>
+          <div class="col-auto">
+            <button type="button" class="btn btn-outline-danger btn-sm" onclick="removeRow(this)" style="margin-bottom:1px">✕</button>
+          </div>
+        </div>
+      </div>
+
+      <button type="button" class="btn btn-outline-secondary btn-sm mb-4" onclick="addRow()">
+        + Add Another Part
+      </button>
+
+      <hr />
+
+      <div class="row g-3 mb-4">
+        <div class="col-md-4">
+          <label class="form-label fw-semibold">Panel Width (in)</label>
+          <input type="number" step="any" name="panel_width" value="96" class="form-control" />
+        </div>
+        <div class="col-md-4">
+          <label class="form-label fw-semibold">Panel Height (in)</label>
+          <input type="number" step="any" name="panel_height" value="48" class="form-control" />
+        </div>
+        <div class="col-md-4">
+          <label class="form-label fw-semibold">Upload Files <span class="text-muted fw-normal">(optional)</span></label>
+          <input type="file" name="job_files" multiple class="form-control" />
+        </div>
+      </div>
+
+      <div class="d-flex gap-2 justify-content-end">
+        <a href="{{ url_for('job_details', job_id=job.id) }}" class="btn btn-outline-secondary px-4">
+          Save &amp; Exit
+        </a>
+        <button type="submit" name="action" value="save_exit" class="btn btn-outline-primary px-4">
+          Save Parts &amp; Exit
+        </button>
+        <button type="submit" name="action" value="next" class="btn btn-primary px-4">
+          Next: Accessories ›
+        </button>
+      </div>
+
+    </form>
+  </div>
+</div>
+
+<script>
+  function addRow() {
+    const list = document.getElementById('parts-list');
+    const row = document.createElement('div');
+    row.className = 'row g-2 mb-2 align-items-end part-row';
+    row.innerHTML = `
+      <div class="col">
+        <input type="number" step="any" min="0" name="widths" class="form-control" placeholder="e.g. 24" />
+      </div>
+      <div class="col">
+        <input type="number" step="any" min="0" name="heights" class="form-control" placeholder="e.g. 30" />
+      </div>
+      <div class="col-2">
+        <input type="number" step="1" min="1" name="quantities" value="1" class="form-control" />
+      </div>
+      <div class="col">
+        <select name="thicknesses" class="form-select">
+          <option value="3/4">3/4"</option>
+          <option value="1/2">1/2"</option>
+          <option value="1/4">1/4"</option>
+        </select>
+      </div>
+      <div class="col-auto">
+        <button type="button" class="btn btn-outline-danger btn-sm" onclick="removeRow(this)">✕</button>
+      </div>
+    `;
+    list.appendChild(row);
+  }
+
+  function removeRow(btn) {
+    const rows = document.querySelectorAll('.part-row');
+    if (rows.length > 1) btn.closest('.part-row').remove();
+  }
+</script>
+
+{% endblock %}

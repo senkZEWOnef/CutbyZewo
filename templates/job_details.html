@@ -26,10 +26,10 @@
       </span>
       {% endif %}
       
-      {% if job.hard_deadline %}
+      {% if deadline and deadline.hard_deadline %}
       <span class="badge bg-danger me-2">
         <i class="fas fa-exclamation-triangle"></i>
-        Due {{ job.hard_deadline.strftime('%m/%d/%Y') }}
+        Due {{ deadline.hard_deadline.strftime('%m/%d/%Y') }}
       </span>
       {% endif %}
     </div>
@@ -84,7 +84,7 @@
             <strong>Soft Deadline:</strong>
           </div>
           <div class="col-sm-6">
-            {{ job.soft_deadline.strftime('%m/%d/%Y') if job.soft_deadline else 'Not set' }}
+            {{ deadline.soft_deadline.strftime('%m/%d/%Y') if (deadline and deadline.soft_deadline) else 'Not set' }}
           </div>
         </div>
         
@@ -93,9 +93,9 @@
             <strong>Hard Deadline:</strong>
           </div>
           <div class="col-sm-6">
-            {% if job.hard_deadline %}
+            {% if deadline and deadline.hard_deadline %}
               <span class="text-danger fw-bold">
-                {{ job.hard_deadline.strftime('%m/%d/%Y') }}
+                {{ deadline.hard_deadline.strftime('%m/%d/%Y') }}
               </span>
             {% else %}
               <span class="text-muted">Not set</span>

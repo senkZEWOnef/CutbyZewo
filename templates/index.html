@@ -1,130 +1,62 @@
-{% extends "base.html" %} {% block title %}Cut Planner{% endblock %} {% block
-content %}
-<h1 class="mb-4 text-center display-4">Cabinet Cut Planner ✏️</h1>
+{% extends "base.html" %}
+{% block title %}New Job — Step 1{% endblock %}
+{% block content %}
 
-<div class="card p-4 shadow-sm">
-  <form method="POST">
-    <div class="mb-3">
-      <label class="form-label">Client Name:</label>
-      <input
-        type="text"
-        name="client_name"
-        class="form-control"
-        placeholder="e.g., John Doe"
-        required
-      />
-    </div>
-
-    <div class="row mb-3">
-      <div class="col">
-        <label>Soft Deadline (internal):</label>
-        <input type="date" name="soft_deadline" class="form-control" />
-      </div>
-      <div class="col">
-        <label>Hard Deadline (client):</label>
-        <input type="date" name="hard_deadline" class="form-control" />
-      </div>
-    </div>
-
-    <div id="parts-list">
-      <h5>Parts List</h5>
-      <div class="row mb-2">
-        <div class="col">
-          <label class="form-label">Width (in):</label>
-          <input type="number" step="any" name="widths" class="form-control" />
-        </div>
-        <div class="col">
-          <label class="form-label">Height (in):</label>
-          <input type="number" step="any" name="heights" class="form-control" />
-        </div>
-        <div class="col">
-          <label class="form-label">Quantity:</label>
-          <input
-            type="number"
-            step="1"
-            name="quantities"
-            value="1"
-            class="form-control"
-          />
-        </div>
-        <div class="col">
-          <label class="form-label">Thickness:</label>
-          <select name="thicknesses" class="form-select" required>
-            <option value="3/4">3/4</option>
-            <option value="1/2">1/2</option>
-            <option value="1/4">1/4</option>
-          </select>
-        </div>
-      </div>
-    </div>
-
-    <button
-      type="button"
-      class="btn btn-outline-primary mb-3"
-      onclick="addRow()"
-    >
-      ➕ Add Part
-    </button>
-
-    <div class="mb-3">
-      <label class="form-label">Panel Width (default 96):</label>
-      <input
-        type="number"
-        step="any"
-        name="panel_width"
-        value="96"
-        class="form-control"
-      />
-    </div>
-
-    <div class="mb-3">
-      <label class="form-label">Panel Height (default 48):</label>
-      <input
-        type="number"
-        step="any"
-        name="panel_height"
-        value="48"
-        class="form-control"
-      />
-    </div>
-
-    <button type="submit" class="btn btn-primary w-100 mb-2">
-      🚀 Generate Cut Plan
-    </button>
-    <a href="{{ url_for('jobs') }}" class="btn btn-outline-dark w-100">
-      📁 View Saved Jobs
-    </a>
-
-    <a href="{{ url_for('view_stocks') }}" class="btn btn-outline-info"
-      >📊 View Stocks</a
-    >
-  </form>
+<div class="mb-4">
+  <h2 class="fw-bold">New Job</h2>
 </div>
 
-<script>
-  function addRow() {
-    const partsList = document.getElementById("parts-list");
-    const newRow = document.createElement("div");
-    newRow.className = "row mb-2";
-    newRow.innerHTML = `
-      <div class="col">
-        <input type="number" step="any" name="widths" class="form-control" placeholder="Width">
+<!-- Step indicator -->
+<div class="d-flex align-items-center gap-2 mb-4 p-3 bg-light rounded">
+  <span class="badge bg-primary rounded-pill px-3 py-2">1</span>
+  <span class="fw-bold">Client Info</span>
+  <span class="text-muted mx-1">›</span>
+  <span class="badge bg-secondary rounded-pill px-3 py-2">2</span>
+  <span class="text-muted">Parts</span>
+  <span class="text-muted mx-1">›</span>
+  <span class="badge bg-secondary rounded-pill px-3 py-2">3</span>
+  <span class="text-muted">Accessories</span>
+  <span class="text-muted mx-1">›</span>
+  <span class="badge bg-secondary rounded-pill px-3 py-2">4</span>
+  <span class="text-muted">Estimate</span>
+</div>
+
+<div class="card shadow-sm">
+  <div class="card-body p-4">
+    <form method="POST">
+      <div class="mb-4">
+        <label class="form-label fw-semibold">Client Name</label>
+        <input
+          type="text"
+          name="client_name"
+          class="form-control form-control-lg"
+          placeholder="e.g. John Doe"
+          required
+          autofocus
+        />
       </div>
-      <div class="col">
-        <input type="number" step="any" name="heights" class="form-control" placeholder="Height">
+
+      <div class="row mb-4">
+        <div class="col-md-6 mb-3 mb-md-0">
+          <label class="form-label fw-semibold">Soft Deadline <span class="text-muted fw-normal">(internal)</span></label>
+          <input type="date" name="soft_deadline" class="form-control" />
+        </div>
+        <div class="col-md-6">
+          <label class="form-label fw-semibold">Hard Deadline <span class="text-muted fw-normal">(client-facing)</span></label>
+          <input type="date" name="hard_deadline" class="form-control" />
+        </div>
       </div>
-      <div class="col">
-        <input type="number" step="1" name="quantities" value="1" class="form-control" placeholder="Quantity">
+
+      <div class="d-flex gap-2 justify-content-end">
+        <button type="submit" name="action" value="save_exit" class="btn btn-outline-secondary px-4">
+          Save &amp; Exit
+        </button>
+        <button type="submit" name="action" value="next" class="btn btn-primary px-4">
+          Next: Add Parts ›
+        </button>
       </div>
-      <div class="col">
-        <select name="thicknesses" class="form-select" required>
-          <option value="3/4">3/4</option>
-          <option value="1/2">1/2</option>
-          <option value="1/4">1/4</option>
-        </select>
-      </div>
-    `;
-    partsList.appendChild(newRow);
-  }
-</script>
+    </form>
+  </div>
+</div>
+
 {% endblock %}
