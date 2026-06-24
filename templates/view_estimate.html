@@ -61,8 +61,8 @@
       <button class="btn btn-outline-primary" onclick="window.print()">
         <i class="fas fa-print"></i> Print Estimate
       </button>
-      <button class="btn btn-outline-warning" onclick="copyEstimateLink()">
-        <i class="fas fa-link"></i> Share Link
+      <button class="btn btn-outline-warning" onclick="openShareModal()">
+        <i class="fas fa-share-alt"></i> Share with Client
       </button>
       <a href="{{ url_for('create_detailed_estimate', job_id=job.id) }}" class="btn btn-success">
         <i class="fas fa-plus"></i> Create New Estimate
@@ -262,25 +262,33 @@
 </div>
 
 <script>
-function copyEstimateLink() {
-  const url = window.location.href;
-  navigator.clipboard.writeText(url).then(function() {
-    alert('Estimate link copied to clipboard!');
-  }, function(err) {
-    console.error('Could not copy text: ', err);
-    // Fallback for older browsers
-    const textArea = document.createElement("textarea");
-    textArea.value = url;
-    document.body.appendChild(textArea);
-    textArea.focus();
-    textArea.select();
-    try {
-      document.execCommand('copy');
-      alert('Estimate link copied to clipboard!');
-    } catch (err) {
-      alert('Please copy the URL manually from your browser address bar.');
-    }
-    document.body.removeChild(textArea);
+function openShareModal() {
+  const modal = new bootstrap.Modal(document.getElementById('shareModal'));
+  const urlBox = document.getElementById('shareUrl');
+  const qrBox  = document.getElementById('shareQr');
+  const statusEl = document.getElementById('shareStatus');
+  urlBox.value = '';
+  qrBox.style.display = 'none';
+  statusEl.textContent = 'Generating link…';
+  modal.show();
+  fetch('/estimate/generate-share/{{ estimate.id }}')
+    .then(r => r.json())
+    .then(data => {
+      urlBox.value = data.url;
+      statusEl.textContent = '';
+      if (data.qr) {
+        qrBox.src = 'data:image/png;base64,' + data.qr;
+        qrBox.style.display = 'block';
+      }
+    })
+    .catch(() => { statusEl.textContent = 'Error generating link.'; });
+}
+
+function copyShareUrl() {
+  const urlBox = document.getElementById('shareUrl');
+  navigator.clipboard.writeText(urlBox.value).then(() => {
+    document.getElementById('copyBtn').textContent = 'Copied!';
+    setTimeout(() => { document.getElementById('copyBtn').textContent = 'Copy'; }, 2000);
   });
 }
 
@@ -297,5 +305,27 @@ const printStyles = `
 `;
 document.head.insertAdjacentHTML('beforeend', printStyles);
 </script>
+
+<!-- Share Modal -->
+<div class="modal fade" id="shareModal" tabindex="-1">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title"><i class="fas fa-share-alt"></i> Share with Client</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body text-center">
+        <p class="text-muted small mb-3">Send this link — client can view without logging in.</p>
+        <span id="shareStatus" class="text-muted small d-block mb-2"></span>
+        <div class="input-group mb-3">
+          <input type="text" id="shareUrl" class="form-control" readonly />
+          <button id="copyBtn" class="btn btn-outline-secondary" onclick="copyShareUrl()">Copy</button>
+        </div>
+        <img id="shareQr" style="max-width:200px; display:none;" class="img-fluid mt-1" alt="QR Code" />
+        <p class="text-muted small mt-2 mb-0">Scan QR code to open on phone</p>
+      </div>
+    </div>
+  </div>
+</div>
 
 {% endblock %}

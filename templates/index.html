@@ -47,6 +47,23 @@
         </div>
       </div>
 
+      {% if templates %}
+      <div class="mb-4">
+        <label class="form-label fw-semibold">Start from a Template <span class="text-muted fw-normal">(optional)</span></label>
+        <select name="template_id" class="form-select" onchange="showTemplatePreview(this)">
+          <option value="">— No template, start fresh —</option>
+          {% for t in templates %}
+          <option value="{{ t.id }}"
+                  data-parts="{{ t.parts | length }} part type{{ 's' if t.parts | length != 1 }}"
+                  data-accs="{{ t.accessories | length }} accessory item{{ 's' if t.accessories | length != 1 }}">
+            {{ t.name }}
+          </option>
+          {% endfor %}
+        </select>
+        <div id="tpl-preview" class="mt-2 small text-muted" style="display:none;"></div>
+      </div>
+      {% endif %}
+
       <div class="d-flex gap-2 justify-content-end">
         <button type="submit" name="action" value="save_exit" class="btn btn-outline-secondary px-4">
           Save &amp; Exit
@@ -58,5 +75,15 @@
     </form>
   </div>
 </div>
+
+<script>
+function showTemplatePreview(sel) {
+  const preview = document.getElementById('tpl-preview');
+  const opt = sel.options[sel.selectedIndex];
+  if (!sel.value) { preview.style.display = 'none'; return; }
+  preview.style.display = 'block';
+  preview.textContent = `Will import: ${opt.dataset.parts}, ${opt.dataset.accs}`;
+}
+</script>
 
 {% endblock %}

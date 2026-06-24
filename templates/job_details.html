@@ -120,35 +120,22 @@
           </label>
           <div class="input-group">
             <span class="input-group-text">$</span>
-            <input
-              type="number"
-              name="final_price"
-              class="form-control"
-              placeholder="0.00"
-              step="0.01"
-              value="{{ job.final_price or '' }}"
-            />
-            <button class="btn btn-primary" type="submit">
-              <i class="fas fa-save"></i>
-            </button>
+            <input type="number" name="final_price" class="form-control"
+                   placeholder="0.00" step="0.01" value="{{ job.final_price or '' }}" />
+            <button class="btn btn-primary" type="submit"><i class="fas fa-save"></i></button>
           </div>
         </form>
 
-        <!-- Add Estimate Buttons -->
+        <!-- Estimate -->
         <div class="d-grid gap-2 mb-3">
-          <button class="btn btn-outline-success" data-bs-toggle="modal" data-bs-target="#estimateModal">
-            <i class="fas fa-calculator"></i> Quick Estimate
-          </button>
           <a href="{{ url_for('create_detailed_estimate', job_id=job.id) }}" class="btn btn-success">
-            <i class="fas fa-file-invoice-dollar"></i> Detailed Estimate
+            <i class="fas fa-file-invoice-dollar"></i> New Estimate
           </a>
         </div>
 
         <!-- Update Status Form -->
-        <form method="POST" action="{{ url_for('update_job_status', job_id=job.id) }}">
-          <label class="form-label">
-            <i class="fas fa-tasks"></i> Update Status
-          </label>
+        <form method="POST" action="{{ url_for('update_job_status', job_id=job.id) }}" class="mb-3">
+          <label class="form-label"><i class="fas fa-tasks"></i> Update Status</label>
           <div class="input-group">
             <select name="status" class="form-select">
               <option value="draft" {{ 'selected' if job.status == 'draft' else '' }}>Draft</option>
@@ -157,47 +144,94 @@
               <option value="completed" {{ 'selected' if job.status == 'completed' else '' }}>Completed</option>
               <option value="cancelled" {{ 'selected' if job.status == 'cancelled' else '' }}>Cancelled</option>
             </select>
-            <button class="btn btn-outline-primary" type="submit">
-              <i class="fas fa-sync"></i>
-            </button>
+            <button class="btn btn-outline-primary" type="submit"><i class="fas fa-sync"></i></button>
           </div>
         </form>
+
+        <!-- Continue Setup -->
+        <div class="border-top pt-3">
+          <p class="small text-muted mb-2 fw-semibold">ADD / EDIT</p>
+          <div class="d-grid gap-2">
+            <a href="{{ url_for('job_step_parts', job_id=job.id) }}" class="btn btn-outline-primary btn-sm">
+              <i class="fas fa-th-list"></i> Parts
+            </a>
+            <a href="{{ url_for('job_step_accessories', job_id=job.id) }}" class="btn btn-outline-secondary btn-sm">
+              <i class="fas fa-tools"></i> Accessories
+            </a>
+          </div>
+        </div>
+
+        <!-- Save as Template -->
+        <div class="border-top pt-3 mt-2">
+          <button class="btn btn-outline-warning btn-sm w-100" data-bs-toggle="modal" data-bs-target="#saveTemplateModal">
+            <i class="fas fa-bookmark"></i> Save as Template
+          </button>
+        </div>
       </div>
     </div>
 
     <!-- Parts Summary Card -->
     <div class="card mb-4">
       <div class="card-header bg-info text-white">
-        <h6 class="mb-0">
-          <i class="fas fa-list"></i> Parts Summary
-        </h6>
+        <h6 class="mb-0"><i class="fas fa-list"></i> Parts Summary</h6>
       </div>
-      <div class="card-body">
+      <div class="card-body p-0">
         {% if grouped_parts %}
-        <div class="table-responsive">
-          <table class="table table-sm">
-            <thead>
-              <tr>
-                <th>Material</th>
-                <th>Size</th>
-                <th>Qty</th>
-              </tr>
-            </thead>
-            <tbody>
-              {% for part in grouped_parts %}
-              <tr>
-                <td>
-                  <span class="badge bg-secondary">{{ part.material }}</span>
-                </td>
-                <td>{{ part.width }}" × {{ part.height }}"</td>
-                <td>{{ part.quantity }}</td>
-              </tr>
-              {% endfor %}
-            </tbody>
-          </table>
-        </div>
+        <table class="table table-sm mb-0">
+          <thead class="table-light">
+            <tr><th>Size</th><th>Thick</th><th>Qty</th><th></th></tr>
+          </thead>
+          <tbody>
+            {% for part in grouped_parts %}
+            <tr>
+              <td class="small">{{ part.width }}" × {{ part.height }}"</td>
+              <td class="small">{{ part.thickness }}</td>
+              <td class="small">{{ part.quantity }}</td>
+              <td>
+                <form method="POST" action="{{ url_for('delete_part', part_id=part.first_id) }}"
+                      onsubmit="return confirm('Remove one of this part?')">
+                  <button type="submit" class="btn btn-outline-danger btn-sm py-0 px-1">✕</button>
+                </form>
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
         {% else %}
-        <p class="text-muted text-center">No parts defined</p>
+        <p class="text-muted text-center py-3 mb-0">No parts yet</p>
+        {% endif %}
+      </div>
+    </div>
+
+    <!-- Accessories Card -->
+    <div class="card mb-4">
+      <div class="card-header bg-secondary text-white">
+        <h6 class="mb-0"><i class="fas fa-tools"></i> Accessories</h6>
+      </div>
+      <div class="card-body p-0">
+        {% if accessories %}
+        <table class="table table-sm mb-0">
+          <thead class="table-light">
+            <tr><th>Item</th><th>Qty</th><th>Unit Price</th><th></th></tr>
+          </thead>
+          <tbody>
+            {% for acc in accessories %}
+            <tr>
+              <td class="small">{{ acc.name }}</td>
+              <td class="small">{{ acc.quantity }} {{ acc.unit }}</td>
+              <td class="small">${{ "%.2f"|format(acc.unit_price) }}</td>
+              <td>
+                <form method="POST" action="{{ url_for('delete_accessory', acc_id=acc.id) }}"
+                      onsubmit="return confirm('Remove this accessory?')">
+                  <button type="submit" class="btn btn-outline-danger btn-sm py-0 px-1">✕</button>
+                </form>
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+        {% else %}
+        <p class="text-muted text-center py-3 mb-0">No accessories yet</p>
         {% endif %}
       </div>
     </div>
@@ -303,9 +337,13 @@
                 {% endif %}
               </div>
               <div class="text-end">
-                <a href="{{ url_for('view_estimate', job_id=job.id, estimate_id=estimate.id) }}" 
+                <a href="{{ url_for('view_estimate', estimate_id=estimate.id) }}"
                    class="btn btn-sm btn-outline-primary mb-1">
-                  <i class="fas fa-eye"></i> View Details
+                  <i class="fas fa-eye"></i> View
+                </a>
+                <a href="{{ url_for('edit_estimate', estimate_id=estimate.id) }}"
+                   class="btn btn-sm btn-outline-secondary mb-1">
+                  <i class="fas fa-edit"></i> Edit
                 </a>
                 <br>
                 <small class="text-muted">
@@ -452,6 +490,39 @@
           </button>
         </form>
       </div>
+    </div>
+  </div>
+</div>
+
+<!-- Save as Template Modal -->
+<div class="modal fade" id="saveTemplateModal" tabindex="-1">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title"><i class="fas fa-bookmark"></i> Save as Template</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <form method="POST" action="{{ url_for('save_as_template', job_id=job.id) }}">
+        <div class="modal-body">
+          <div class="mb-3">
+            <label class="form-label fw-semibold">Template Name</label>
+            <input type="text" name="template_name" class="form-control"
+                   value="{{ job.client_name }}" required placeholder="e.g. 5ft Kitchen" />
+          </div>
+          <div class="mb-3">
+            <label class="form-label fw-semibold">Description <span class="text-muted fw-normal">(optional)</span></label>
+            <input type="text" name="template_description" class="form-control"
+                   placeholder="e.g. Standard 5ft kitchen — 8 cabinets" />
+          </div>
+          <p class="small text-muted mb-0">
+            Saves all parts and accessories from this job. You can load this template when creating a new job to get an instant estimate.
+          </p>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+          <button type="submit" class="btn btn-warning">Save Template</button>
+        </div>
+      </form>
     </div>
   </div>
 </div>

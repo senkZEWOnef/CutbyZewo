@@ -37,6 +37,7 @@ pydantic_core==2.33.2
 Pygments==2.19.2
 PyJWT==2.10.1
 pyparsing==3.2.3
+qrcode==7.4.2
 pytest==8.4.1
 pytest-mock==3.14.1
 python-dateutil==2.9.0.post0

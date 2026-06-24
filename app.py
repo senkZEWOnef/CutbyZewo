@@ -2,9 +2,15 @@
 from flask import Flask, render_template, request, redirect, url_for, flash, session, send_file, make_response, current_app, jsonify
 from werkzeug.utils import secure_filename
 from datetime import datetime, timedelta
-import os, uuid, shutil, glob, json, math
+import os, uuid, shutil, glob, json, math, secrets, base64 as _b64
 from io import BytesIO
 from PIL import Image
+
+try:
+    import qrcode as _qrcode
+    _HAS_QRCODE = True
+except ImportError:
+    _HAS_QRCODE = False
 
 from reportlab.pdfgen import canvas
 from reportlab.lib.pagesizes import letter
@@ -46,6 +52,28 @@ except Exception as _e:
 
 try:
     execute_query("""
+        ALTER TABLE estimates ADD COLUMN IF NOT EXISTS share_token VARCHAR(64) UNIQUE
+    """, fetch=False)
+except Exception as _e:
+    print("Warning: could not add share_token to estimates:", _e)
+
+try:
+    execute_query("""
+        CREATE TABLE IF NOT EXISTS job_templates (
+            id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+            user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            name VARCHAR(255) NOT NULL,
+            description TEXT,
+            parts JSONB DEFAULT '[]',
+            accessories JSONB DEFAULT '[]',
+            created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+        )
+    """, fetch=False)
+except Exception as _e:
+    print("Warning: could not ensure job_templates table:", _e)
+
+try:
+    execute_query("""
         CREATE TABLE IF NOT EXISTS job_accessories (
             id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
             job_id UUID NOT NULL REFERENCES jobs(id) ON DELETE CASCADE,
@@ -58,6 +86,18 @@ try:
     """, fetch=False)
 except Exception as _e:
     print("Warning: could not ensure job_accessories table:", _e)
+
+def _make_qr_dataurl(url):
+    if not _HAS_QRCODE:
+        return None
+    qr = _qrcode.QRCode(version=1, box_size=6, border=4)
+    qr.add_data(url)
+    qr.make(fit=True)
+    img = qr.make_image(fill_color="black", back_color="white")
+    buf = BytesIO()
+    img.save(buf, format='PNG')
+    return _b64.b64encode(buf.getvalue()).decode()
+
 
 # ✅ Session helper (Neon-based)
 def current_user():
@@ -254,7 +294,11 @@ def create_job():
         return redirect(url_for("login"))
 
     if request.method == "GET":
-        return render_template("index.html")
+        templates = execute_query(
+            "SELECT * FROM job_templates WHERE user_id = %s ORDER BY name",
+            (session["user_id"],), fetch=True
+        ) if "user_id" in session else []
+        return render_template("index.html", templates=templates)
 
     user_id = session["user_id"]
 
@@ -262,10 +306,11 @@ def create_job():
         client_name = request.form.get("client_name", "").strip()
         soft_deadline = request.form.get("soft_deadline")
         hard_deadline = request.form.get("hard_deadline")
+        template_id = request.form.get("template_id", "").strip()
 
         if not client_name:
             flash("Client name is required.", "warning")
-            return render_template("index.html")
+            return render_template("index.html", templates=[])
 
         job_uuid = str(uuid.uuid4())
         execute_query(
@@ -283,6 +328,44 @@ def create_job():
                  client_name),
                 fetch=False
             )
+
+        # Import parts + accessories from template if selected
+        if template_id:
+            tpl = execute_single(
+                "SELECT * FROM job_templates WHERE id = %s AND user_id = %s",
+                (template_id, user_id)
+            )
+            if tpl:
+                tpl_parts = tpl['parts'] if isinstance(tpl['parts'], list) else json.loads(tpl['parts'] or '[]')
+                tpl_accs  = tpl['accessories'] if isinstance(tpl['accessories'], list) else json.loads(tpl['accessories'] or '[]')
+                parts_xy = []
+                for p in tpl_parts:
+                    for _ in range(int(p.get('quantity', 1))):
+                        execute_query(
+                            "INSERT INTO parts (job_id, width, height, thickness, material) VALUES (%s, %s, %s, %s, %s)",
+                            (job_uuid, p['width'], p['height'], p.get('thickness','3/4'), p.get('material','Plywood')),
+                            fetch=False
+                        )
+                        parts_xy.append((float(p['width']), float(p['height'])))
+                for a in tpl_accs:
+                    execute_query(
+                        "INSERT INTO job_accessories (job_id, name, quantity, unit, unit_price) VALUES (%s, %s, %s, %s, %s)",
+                        (job_uuid, a['name'], a.get('quantity', 1), a.get('unit','pieces'), a.get('unit_price', 0)),
+                        fetch=False
+                    )
+                if parts_xy:
+                    try:
+                        optimized = optimize_cuts(96, 48, parts_xy)
+                        sheet_images = draw_sheets_to_files(optimized, f"static/sheets/{job_uuid}")
+                        for n, (src, label) in enumerate(sheet_images, 1):
+                            execute_query(
+                                "INSERT INTO cut_sheets (job_id, src, label, sheet_number) VALUES (%s, %s, %s, %s)",
+                                (job_uuid, src, label, n), fetch=False
+                            )
+                    except Exception as e:
+                        print("Error generating cut sheets from template:", e)
+                flash(f"Job created from template — review parts and go to estimate.", "info")
+                return redirect(url_for('job_step_parts', job_id=job_uuid))
 
         action = request.form.get('action', 'next')
         if action == 'save_exit':
@@ -510,11 +593,42 @@ def job_details(job_id):
             fetch=True
         )
 
+        # Get accessories
+        accessories = execute_query(
+            "SELECT * FROM job_accessories WHERE job_id = %s ORDER BY created_at",
+            (job_id,), fetch=True
+        )
+
+        # Group parts by dimensions for the summary card
+        part_groups = defaultdict(lambda: {'count': 0, 'first_id': None})
+        for p in parts:
+            key = (str(p['width']), str(p['height']), p.get('thickness') or '3/4', p.get('material') or 'Plywood')
+            part_groups[key]['count'] += 1
+            if part_groups[key]['first_id'] is None:
+                part_groups[key]['first_id'] = str(p['id'])
+        grouped_parts = [
+            {'width': k[0], 'height': k[1], 'thickness': k[2], 'material': k[3],
+             'quantity': v['count'], 'first_id': v['first_id']}
+            for k, v in sorted(part_groups.items())
+        ]
+
+        # Build uploaded_images from files
+        image_exts = {'.jpg', '.jpeg', '.png', '.gif', '.webp', '.bmp'}
+        uploaded_images = [
+            {
+                'url': '/' + f['storage_path'],
+                'filename': f['filename'],
+                'subfolder': f.get('subfolder') or '',
+                'id': str(f['id'])
+            }
+            for f in files
+            if os.path.splitext(f['filename'])[1].lower() in image_exts
+        ]
+
         # Get cut sheets; regenerate PNGs if missing from disk (ephemeral filesystem)
         cut_sheet_rows = execute_query(
             "SELECT * FROM cut_sheets WHERE job_id = %s ORDER BY sheet_number",
-            (job_id,),
-            fetch=True
+            (job_id,), fetch=True
         )
         sheet_images = []
         if cut_sheet_rows:
@@ -530,7 +644,13 @@ def job_details(job_id):
                     print("Error regenerating cut sheets:", _regen_err)
             sheet_images = [{"src": row["src"], "label": row["label"]} for row in cut_sheet_rows]
 
-        return render_template("job_details.html", job=job, parts=parts, deadline=deadline, files=files, estimates=estimates, sheet_images=sheet_images)
+        return render_template(
+            "job_details.html",
+            job=job, parts=parts, grouped_parts=grouped_parts,
+            deadline=deadline, uploaded_images=uploaded_images,
+            estimates=estimates, sheet_images=sheet_images,
+            accessories=accessories
+        )
         
     except Exception as e:
         print("Error loading job details:", e)
@@ -655,6 +775,170 @@ def edit_job(job_id):
         print("Error editing job:", e)
         flash("Could not edit job.", "danger")
         return redirect(url_for("jobs"))
+
+@app.route("/delete_part/<part_id>", methods=["POST"])
+def delete_part(part_id):
+    if "user_id" not in session:
+        return redirect(url_for("login"))
+    user_id = session["user_id"]
+    part = execute_single(
+        "SELECT p.*, j.user_id as owner FROM parts p JOIN jobs j ON p.job_id = j.id WHERE p.id = %s",
+        (part_id,)
+    )
+    if not part or str(part['owner']) != str(user_id):
+        flash("Part not found.", "danger")
+        return redirect(url_for("jobs"))
+    job_id = str(part['job_id'])
+    execute_query("DELETE FROM parts WHERE id = %s", (part_id,), fetch=False)
+    # Regenerate cut sheets from remaining parts
+    remaining = execute_query("SELECT * FROM parts WHERE job_id = %s", (job_id,), fetch=True)
+    execute_query("DELETE FROM cut_sheets WHERE job_id = %s", (job_id,), fetch=False)
+    if remaining:
+        try:
+            parts_xy = [(float(p['width']), float(p['height'])) for p in remaining]
+            optimized = optimize_cuts(96, 48, parts_xy)
+            sheet_images = draw_sheets_to_files(optimized, f"static/sheets/{job_id}")
+            for n, (src, label) in enumerate(sheet_images, 1):
+                execute_query(
+                    "INSERT INTO cut_sheets (job_id, src, label, sheet_number) VALUES (%s, %s, %s, %s)",
+                    (job_id, src, label, n), fetch=False
+                )
+        except Exception as e:
+            print("Error regenerating cut sheets after part delete:", e)
+    flash("Part removed.", "success")
+    return redirect(url_for("job_details", job_id=job_id))
+
+
+@app.route("/delete_accessory/<acc_id>", methods=["POST"])
+def delete_accessory(acc_id):
+    if "user_id" not in session:
+        return redirect(url_for("login"))
+    user_id = session["user_id"]
+    acc = execute_single(
+        "SELECT a.*, j.user_id as owner FROM job_accessories a JOIN jobs j ON a.job_id = j.id WHERE a.id = %s",
+        (acc_id,)
+    )
+    if not acc or str(acc['owner']) != str(user_id):
+        flash("Accessory not found.", "danger")
+        return redirect(url_for("jobs"))
+    job_id = str(acc['job_id'])
+    execute_query("DELETE FROM job_accessories WHERE id = %s", (acc_id,), fetch=False)
+    flash("Accessory removed.", "success")
+    return redirect(url_for("job_details", job_id=job_id))
+
+
+# ===== TEMPLATE ROUTES =====
+
+@app.route("/job/<job_id>/save-as-template", methods=["POST"])
+def save_as_template(job_id):
+    if "user_id" not in session:
+        return redirect(url_for("login"))
+    user_id = session["user_id"]
+    job = execute_single("SELECT * FROM jobs WHERE id = %s AND user_id = %s", (job_id, user_id))
+    if not job:
+        flash("Job not found.", "danger")
+        return redirect(url_for("jobs"))
+
+    template_name = request.form.get("template_name", "").strip() or f"Template – {job['client_name']}"
+    template_desc = request.form.get("template_description", "").strip()
+
+    parts = execute_query("SELECT * FROM parts WHERE job_id = %s", (job_id,), fetch=True)
+    part_groups = defaultdict(lambda: {'count': 0})
+    for p in parts:
+        key = (str(p['width']), str(p['height']), p.get('thickness','3/4'), p.get('material','Plywood'))
+        part_groups[key]['count'] += 1
+    parts_json = [
+        {'width': k[0], 'height': k[1], 'thickness': k[2], 'material': k[3], 'quantity': v['count']}
+        for k, v in part_groups.items()
+    ]
+
+    accessories = execute_query("SELECT * FROM job_accessories WHERE job_id = %s", (job_id,), fetch=True)
+    acc_json = [
+        {'name': a['name'], 'quantity': float(a['quantity']), 'unit': a['unit'], 'unit_price': float(a['unit_price'])}
+        for a in accessories
+    ]
+
+    execute_query(
+        "INSERT INTO job_templates (user_id, name, description, parts, accessories) VALUES (%s, %s, %s, %s, %s)",
+        (user_id, template_name, template_desc, json.dumps(parts_json), json.dumps(acc_json)),
+        fetch=False
+    )
+    flash(f'Template "{template_name}" saved.', "success")
+    return redirect(url_for("job_details", job_id=job_id))
+
+
+@app.route("/templates")
+def list_templates():
+    if "user_id" not in session:
+        return redirect(url_for("login"))
+    user_id = session["user_id"]
+    templates = execute_query(
+        "SELECT * FROM job_templates WHERE user_id = %s ORDER BY name",
+        (user_id,), fetch=True
+    )
+    # Parse JSON fields
+    for t in templates:
+        t['parts']       = t['parts'] if isinstance(t['parts'], list) else json.loads(t['parts'] or '[]')
+        t['accessories'] = t['accessories'] if isinstance(t['accessories'], list) else json.loads(t['accessories'] or '[]')
+    return render_template("job_templates.html", templates=templates)
+
+
+@app.route("/delete-template/<template_id>", methods=["POST"])
+def delete_template(template_id):
+    if "user_id" not in session:
+        return redirect(url_for("login"))
+    user_id = session["user_id"]
+    execute_query(
+        "DELETE FROM job_templates WHERE id = %s AND user_id = %s",
+        (template_id, user_id), fetch=False
+    )
+    flash("Template deleted.", "success")
+    return redirect(url_for("list_templates"))
+
+
+# ===== SHARE ROUTES =====
+
+@app.route("/estimate/generate-share/<estimate_id>")
+def generate_share(estimate_id):
+    if "user_id" not in session:
+        return jsonify({'error': 'Not authenticated'}), 401
+    user_id = session["user_id"]
+    estimate = execute_single(
+        "SELECT e.*, j.user_id as owner FROM estimates e JOIN jobs j ON e.job_id = j.id WHERE e.id = %s",
+        (estimate_id,)
+    )
+    if not estimate or str(estimate['owner']) != str(user_id):
+        return jsonify({'error': 'Not found'}), 404
+    token = estimate.get('share_token')
+    if not token:
+        token = secrets.token_urlsafe(24)
+        execute_query("UPDATE estimates SET share_token = %s WHERE id = %s", (token, estimate_id), fetch=False)
+    share_url = request.host_url.rstrip('/') + url_for('shared_estimate', token=token)
+    return jsonify({'url': share_url, 'qr': _make_qr_dataurl(share_url)})
+
+
+@app.route("/e/<token>")
+def shared_estimate(token):
+    estimate = execute_single("SELECT * FROM estimates WHERE share_token = %s", (token,))
+    if not estimate:
+        return "<h2>Estimate not found or link has expired.</h2>", 404
+    job = execute_single("SELECT * FROM jobs WHERE id = %s", (estimate['job_id'],))
+    items = execute_query(
+        "SELECT * FROM estimate_items WHERE estimate_id = %s ORDER BY item_type, created_at",
+        (str(estimate['id']),), fetch=True
+    )
+    grouped_items = defaultdict(list)
+    totals = {"material": 0.0, "hardware": 0.0, "labor": 0.0}
+    for item in items:
+        grouped_items[item["item_type"]].append(item)
+        if item["item_type"] in totals:
+            totals[item["item_type"]] += float(item.get("total_price") or 0)
+    return render_template(
+        "shared_estimate.html",
+        estimate=estimate, job=job,
+        grouped_items=dict(grouped_items), totals=totals
+    )
+
 
 @app.route("/job_gallery/<job_id>")
 def job_gallery(job_id):
@@ -1025,6 +1309,98 @@ def view_estimate(estimate_id):
         print("Error viewing estimate:", e)
         flash("Could not load estimate.", "danger")
         return redirect(url_for("jobs"))
+
+@app.route("/edit_estimate/<estimate_id>", methods=["GET", "POST"])
+def edit_estimate(estimate_id):
+    if "user_id" not in session:
+        return redirect(url_for("login"))
+    user_id = session["user_id"]
+    try:
+        estimate = execute_single(
+            "SELECT e.*, j.client_name FROM estimates e JOIN jobs j ON e.job_id = j.id WHERE e.id = %s AND j.user_id = %s",
+            (estimate_id, user_id)
+        )
+        if not estimate:
+            flash("Estimate not found.", "danger")
+            return redirect(url_for("jobs"))
+
+        job_id = str(estimate['job_id'])
+        job = execute_single("SELECT * FROM jobs WHERE id = %s", (job_id,))
+
+        if request.method == "POST":
+            labor_fee = float(request.form.get("labor_fee") or 0)
+            commission = float(request.form.get("commission") or 0)
+            estimate_name = request.form.get("estimate_name")
+            description = request.form.get("description")
+
+            execute_query(
+                "UPDATE estimates SET name=%s, description=%s, labor_rate=%s, markup_percentage=%s WHERE id=%s",
+                (estimate_name, description, labor_fee, commission, estimate_id),
+                fetch=False
+            )
+            execute_query("DELETE FROM estimate_items WHERE estimate_id = %s", (estimate_id,), fetch=False)
+
+            item_types = request.form.getlist('item_type')
+            item_names = request.form.getlist('item_name')
+            item_quantities = request.form.getlist('item_quantity')
+            item_units = request.form.getlist('item_unit')
+            item_prices = request.form.getlist('item_unit_price')
+            item_descriptions = request.form.getlist('item_description')
+
+            line_total = 0
+            for i in range(len(item_names)):
+                name = item_names[i].strip() if i < len(item_names) else ''
+                if not name:
+                    continue
+                try:
+                    itype = item_types[i] if i < len(item_types) else 'material'
+                    qty = float(item_quantities[i]) if i < len(item_quantities) and item_quantities[i] else 1
+                    unit = item_units[i] if i < len(item_units) and item_units[i] else 'pieces'
+                    price = float(item_prices[i]) if i < len(item_prices) and item_prices[i] else 0
+                    desc = item_descriptions[i] if i < len(item_descriptions) else ''
+                    row_total = qty * price
+                    line_total += row_total
+                    execute_query(
+                        "INSERT INTO estimate_items (estimate_id, item_type, name, description, quantity, unit, unit_price, total_price) VALUES (%s, %s, %s, %s, %s, %s, %s, %s)",
+                        (estimate_id, itype, name, desc, qty, unit, price, row_total),
+                        fetch=False
+                    )
+                except ValueError:
+                    continue
+
+            final_amount = line_total + labor_fee + commission
+            execute_query("UPDATE estimates SET amount=%s WHERE id=%s", (final_amount, estimate_id), fetch=False)
+            flash("Estimate updated.", "success")
+            return redirect(url_for("view_estimate", estimate_id=estimate_id))
+
+        # GET: load existing items as prefill
+        items = execute_query(
+            "SELECT * FROM estimate_items WHERE estimate_id = %s ORDER BY created_at",
+            (estimate_id,), fetch=True
+        )
+        prefill_items = [
+            {
+                'type': item['item_type'],
+                'name': item['name'],
+                'quantity': float(item['quantity']),
+                'unit': item['unit'],
+                'unit_price': float(item['unit_price']),
+                'description': item.get('description') or ''
+            }
+            for item in items
+        ]
+        return render_template(
+            "create_detailed_estimate.html",
+            job=job,
+            prefill_items=prefill_items,
+            edit_mode=True,
+            estimate=estimate
+        )
+    except Exception as e:
+        print("Error editing estimate:", e)
+        flash("Could not load estimate for editing.", "danger")
+        return redirect(url_for("jobs"))
+
 
 @app.route("/save_estimate/<job_id>", methods=["POST"])
 def save_estimate(job_id):

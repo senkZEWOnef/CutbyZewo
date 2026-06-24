@@ -1,0 +1,64 @@
+{% extends "base.html" %}
+{% block title %}Job Templates{% endblock %}
+{% block content %}
+
+<div class="d-flex justify-content-between align-items-center mb-4">
+  <h2 class="fw-bold mb-0">Job Templates</h2>
+  <a href="{{ url_for('create_job') }}" class="btn btn-primary">+ New Job</a>
+</div>
+
+{% if templates %}
+<div class="row g-3">
+  {% for t in templates %}
+  <div class="col-md-6 col-lg-4">
+    <div class="card h-100 shadow-sm">
+      <div class="card-body">
+        <h5 class="fw-bold mb-1">{{ t.name }}</h5>
+        {% if t.description %}<p class="text-muted small mb-2">{{ t.description }}</p>{% endif %}
+        <div class="d-flex gap-3 text-muted small mb-3">
+          <span><strong>{{ t.parts | length }}</strong> part type{{ 's' if t.parts | length != 1 }}</span>
+          <span><strong>{{ t.accessories | length }}</strong> accessory item{{ 's' if t.accessories | length != 1 }}</span>
+        </div>
+
+        {% if t.parts %}
+        <div class="mb-2">
+          <p class="small fw-semibold text-muted mb-1">Parts:</p>
+          {% for p in t.parts %}
+          <span class="badge bg-light text-dark border me-1 mb-1">
+            {{ p.width }}" × {{ p.height }}" {{ p.thickness }} (×{{ p.quantity }})
+          </span>
+          {% endfor %}
+        </div>
+        {% endif %}
+
+        {% if t.accessories %}
+        <div class="mb-3">
+          <p class="small fw-semibold text-muted mb-1">Accessories:</p>
+          {% for a in t.accessories %}
+          <span class="badge bg-light text-dark border me-1 mb-1">{{ a.name }}</span>
+          {% endfor %}
+        </div>
+        {% endif %}
+      </div>
+      <div class="card-footer d-flex gap-2 bg-transparent">
+        <a href="{{ url_for('create_job') }}?template={{ t.id }}" class="btn btn-primary btn-sm flex-grow-1">
+          Use Template
+        </a>
+        <form method="POST" action="{{ url_for('delete_template', template_id=t.id) }}"
+              onsubmit="return confirm('Delete this template?')">
+          <button type="submit" class="btn btn-outline-danger btn-sm">Delete</button>
+        </form>
+      </div>
+    </div>
+  </div>
+  {% endfor %}
+</div>
+
+{% else %}
+<div class="text-center py-5">
+  <p class="text-muted mb-3">No templates yet. Open a job and use <strong>Save as Template</strong> to create one.</p>
+  <a href="{{ url_for('jobs') }}" class="btn btn-outline-primary">View Jobs</a>
+</div>
+{% endif %}
+
+{% endblock %}
