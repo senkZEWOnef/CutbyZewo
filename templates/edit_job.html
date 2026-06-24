@@ -1,125 +1,62 @@
-{% extends "base.html" %} {% block title %}Edit Job{% endblock %} {% block
-content %}
+{% extends "base.html" %}
+{% block title %}Edit Job{% endblock %}
+{% block content %}
 
-<h1 class="mb-4 text-center">✏️ Edit Job</h1>
+<div class="mb-4">
+  <h2 class="fw-bold">Edit Job</h2>
+  <p class="text-muted mb-0">{{ job.client_name }}</p>
+</div>
 
-<form method="POST" enctype="multipart/form-data" class="card p-4 shadow">
-  <div class="mb-3">
-    <label class="form-label">Client Name:</label>
-    <input
-      type="text"
-      name="client_name"
-      class="form-control"
-      value="{{ job.client_name or '' }}"
-      required
-    />
+<div class="card shadow-sm mb-4">
+  <div class="card-body p-4">
+    <form method="POST" enctype="multipart/form-data">
+
+      <div class="mb-4">
+        <label class="form-label fw-semibold">Client Name</label>
+        <input type="text" name="client_name" class="form-control form-control-lg"
+               value="{{ job.client_name or '' }}" required />
+      </div>
+
+      <div class="row mb-4">
+        <div class="col-md-6 mb-3 mb-md-0">
+          <label class="form-label fw-semibold">Soft Deadline <span class="text-muted fw-normal">(internal)</span></label>
+          <input type="date" name="soft_deadline" class="form-control"
+                 value="{{ deadline.soft_deadline.strftime('%Y-%m-%d') if (deadline and deadline.soft_deadline) else '' }}" />
+        </div>
+        <div class="col-md-6">
+          <label class="form-label fw-semibold">Hard Deadline <span class="text-muted fw-normal">(client-facing)</span></label>
+          <input type="date" name="hard_deadline" class="form-control"
+                 value="{{ deadline.hard_deadline.strftime('%Y-%m-%d') if (deadline and deadline.hard_deadline) else '' }}" />
+        </div>
+      </div>
+
+      <div class="mb-4">
+        <label class="form-label fw-semibold">Upload Files <span class="text-muted fw-normal">(optional)</span></label>
+        <input type="file" name="job_files" multiple class="form-control" />
+      </div>
+
+      <div class="d-flex gap-2 justify-content-end">
+        <a href="{{ url_for('job_details', job_id=job.id) }}" class="btn btn-outline-secondary px-4">Cancel</a>
+        <button type="submit" class="btn btn-primary px-4">Save Changes</button>
+      </div>
+
+    </form>
   </div>
+</div>
 
-  <div class="row mb-3">
-    <div class="col">
-      <label class="form-label">Soft Deadline:</label>
-      <input
-        type="date"
-        name="soft_deadline"
-        class="form-control"
-        value="{% if job.soft_deadline %}{{ job.soft_deadline.strftime('%Y-%m-%d') if job.soft_deadline.__class__.__name__ == 'datetime' else job.soft_deadline.split('T')[0] }}{% endif %}"
-      />
-    </div>
-    <div class="col">
-      <label class="form-label">Hard Deadline:</label>
-      <input
-        type="date"
-        name="hard_deadline"
-        class="form-control"
-        value="{% if job.hard_deadline %}{{ job.hard_deadline.strftime('%Y-%m-%d') if job.hard_deadline.__class__.__name__ == 'datetime' else job.hard_deadline.split('T')[0] }}{% endif %}"
-      />
-    </div>
+<div class="card shadow-sm">
+  <div class="card-header fw-semibold">Continue Setup</div>
+  <div class="card-body d-flex gap-2 flex-wrap">
+    <a href="{{ url_for('job_step_parts', job_id=job.id) }}" class="btn btn-outline-primary">
+      + Add / Edit Parts
+    </a>
+    <a href="{{ url_for('job_step_accessories', job_id=job.id) }}" class="btn btn-outline-secondary">
+      + Add / Edit Accessories
+    </a>
+    <a href="{{ url_for('create_detailed_estimate', job_id=job.id) }}" class="btn btn-outline-success">
+      + Create Estimate
+    </a>
   </div>
-
-  <div class="mb-3">
-    <label class="form-label">Upload Files:</label>
-    <input type="file" name="job_files" multiple class="form-control" />
-  </div>
-
-  <h5 class="mt-4">➕ Add New Parts (optional)</h5>
-  <div id="parts-list">
-    <div class="row mb-2">
-      <div class="col">
-        <input
-          type="number"
-          step="any"
-          name="widths"
-          class="form-control"
-          placeholder="Width"
-        />
-      </div>
-      <div class="col">
-        <input
-          type="number"
-          step="any"
-          name="heights"
-          class="form-control"
-          placeholder="Height"
-        />
-      </div>
-      <div class="col">
-        <input
-          type="number"
-          step="1"
-          name="quantities"
-          value="1"
-          class="form-control"
-          placeholder="Quantity"
-        />
-      </div>
-      <div class="col">
-        <select name="thicknesses" class="form-select">
-          <option value="">Thickness</option>
-          <option value="3/4">3/4</option>
-          <option value="1/2">1/2</option>
-          <option value="1/4">1/4</option>
-        </select>
-      </div>
-    </div>
-  </div>
-
-  <button
-    type="button"
-    class="btn btn-outline-secondary mb-3"
-    onclick="addRow()"
-  >
-    ➕ Add Another Part
-  </button>
-
-  <button type="submit" class="btn btn-success w-100">💾 Save Changes</button>
-</form>
-
-<script>
-  function addRow() {
-    const partsList = document.getElementById("parts-list");
-    const newRow = document.createElement("div");
-    newRow.className = "row mb-2";
-    newRow.innerHTML = `
-      <div class="col">
-        <input type="number" step="any" name="widths" class="form-control" placeholder="Width">
-      </div>
-      <div class="col">
-        <input type="number" step="any" name="heights" class="form-control" placeholder="Height">
-      </div>
-      <div class="col">
-        <input type="number" step="1" name="quantities" value="1" class="form-control" placeholder="Quantity">
-      </div>
-      <div class="col">
-        <select name="thicknesses" class="form-select">
-          <option value="">Thickness</option>
-          <option value="3/4">3/4</option>
-          <option value="1/2">1/2</option>
-          <option value="1/4">1/4</option>
-        </select>
-      </div>
-    `;
-    partsList.appendChild(newRow);
-  }
-</script>
+</div>
 
 {% endblock %}

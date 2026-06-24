@@ -124,7 +124,8 @@ def verify_password(password: str, hashed: str) -> bool:
 
 @app.context_processor
 def inject_user():
-    return dict(current_user=current_user())
+    u = current_user()
+    return dict(current_user=u, user=u)
 
 @app.context_processor  
 def expose_helpers():
@@ -896,6 +897,43 @@ def delete_template(template_id):
     return redirect(url_for("list_templates"))
 
 
+SHEET_PRICES = {'3/4': 85.0, '1/2': 65.0, '1/4': 45.0}
+
+# ===== PUBLIC CATALOG =====
+
+def _calc_template_price(tpl):
+    """Estimate base material + hardware cost from a template."""
+    parts = tpl['parts'] if isinstance(tpl['parts'], list) else json.loads(tpl['parts'] or '[]')
+    accs  = tpl['accessories'] if isinstance(tpl['accessories'], list) else json.loads(tpl['accessories'] or '[]')
+    sheet_area = 96.0 * 48.0
+    thickness_areas = {}
+    for p in parts:
+        t = p.get('thickness', '3/4')
+        area = float(p['width']) * float(p['height']) * int(p.get('quantity', 1))
+        thickness_areas[t] = thickness_areas.get(t, 0) + area
+    mat_cost = sum(
+        math.ceil(area / sheet_area * 1.15) * SHEET_PRICES.get(t, 85.0)
+        for t, area in thickness_areas.items()
+    )
+    acc_cost = sum(float(a.get('quantity', 1)) * float(a.get('unit_price', 0)) for a in accs)
+    return mat_cost + acc_cost
+
+
+@app.route("/catalog")
+def catalog():
+    templates = execute_query(
+        "SELECT * FROM job_templates ORDER BY name",
+        fetch=True
+    )
+    catalog_items = []
+    for t in templates:
+        t['parts']       = t['parts'] if isinstance(t['parts'], list) else json.loads(t['parts'] or '[]')
+        t['accessories'] = t['accessories'] if isinstance(t['accessories'], list) else json.loads(t['accessories'] or '[]')
+        t['base_price']  = _calc_template_price(t)
+        catalog_items.append(t)
+    return render_template("catalog.html", templates=catalog_items)
+
+
 # ===== SHARE ROUTES =====
 
 @app.route("/estimate/generate-share/<estimate_id>")
@@ -1144,8 +1182,6 @@ def calendar():
         return redirect(url_for("home"))
 
 # ===== ESTIMATE ROUTES =====
-
-SHEET_PRICES = {'3/4': 85.0, '1/2': 65.0, '1/4': 45.0}
 
 @app.route("/create_detailed_estimate/<job_id>", methods=["GET", "POST"])
 def create_detailed_estimate(job_id):
