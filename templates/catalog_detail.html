@@ -1,0 +1,281 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>{{ t.name }} — byZewo Cabinet Catalog</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <style>
+    :root {
+      --wood-brown: #8B4513;
+      --light-wood: #D2B48C;
+      --dark-wood: #654321;
+      --sawdust: #F5E6D3;
+    }
+    body {
+      background: linear-gradient(135deg, var(--sawdust) 0%, #fff 100%);
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      min-height: 100vh;
+    }
+    .site-header {
+      background: linear-gradient(45deg, var(--dark-wood), var(--wood-brown));
+      color: white;
+      padding: 1.25rem 0;
+      border-bottom: 3px solid var(--light-wood);
+      box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+    }
+    .site-header .brand { font-size: 1.6rem; font-weight: 700; }
+    .card {
+      border: none;
+      border-radius: 14px;
+      box-shadow: 0 4px 14px rgba(0,0,0,0.09);
+      background: #fff;
+    }
+    .section-title {
+      font-size: .72rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: .6px;
+      color: #888;
+      margin-bottom: .5rem;
+    }
+    .price-block {
+      background: linear-gradient(135deg, #28a745, #20c997);
+      color: white;
+      border-radius: 14px;
+      padding: 1.5rem;
+      text-align: center;
+    }
+    .price-block .price { font-size: 2.2rem; font-weight: 700; }
+    .price-block .note { font-size: .82rem; opacity: .85; }
+    .part-row {
+      display: flex;
+      align-items: center;
+      gap: .75rem;
+      padding: .6rem .75rem;
+      border-radius: 8px;
+      background: #f8faff;
+      border: 1px solid #e0e8ff;
+      margin-bottom: .4rem;
+    }
+    .part-dim { font-weight: 600; font-size: .95rem; }
+    .part-meta { font-size: .78rem; color: #666; }
+    .acc-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: .6rem .75rem;
+      border-radius: 8px;
+      background: #fffbf0;
+      border: 1px solid #f5e0a0;
+      margin-bottom: .4rem;
+    }
+    .acc-name { font-weight: 600; font-size: .9rem; }
+    .acc-meta { font-size: .78rem; color: #666; }
+    .gallery-img {
+      width: 100%;
+      aspect-ratio: 4/3;
+      object-fit: cover;
+      border-radius: 10px;
+      cursor: pointer;
+      transition: transform .15s;
+      border: 2px solid #eee;
+    }
+    .gallery-img:hover { transform: scale(1.02); border-color: var(--wood-brown); }
+    .cut-sheet-img {
+      width: 100%;
+      border-radius: 10px;
+      border: 2px solid #dee2e6;
+      background: #f8f9fa;
+    }
+    .cta-btn {
+      background: linear-gradient(45deg, var(--wood-brown), #c46a28);
+      border: none;
+      color: white;
+      font-weight: 600;
+      padding: .7rem 1.5rem;
+      border-radius: 10px;
+      text-decoration: none;
+      font-size: 1rem;
+      display: inline-block;
+      transition: opacity .15s;
+    }
+    .cta-btn:hover { opacity: .88; color: white; }
+    .back-link { color: var(--wood-brown); font-weight: 600; text-decoration: none; }
+    .back-link:hover { opacity: .8; color: var(--wood-brown); }
+    .site-footer {
+      background: var(--dark-wood);
+      color: rgba(255,255,255,.7);
+      padding: 1.5rem 0;
+      text-align: center;
+      font-size: .85rem;
+      margin-top: 4rem;
+    }
+    /* Lightbox */
+    #lightbox { display:none; position:fixed; inset:0; background:rgba(0,0,0,.85);
+      z-index:9999; align-items:center; justify-content:center; }
+    #lightbox.active { display:flex; }
+    #lightbox img { max-width:90vw; max-height:90vh; border-radius:8px; }
+    #lightbox-close { position:absolute; top:1.2rem; right:1.5rem; color:#fff;
+      font-size:2rem; cursor:pointer; line-height:1; }
+  </style>
+</head>
+<body>
+
+<!-- Header -->
+<header class="site-header">
+  <div class="container d-flex align-items-center justify-content-between">
+    <a href="/catalog" class="brand text-white text-decoration-none">🪚 byZewo</a>
+    <span class="small opacity-75">Cabinet Specialists</span>
+  </div>
+</header>
+
+<div class="container py-4" style="max-width:960px;">
+
+  <!-- Back -->
+  <a href="/catalog" class="back-link mb-4 d-inline-block">
+    <i class="fas fa-arrow-left me-1"></i> Back to Catalog
+  </a>
+
+  <!-- Title row -->
+  <div class="row align-items-start g-4 mb-4">
+    <div class="col-md-8">
+      <h1 class="fw-bold mb-1">{{ t.name }}</h1>
+      {% if t.description %}
+      <p class="text-muted fs-5">{{ t.description }}</p>
+      {% endif %}
+    </div>
+    <div class="col-md-4">
+      <div class="price-block">
+        <div class="price">${{ "{:,.0f}".format(t.base_price) }}</div>
+        <div class="note mt-1">Starting price<br>Materials &amp; hardware included<br><em>Labor quoted separately</em></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Photos / Sketches -->
+  {% if uploaded_images %}
+  <div class="card p-4 mb-4">
+    <div class="section-title"><i class="fas fa-images me-1"></i> Photos &amp; Sketches</div>
+    <div class="row g-3">
+      {% for img in uploaded_images %}
+      <div class="col-6 col-md-4 col-lg-3">
+        <img src="{{ img.url }}" alt="{{ img.filename }}" class="gallery-img"
+             onclick="openLightbox('{{ img.url }}')">
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+  {% endif %}
+
+  <div class="row g-4">
+
+    <!-- Parts -->
+    <div class="col-md-6">
+      <div class="card p-4 h-100">
+        <div class="section-title"><i class="fas fa-vector-square me-1"></i> Panels</div>
+        {% if t.parts %}
+          {% for p in t.parts %}
+          <div class="part-row">
+            <div>
+              <div class="part-dim">{{ p.width }}" × {{ p.height }}"</div>
+              <div class="part-meta">
+                {{ p.thickness or '3/4' }}" thick
+                {% if p.material %} · {{ p.material }}{% endif %}
+              </div>
+            </div>
+            <span class="badge bg-primary ms-auto">×{{ p.quantity or 1 }}</span>
+          </div>
+          {% endfor %}
+        {% else %}
+          <p class="text-muted small mb-0">No panel data recorded.</p>
+        {% endif %}
+      </div>
+    </div>
+
+    <!-- Accessories -->
+    <div class="col-md-6">
+      <div class="card p-4 h-100">
+        <div class="section-title"><i class="fas fa-tools me-1"></i> Hardware &amp; Accessories</div>
+        {% if t.accessories %}
+          {% for a in t.accessories %}
+          <div class="acc-row">
+            <div>
+              <div class="acc-name">{{ a.name or a.acc_name or 'Item' }}</div>
+              {% if a.unit %}
+              <div class="acc-meta">{{ a.unit }}</div>
+              {% endif %}
+            </div>
+            <div class="text-end">
+              <span class="badge bg-warning text-dark">×{{ a.quantity | int }}</span>
+              {% if a.unit_price and a.unit_price > 0 %}
+              <div class="acc-meta">${{ "%.2f"|format(a.unit_price) }} ea.</div>
+              {% endif %}
+            </div>
+          </div>
+          {% endfor %}
+        {% else %}
+          <p class="text-muted small mb-0">No hardware recorded.</p>
+        {% endif %}
+      </div>
+    </div>
+
+  </div>
+
+  <!-- Cut Sheets -->
+  {% if cut_sheets %}
+  <div class="card p-4 mt-4">
+    <div class="section-title"><i class="fas fa-th-large me-1"></i> Cut Layout Diagrams</div>
+    <div class="row g-3">
+      {% for sheet in cut_sheets %}
+      <div class="col-md-6">
+        <p class="small fw-semibold text-muted mb-1">{{ sheet.label }}</p>
+        <img src="/static/{{ sheet.src }}" alt="{{ sheet.label }}" class="cut-sheet-img"
+             onclick="openLightbox('/static/{{ sheet.src }}')">
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+  {% endif %}
+
+  <!-- CTA -->
+  <div class="card p-4 mt-4 text-center">
+    <h5 class="fw-bold mb-1">Interested in this package?</h5>
+    <p class="text-muted mb-3">Every cabinet is built custom. Contact us for an exact quote based on your space and requirements.</p>
+    <a href="mailto:?subject=Quote%20Request%3A%20{{ t.name | urlencode }}&body=Hi%2C%20I%27m%20interested%20in%20the%20%22{{ t.name | urlencode }}%22%20package%20from%20your%20catalog.%20Please%20send%20me%20a%20quote."
+       class="cta-btn">
+      <i class="fas fa-envelope me-2"></i>Request a Quote for This Package
+    </a>
+  </div>
+
+</div>
+
+<!-- Lightbox -->
+<div id="lightbox" onclick="closeLightbox()">
+  <span id="lightbox-close" onclick="closeLightbox()">&times;</span>
+  <img id="lightbox-img" src="" alt="Preview" onclick="event.stopPropagation()">
+</div>
+
+<!-- Footer -->
+<footer class="site-footer">
+  <div class="container">
+    <p class="mb-1">byZewo Cabinet Specialists &mdash; Precision cuts, quality builds</p>
+    <p class="mb-0 opacity-50" style="font-size:.75rem;">Prices shown are material &amp; hardware estimates only. Final price includes labor and site assessment.</p>
+  </div>
+</footer>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+<script>
+function openLightbox(src) {
+  document.getElementById('lightbox-img').src = src;
+  document.getElementById('lightbox').classList.add('active');
+}
+function closeLightbox() {
+  document.getElementById('lightbox').classList.remove('active');
+  document.getElementById('lightbox-img').src = '';
+}
+document.addEventListener('keydown', e => { if (e.key === 'Escape') closeLightbox(); });
+</script>
+</body>
+</html>

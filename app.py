@@ -87,6 +87,14 @@ try:
 except Exception as _e:
     print("Warning: could not ensure job_accessories table:", _e)
 
+try:
+    execute_query(
+        "ALTER TABLE job_templates ADD COLUMN IF NOT EXISTS source_job_id UUID REFERENCES jobs(id) ON DELETE SET NULL",
+        fetch=False
+    )
+except Exception as _e:
+    print("Warning: could not add source_job_id column:", _e)
+
 def _make_qr_dataurl(url):
     if not _HAS_QRCODE:
         return None
@@ -860,8 +868,8 @@ def save_as_template(job_id):
     ]
 
     execute_query(
-        "INSERT INTO job_templates (user_id, name, description, parts, accessories) VALUES (%s, %s, %s, %s, %s)",
-        (user_id, template_name, template_desc, json.dumps(parts_json), json.dumps(acc_json)),
+        "INSERT INTO job_templates (user_id, name, description, parts, accessories, source_job_id) VALUES (%s, %s, %s, %s, %s, %s)",
+        (user_id, template_name, template_desc, json.dumps(parts_json), json.dumps(acc_json), job_id),
         fetch=False
     )
     flash(f'Template "{template_name}" saved.', "success")
@@ -921,17 +929,60 @@ def _calc_template_price(tpl):
 
 @app.route("/catalog")
 def catalog():
-    templates = execute_query(
-        "SELECT * FROM job_templates ORDER BY name",
-        fetch=True
-    )
+    q = request.args.get("q", "").strip()
+    if q:
+        templates = execute_query(
+            "SELECT * FROM job_templates WHERE name ILIKE %s OR description ILIKE %s ORDER BY name",
+            (f"%{q}%", f"%{q}%"), fetch=True
+        )
+    else:
+        templates = execute_query("SELECT * FROM job_templates ORDER BY name", fetch=True)
     catalog_items = []
     for t in templates:
         t['parts']       = t['parts'] if isinstance(t['parts'], list) else json.loads(t['parts'] or '[]')
         t['accessories'] = t['accessories'] if isinstance(t['accessories'], list) else json.loads(t['accessories'] or '[]')
         t['base_price']  = _calc_template_price(t)
         catalog_items.append(t)
-    return render_template("catalog.html", templates=catalog_items)
+    return render_template("catalog.html", templates=catalog_items, q=q)
+
+
+@app.route("/catalog/<template_id>")
+def catalog_detail(template_id):
+    t = execute_single("SELECT * FROM job_templates WHERE id = %s", (template_id,))
+    if not t:
+        flash("Package not found.", "danger")
+        return redirect(url_for("catalog"))
+
+    t['parts']       = t['parts'] if isinstance(t['parts'], list) else json.loads(t['parts'] or '[]')
+    t['accessories'] = t['accessories'] if isinstance(t['accessories'], list) else json.loads(t['accessories'] or '[]')
+    t['base_price']  = _calc_template_price(t)
+
+    uploaded_images = []
+    cut_sheets = []
+    if t.get('source_job_id'):
+        job_id = str(t['source_job_id'])
+        image_exts = {'.jpg', '.jpeg', '.png', '.gif', '.webp', '.bmp'}
+        files = execute_query(
+            "SELECT * FROM files WHERE job_id = %s ORDER BY uploaded_at",
+            (job_id,), fetch=True
+        )
+        uploaded_images = [
+            {'url': '/' + f['storage_path'], 'filename': f['filename']}
+            for f in files
+            if os.path.splitext(f['filename'])[1].lower() in image_exts
+        ]
+        cut_sheet_rows = execute_query(
+            "SELECT * FROM cut_sheets WHERE job_id = %s ORDER BY sheet_number",
+            (job_id,), fetch=True
+        )
+        cut_sheets = [{"src": row["src"], "label": row["label"]} for row in cut_sheet_rows]
+
+    return render_template(
+        "catalog_detail.html",
+        t=t,
+        uploaded_images=uploaded_images,
+        cut_sheets=cut_sheets,
+    )
 
 
 # ===== SHARE ROUTES =====

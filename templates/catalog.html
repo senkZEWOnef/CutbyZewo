@@ -131,8 +131,28 @@
 <!-- Hero -->
 <div class="hero">
   <div class="container">
-    <h1>Our Cabinet Catalog</h1>
+    <h1>Cabinet Catalog</h1>
     <p>Browse popular cabinet packages with estimated starting prices. Every project is custom — contact us for an exact quote.</p>
+    <form method="GET" action="/catalog" class="mt-4 d-flex gap-2 justify-content-center" style="max-width:480px;margin:0 auto;">
+      <input
+        type="text"
+        name="q"
+        value="{{ q }}"
+        placeholder="Search by name, e.g. Kitchen, Bathroom…"
+        class="form-control form-control-lg shadow-sm"
+        style="border-radius:10px;"
+        autofocus
+      />
+      <button type="submit" class="btn btn-light btn-lg px-4 fw-semibold" style="border-radius:10px;">
+        Search
+      </button>
+    </form>
+    {% if q %}
+    <p class="mt-3 opacity-75 small">
+      Showing results for "<strong>{{ q }}</strong>" —
+      <a href="/catalog" class="text-white">clear</a>
+    </p>
+    {% endif %}
   </div>
 </div>
 
@@ -189,8 +209,8 @@
                 </div>
                 <div class="price-note">Materials &amp; hardware · Labor quoted separately</div>
               </div>
-              <a href="mailto:?subject=Cabinet%20Quote%20Request&body=Hi%2C%20I%27m%20interested%20in%20the%20{{ t.name | urlencode }}%20package." class="cta-btn ms-2">
-                Get Quote
+              <a href="/catalog/{{ t.id }}" class="cta-btn ms-2">
+                View Details
               </a>
             </div>
           </div>
@@ -211,9 +231,14 @@
 
   {% else %}
   <div class="empty-state">
-    <i class="fas fa-cabinet-filing fa-3x mb-3 opacity-25"></i>
+    <i class="fas fa-search fa-3x mb-3 opacity-25"></i>
+    {% if q %}
+    <h4>No results for "{{ q }}"</h4>
+    <p class="text-muted">Try a different search term. <a href="/catalog">View all packages</a></p>
+    {% else %}
     <h4>No packages yet</h4>
     <p class="text-muted">Check back soon — we're adding cabinet packages.</p>
+    {% endif %}
   </div>
   {% endif %}
 </div>
