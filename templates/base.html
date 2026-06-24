@@ -126,6 +126,11 @@
 
         <div class="collapse navbar-collapse" id="navbarNav">
           <ul class="navbar-nav me-auto">
+            <li class="nav-item">
+              <a class="nav-link" href="{{ url_for('catalog') }}">
+                <i class="fas fa-store"></i> Catalog
+              </a>
+            </li>
             {% if user %}
             <li class="nav-item">
               <a class="nav-link" href="{{ url_for('create_job') }}">
