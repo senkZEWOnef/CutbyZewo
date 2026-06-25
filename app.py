@@ -902,6 +902,29 @@ def delete_template(template_id):
         (template_id, user_id), fetch=False
     )
     flash("Template deleted.", "success")
+    next_url = request.form.get("next") or url_for("list_templates")
+    return redirect(next_url)
+
+
+@app.route("/catalog/<template_id>/save-to-mine", methods=["POST"])
+def save_template_to_mine(template_id):
+    if "user_id" not in session:
+        flash("Please log in to save templates.", "warning")
+        return redirect(url_for("login"))
+    user_id = session["user_id"]
+    t = execute_single("SELECT * FROM job_templates WHERE id = %s", (template_id,))
+    if not t:
+        flash("Template not found.", "danger")
+        return redirect(url_for("catalog"))
+    parts = t['parts'] if isinstance(t['parts'], list) else json.loads(t['parts'] or '[]')
+    accs  = t['accessories'] if isinstance(t['accessories'], list) else json.loads(t['accessories'] or '[]')
+    new_name = request.form.get("save_name", "").strip() or t['name']
+    execute_query(
+        "INSERT INTO job_templates (user_id, name, description, parts, accessories, source_job_id) VALUES (%s, %s, %s, %s, %s, %s)",
+        (user_id, new_name, t.get('description'), json.dumps(parts), json.dumps(accs), t.get('source_job_id')),
+        fetch=False
+    )
+    flash(f'"{new_name}" saved to your templates.', "success")
     return redirect(url_for("list_templates"))
 
 
