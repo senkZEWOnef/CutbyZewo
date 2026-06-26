@@ -17,6 +17,22 @@
                value="{{ job.client_name or '' }}" required />
       </div>
 
+      <div class="row mb-3">
+        <div class="col-md-6 mb-3 mb-md-0">
+          <label class="form-label fw-semibold">Phone</label>
+          <input type="tel" name="phone" class="form-control" value="{{ job.phone or '' }}" placeholder="555-123-4567" />
+        </div>
+        <div class="col-md-6">
+          <label class="form-label fw-semibold">Email</label>
+          <input type="email" name="email" class="form-control" value="{{ job.email or '' }}" placeholder="client@email.com" />
+        </div>
+      </div>
+
+      <div class="mb-3">
+        <label class="form-label fw-semibold">Address</label>
+        <input type="text" name="address" class="form-control" value="{{ job.address or '' }}" placeholder="123 Main St, City, State" />
+      </div>
+
       <div class="row mb-4">
         <div class="col-md-6 mb-3 mb-md-0">
           <label class="form-label fw-semibold">Soft Deadline <span class="text-muted fw-normal">(internal)</span></label>
@@ -28,6 +44,11 @@
           <input type="date" name="hard_deadline" class="form-control"
                  value="{{ deadline.hard_deadline.strftime('%Y-%m-%d') if (deadline and deadline.hard_deadline) else '' }}" />
         </div>
+      </div>
+
+      <div class="mb-4">
+        <label class="form-label fw-semibold">Notes</label>
+        <textarea name="notes" class="form-control" rows="2" placeholder="Project notes...">{{ job.notes or '' }}</textarea>
       </div>
 
       <div class="mb-4">

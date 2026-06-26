@@ -19,8 +19,17 @@
 <div class="row mb-4">
   <div class="col-md-8">
     <h1 class="display-6 mb-2">
+      {% if estimate.estimate_type == 'invoice' %}
+      <i class="fas fa-file-invoice text-warning"></i>
+      {% else %}
       <i class="fas fa-file-invoice-dollar text-success"></i>
+      {% endif %}
       {{ estimate.name or "Cabinet Estimate" }}
+      {% if estimate.estimate_type == 'invoice' %}
+      <span class="badge bg-warning text-dark ms-2 fs-6">Invoice</span>
+      {% else %}
+      <span class="badge bg-secondary ms-2 fs-6">Quote</span>
+      {% endif %}
     </h1>
     <p class="text-muted mb-3">
       <strong>Client:</strong> {{ job.client_name }} |
@@ -64,6 +73,13 @@
       <button class="btn btn-outline-warning" onclick="openShareModal()">
         <i class="fas fa-share-alt"></i> Share with Client
       </button>
+      {% if estimate.estimate_type != 'invoice' %}
+      <form method="POST" action="{{ url_for('convert_to_invoice', estimate_id=estimate.id) }}" class="d-inline">
+        <button type="submit" class="btn btn-warning" onclick="return confirm('Convert this quote to an invoice?')">
+          <i class="fas fa-file-invoice"></i> Convert to Invoice
+        </button>
+      </form>
+      {% endif %}
       <a href="{{ url_for('create_detailed_estimate', job_id=job.id) }}" class="btn btn-success">
         <i class="fas fa-plus"></i> Create New Estimate
       </a>

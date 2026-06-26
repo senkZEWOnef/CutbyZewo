@@ -38,6 +38,22 @@
 
       <div class="row mb-4">
         <div class="col-md-6 mb-3 mb-md-0">
+          <label class="form-label fw-semibold">Phone <span class="text-muted fw-normal">(optional)</span></label>
+          <input type="tel" name="phone" class="form-control" placeholder="e.g. 555-123-4567" />
+        </div>
+        <div class="col-md-6">
+          <label class="form-label fw-semibold">Email <span class="text-muted fw-normal">(optional)</span></label>
+          <input type="email" name="email" class="form-control" placeholder="client@email.com" />
+        </div>
+      </div>
+
+      <div class="mb-4">
+        <label class="form-label fw-semibold">Address <span class="text-muted fw-normal">(optional)</span></label>
+        <input type="text" name="address" class="form-control" placeholder="123 Main St, City, State" />
+      </div>
+
+      <div class="row mb-4">
+        <div class="col-md-6 mb-3 mb-md-0">
           <label class="form-label fw-semibold">Soft Deadline <span class="text-muted fw-normal">(internal)</span></label>
           <input type="date" name="soft_deadline" class="form-control" />
         </div>
@@ -45,6 +61,11 @@
           <label class="form-label fw-semibold">Hard Deadline <span class="text-muted fw-normal">(client-facing)</span></label>
           <input type="date" name="hard_deadline" class="form-control" />
         </div>
+      </div>
+
+      <div class="mb-4">
+        <label class="form-label fw-semibold">Notes <span class="text-muted fw-normal">(optional)</span></label>
+        <textarea name="notes" class="form-control" rows="2" placeholder="e.g. Client wants soft-close hinges, measure again before cutting"></textarea>
       </div>
 
       {% if templates %}

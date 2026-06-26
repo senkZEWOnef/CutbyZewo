@@ -1,0 +1,84 @@
+{% extends "base.html" %}
+{% block title %}Clients — Cut byZewo{% endblock %}
+{% block content %}
+
+<div class="d-flex justify-content-between align-items-center mb-4">
+  <div>
+    <h2 class="fw-bold mb-0">Clients</h2>
+    <p class="text-muted mb-0">{{ clients|length }} client{{ 's' if clients|length != 1 }}</p>
+  </div>
+  <a href="{{ url_for('jobs') }}" class="btn btn-outline-secondary">
+    <i class="fas fa-arrow-left me-1"></i> Back to Jobs
+  </a>
+</div>
+
+{% if clients %}
+<div class="row g-3">
+  {% for c in clients %}
+  <div class="col-md-6 col-lg-4">
+    <div class="card h-100 shadow-sm">
+      <div class="card-body">
+        <h5 class="fw-bold mb-1">
+          <i class="fas fa-user-circle text-muted me-2"></i>{{ c.name or 'Unknown' }}
+        </h5>
+
+        <div class="mb-2 d-flex flex-column gap-1">
+          {% if c.email %}
+          <a href="mailto:{{ c.email }}" class="text-decoration-none small">
+            <i class="fas fa-envelope text-muted me-1"></i>{{ c.email }}
+          </a>
+          {% endif %}
+          {% if c.phone %}
+          <a href="tel:{{ c.phone }}" class="text-decoration-none small">
+            <i class="fas fa-phone text-muted me-1"></i>{{ c.phone }}
+          </a>
+          {% endif %}
+        </div>
+
+        <div class="border-top pt-2 mt-2">
+          <p class="small text-muted fw-semibold mb-1">{{ c.jobs|length }} job{{ 's' if c.jobs|length != 1 }}</p>
+          {% for j in c.jobs %}
+          <div class="d-flex justify-content-between align-items-center py-1 border-bottom">
+            <div>
+              <a href="{{ url_for('job_details', job_id=j.id) }}" class="text-decoration-none small fw-semibold">
+                {{ j.created_at.strftime('%b %d, %Y') if j.created_at else 'Unknown date' }}
+              </a>
+              <br>
+              {% set s = j.status or 'draft' %}
+              {% if s == 'draft' %}<span class="badge bg-secondary" style="font-size:.65rem;">Draft</span>
+              {% elif s == 'quoted' %}<span class="badge bg-info text-dark" style="font-size:.65rem;">Quoted</span>
+              {% elif s == 'deposit_paid' %}<span class="badge bg-warning text-dark" style="font-size:.65rem;">Deposit Paid</span>
+              {% elif s == 'in_progress' %}<span class="badge bg-primary" style="font-size:.65rem;">In Progress</span>
+              {% elif s == 'done' %}<span class="badge bg-success" style="font-size:.65rem;">Done</span>
+              {% elif s == 'cancelled' %}<span class="badge bg-danger" style="font-size:.65rem;">Cancelled</span>
+              {% else %}<span class="badge bg-secondary" style="font-size:.65rem;">{{ s }}</span>{% endif %}
+            </div>
+            {% if j.final_price %}
+            <span class="small text-success fw-bold">${{ "{:,.0f}".format(j.final_price|float) }}</span>
+            {% else %}
+            <span class="small text-muted">No price</span>
+            {% endif %}
+          </div>
+          {% endfor %}
+        </div>
+      </div>
+      <div class="card-footer bg-transparent">
+        <a href="{{ url_for('create_job') }}" class="btn btn-sm btn-outline-primary w-100">
+          <i class="fas fa-plus me-1"></i> New Job for this Client
+        </a>
+      </div>
+    </div>
+  </div>
+  {% endfor %}
+</div>
+
+{% else %}
+<div class="text-center py-5">
+  <i class="fas fa-users fa-3x text-muted mb-3"></i>
+  <h4 class="text-muted">No clients yet</h4>
+  <p class="text-muted">Clients appear here once you create jobs with their contact info.</p>
+  <a href="{{ url_for('create_job') }}" class="btn btn-primary">Create First Job</a>
+</div>
+{% endif %}
+
+{% endblock %}

@@ -9,30 +9,55 @@
       <i class="fas fa-briefcase text-primary"></i>
       {{ job.client_name or "Unnamed Client" }}
     </h1>
-    <p class="text-muted mb-3">
+    <p class="text-muted mb-2">
       <i class="fas fa-calendar-plus"></i>
       Created {{ job.created_at.strftime('%B %d, %Y at %I:%M %p') if job.created_at else 'Unknown' }}
     </p>
-    
-    <!-- Status badges -->
-    <div class="mb-3">
-      {% if job.final_price %}
-      <span class="badge bg-success me-2">
-        <i class="fas fa-dollar-sign"></i> Priced: ${{ job.final_price }}
-      </span>
-      {% else %}
-      <span class="badge bg-warning text-dark me-2">
-        <i class="fas fa-clock"></i> Pending Quote
-      </span>
+
+    <!-- Contact quick-links -->
+    <div class="mb-2 d-flex flex-wrap gap-2 align-items-center">
+      {% if job.phone %}
+      <a href="tel:{{ job.phone }}" class="badge bg-light text-dark border text-decoration-none">
+        <i class="fas fa-phone me-1"></i>{{ job.phone }}
+      </a>
       {% endif %}
-      
-      {% if deadline and deadline.hard_deadline %}
-      <span class="badge bg-danger me-2">
-        <i class="fas fa-exclamation-triangle"></i>
-        Due {{ deadline.hard_deadline.strftime('%m/%d/%Y') }}
+      {% if job.email %}
+      <a href="mailto:{{ job.email }}" class="badge bg-light text-dark border text-decoration-none">
+        <i class="fas fa-envelope me-1"></i>{{ job.email }}
+      </a>
+      {% endif %}
+      {% if job.address %}
+      <span class="badge bg-light text-dark border">
+        <i class="fas fa-map-marker-alt me-1"></i>{{ job.address }}
       </span>
       {% endif %}
     </div>
+
+    <!-- Status pipeline -->
+    {% set statuses = [('draft','Draft'),('quoted','Quoted'),('deposit_paid','Deposit Paid'),('in_progress','In Progress'),('done','Done')] %}
+    {% set cur = job.status or 'draft' %}
+    <div class="d-flex align-items-center flex-wrap gap-1 mb-3">
+      {% for val, label in statuses %}
+        {% if val == cur %}
+        <span class="badge bg-primary px-3 py-2">{{ label }}</span>
+        {% elif loop.index < loop.index0 + 1 %}{# past #}
+        <span class="badge bg-success px-2 py-1 opacity-75">{{ label }}</span>
+        {% else %}
+        <span class="badge bg-light text-muted border px-2 py-1">{{ label }}</span>
+        {% endif %}
+        {% if not loop.last %}<span class="text-muted small">›</span>{% endif %}
+      {% endfor %}
+      {% if cur == 'cancelled' %}
+      <span class="badge bg-danger px-2 py-1">Cancelled</span>
+      {% endif %}
+    </div>
+
+    <!-- Notes -->
+    {% if job.notes %}
+    <div class="alert alert-warning py-2 mb-2">
+      <i class="fas fa-sticky-note me-1"></i><small>{{ job.notes }}</small>
+    </div>
+    {% endif %}
   </div>
   
   <div class="col-md-4 text-end">
@@ -138,15 +163,25 @@
           <label class="form-label"><i class="fas fa-tasks"></i> Update Status</label>
           <div class="input-group">
             <select name="status" class="form-select">
-              <option value="draft" {{ 'selected' if job.status == 'draft' else '' }}>Draft</option>
-              <option value="quoted" {{ 'selected' if job.status == 'quoted' else '' }}>Quoted</option>
-              <option value="in_progress" {{ 'selected' if job.status == 'in_progress' else '' }}>In Progress</option>
-              <option value="completed" {{ 'selected' if job.status == 'completed' else '' }}>Completed</option>
-              <option value="cancelled" {{ 'selected' if job.status == 'cancelled' else '' }}>Cancelled</option>
+              <option value="draft"         {{ 'selected' if job.status == 'draft' }}>Draft</option>
+              <option value="quoted"        {{ 'selected' if job.status == 'quoted' }}>Quoted</option>
+              <option value="deposit_paid"  {{ 'selected' if job.status == 'deposit_paid' }}>Deposit Paid</option>
+              <option value="in_progress"   {{ 'selected' if job.status == 'in_progress' }}>In Progress</option>
+              <option value="done"          {{ 'selected' if job.status == 'done' }}>Done</option>
+              <option value="cancelled"     {{ 'selected' if job.status == 'cancelled' }}>Cancelled</option>
             </select>
             <button class="btn btn-outline-primary" type="submit"><i class="fas fa-sync"></i></button>
           </div>
         </form>
+
+        <!-- Send Reminder -->
+        {% if job.email %}
+        <form method="POST" action="{{ url_for('send_reminder', job_id=job.id) }}" class="mb-3">
+          <button type="submit" class="btn btn-outline-info btn-sm w-100">
+            <i class="fas fa-bell me-1"></i> Send Deadline Reminder to Client
+          </button>
+        </form>
+        {% endif %}
 
         <!-- Continue Setup -->
         <div class="border-top pt-3">
@@ -235,6 +270,78 @@
         {% endif %}
       </div>
     </div>
+  </div>
+
+    <!-- Payments Card -->
+    <div class="card mb-4">
+      <div class="card-header bg-success text-white d-flex justify-content-between align-items-center">
+        <h6 class="mb-0"><i class="fas fa-money-bill-wave"></i> Payments</h6>
+        <button class="btn btn-sm btn-light" data-bs-toggle="collapse" data-bs-target="#paymentForm">
+          + Record
+        </button>
+      </div>
+
+      <!-- Add payment form (collapsed by default) -->
+      <div class="collapse" id="paymentForm">
+        <div class="card-body border-bottom">
+          <form method="POST" action="{{ url_for('add_payment', job_id=job.id) }}">
+            <div class="row g-2 align-items-end">
+              <div class="col-5">
+                <label class="form-label small fw-semibold">Amount ($)</label>
+                <input type="number" name="amount" class="form-control form-control-sm" step="0.01" min="0" required placeholder="0.00" />
+              </div>
+              <div class="col-4">
+                <label class="form-label small fw-semibold">Type</label>
+                <select name="payment_type" class="form-select form-select-sm">
+                  <option value="deposit">Deposit</option>
+                  <option value="partial">Partial</option>
+                  <option value="final">Final</option>
+                </select>
+              </div>
+              <div class="col-3">
+                <button type="submit" class="btn btn-success btn-sm w-100">Save</button>
+              </div>
+              <div class="col-12">
+                <input type="text" name="notes" class="form-control form-control-sm" placeholder="Notes (optional)" />
+              </div>
+            </div>
+          </form>
+        </div>
+      </div>
+
+      <div class="card-body p-0">
+        <!-- Balance summary -->
+        <div class="px-3 py-2 bg-light border-bottom d-flex justify-content-between small">
+          <span>Estimate: <strong>${{ "{:,.2f}".format(job.final_price|float if job.final_price else 0) }}</strong></span>
+          <span>Paid: <strong class="text-success">${{ "{:,.2f}".format(total_paid) }}</strong></span>
+          <span>Balance: <strong class="{{ 'text-danger' if balance_due > 0 else 'text-success' }}">${{ "{:,.2f}".format(balance_due) }}</strong></span>
+        </div>
+
+        {% if payments %}
+        <table class="table table-sm mb-0">
+          <tbody>
+            {% for p in payments %}
+            <tr>
+              <td class="small">{{ p.paid_at.strftime('%m/%d/%Y') if p.paid_at else '' }}</td>
+              <td class="small text-capitalize">{{ p.payment_type }}</td>
+              <td class="small fw-semibold text-success">${{ "{:,.2f}".format(p.amount|float) }}</td>
+              <td class="small text-muted">{{ p.notes or '' }}</td>
+              <td>
+                <form method="POST" action="{{ url_for('delete_payment', job_id=job.id, payment_id=p.id) }}"
+                      onsubmit="return confirm('Remove this payment?')">
+                  <button type="submit" class="btn btn-outline-danger btn-sm py-0 px-1">✕</button>
+                </form>
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+        {% else %}
+        <p class="text-muted text-center py-3 mb-0 small">No payments recorded</p>
+        {% endif %}
+      </div>
+    </div>
+
   </div>
 
   <!-- Right Column: Cut Sheets & Images -->

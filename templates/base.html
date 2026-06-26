@@ -157,6 +157,9 @@
                 <i class="fas fa-user"></i> {{ user.username }}
               </a>
               <ul class="dropdown-menu">
+                <li><a class="dropdown-item" href="{{ url_for('clients') }}">
+                  <i class="fas fa-users"></i> Clients
+                </a></li>
                 <li><a class="dropdown-item" href="{{ url_for('list_templates') }}">
                   <i class="fas fa-bookmark"></i> Templates
                 </a></li>

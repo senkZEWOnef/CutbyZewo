@@ -95,6 +95,67 @@ try:
 except Exception as _e:
     print("Warning: could not add source_job_id column:", _e)
 
+for _col, _def in [
+    ("phone",   "VARCHAR(50)"),
+    ("email",   "VARCHAR(255)"),
+    ("address", "TEXT"),
+    ("notes",   "TEXT"),
+]:
+    try:
+        execute_query(f"ALTER TABLE jobs ADD COLUMN IF NOT EXISTS {_col} {_def}", fetch=False)
+    except Exception as _e:
+        print(f"Warning: could not add {_col} to jobs:", _e)
+
+try:
+    execute_query("""
+        CREATE TABLE IF NOT EXISTS payments (
+            id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+            job_id UUID NOT NULL REFERENCES jobs(id) ON DELETE CASCADE,
+            user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            amount DECIMAL(10,2) NOT NULL,
+            payment_type VARCHAR(50) DEFAULT 'deposit',
+            notes TEXT,
+            paid_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+        )
+    """, fetch=False)
+except Exception as _e:
+    print("Warning: could not ensure payments table:", _e)
+
+try:
+    execute_query(
+        "ALTER TABLE estimates ADD COLUMN IF NOT EXISTS estimate_type VARCHAR(20) DEFAULT 'quote'",
+        fetch=False
+    )
+except Exception as _e:
+    print("Warning: could not add estimate_type column:", _e)
+
+def send_email(to_addr, subject, body_html):
+    """Send email via SMTP. Silently skips if SMTP_HOST env var is not set."""
+    import smtplib
+    from email.mime.multipart import MIMEMultipart
+    from email.mime.text import MIMEText
+    host = os.environ.get("SMTP_HOST")
+    if not host:
+        return
+    try:
+        port     = int(os.environ.get("SMTP_PORT", 587))
+        user     = os.environ.get("SMTP_USER", "")
+        password = os.environ.get("SMTP_PASS", "")
+        from_addr = os.environ.get("FROM_EMAIL", user)
+        msg = MIMEMultipart("alternative")
+        msg["Subject"] = subject
+        msg["From"]    = from_addr
+        msg["To"]      = to_addr
+        msg.attach(MIMEText(body_html, "html"))
+        with smtplib.SMTP(host, port) as srv:
+            srv.starttls()
+            if user:
+                srv.login(user, password)
+            srv.sendmail(from_addr, to_addr, msg.as_string())
+    except Exception as _mail_err:
+        print("Email send error:", _mail_err)
+
+
 def _make_qr_dataurl(url):
     if not _HAS_QRCODE:
         return None
@@ -316,6 +377,10 @@ def create_job():
         soft_deadline = request.form.get("soft_deadline")
         hard_deadline = request.form.get("hard_deadline")
         template_id = request.form.get("template_id", "").strip()
+        phone   = request.form.get("phone", "").strip()
+        email   = request.form.get("email", "").strip()
+        address = request.form.get("address", "").strip()
+        notes   = request.form.get("notes", "").strip()
 
         if not client_name:
             flash("Client name is required.", "warning")
@@ -323,8 +388,8 @@ def create_job():
 
         job_uuid = str(uuid.uuid4())
         execute_query(
-            "INSERT INTO jobs (id, user_id, client_name, status) VALUES (%s, %s, %s, %s)",
-            (job_uuid, user_id, client_name, "draft"),
+            "INSERT INTO jobs (id, user_id, client_name, status, phone, email, address, notes) VALUES (%s, %s, %s, %s, %s, %s, %s, %s)",
+            (job_uuid, user_id, client_name, "draft", phone or None, email or None, address or None, notes or None),
             fetch=False
         )
 
@@ -519,13 +584,20 @@ def jobs():
         return redirect(url_for("login"))
 
     user_id = session["user_id"]
+    q = request.args.get("q", "").strip()
+    status_filter = request.args.get("status", "").strip()
 
     try:
-        job_data = execute_query(
-            "SELECT id, client_name, final_price, status, created_at FROM jobs WHERE user_id = %s ORDER BY created_at DESC",
-            (user_id,),
-            fetch=True
-        )
+        base_q = "SELECT id, client_name, email, phone, final_price, status, created_at FROM jobs WHERE user_id = %s"
+        params = [user_id]
+        if q:
+            base_q += " AND client_name ILIKE %s"
+            params.append(f"%{q}%")
+        if status_filter:
+            base_q += " AND status = %s"
+            params.append(status_filter)
+        base_q += " ORDER BY created_at DESC"
+        job_data = execute_query(base_q, tuple(params), fetch=True)
         job_ids = [str(j["id"]) for j in job_data]
 
         counts = {jid: {"3/4": 0, "1/2": 0, "1/4": 0, "Other": 0, "total": 0} for jid in job_ids}
@@ -549,7 +621,7 @@ def jobs():
             j["part_counts"] = counts.get(str(j["id"]), {"3/4": 0, "1/2": 0, "1/4": 0, "Other": 0, "total": 0})
 
         current_date = datetime.now().date()
-        return render_template("jobs.html", jobs=job_data, current_date=current_date)
+        return render_template("jobs.html", jobs=job_data, current_date=current_date, q=q, status_filter=status_filter)
 
     except Exception as e:
         print("Error loading jobs:", e)
@@ -653,12 +725,22 @@ def job_details(job_id):
                     print("Error regenerating cut sheets:", _regen_err)
             sheet_images = [{"src": row["src"], "label": row["label"]} for row in cut_sheet_rows]
 
+        payments = execute_query(
+            "SELECT * FROM payments WHERE job_id = %s ORDER BY paid_at DESC",
+            (job_id,), fetch=True
+        )
+        total_paid = sum(float(p['amount']) for p in payments)
+        total_estimate = float(job.get('final_price') or 0)
+        balance_due = max(total_estimate - total_paid, 0)
+
         return render_template(
             "job_details.html",
             job=job, parts=parts, grouped_parts=grouped_parts,
             deadline=deadline, uploaded_images=uploaded_images,
             estimates=estimates, sheet_images=sheet_images,
-            accessories=accessories
+            accessories=accessories,
+            payments=payments, total_paid=total_paid,
+            balance_due=balance_due,
         )
         
     except Exception as e:
@@ -696,11 +778,15 @@ def edit_job(job_id):
             client_name = request.form.get("client_name")
             soft_deadline = request.form.get("soft_deadline")
             hard_deadline = request.form.get("hard_deadline")
-            
+            phone   = request.form.get("phone", "").strip() or None
+            email   = request.form.get("email", "").strip() or None
+            address = request.form.get("address", "").strip() or None
+            notes   = request.form.get("notes", "").strip() or None
+
             # Update job
             execute_query(
-                "UPDATE jobs SET client_name = %s WHERE id = %s",
-                (client_name, job_id),
+                "UPDATE jobs SET client_name = %s, phone = %s, email = %s, address = %s, notes = %s WHERE id = %s",
+                (client_name, phone, email, address, notes, job_id),
                 fetch=False
             )
             
@@ -930,6 +1016,115 @@ def save_template_to_mine(template_id):
 
 SHEET_PRICES = {'3/4': 85.0, '1/2': 65.0, '1/4': 45.0}
 
+# ===== PAYMENTS =====
+
+@app.route("/job/<job_id>/add-payment", methods=["POST"])
+def add_payment(job_id):
+    if "user_id" not in session:
+        return redirect(url_for("login"))
+    user_id = session["user_id"]
+    job = execute_single("SELECT * FROM jobs WHERE id = %s AND user_id = %s", (job_id, user_id))
+    if not job:
+        flash("Job not found.", "danger")
+        return redirect(url_for("jobs"))
+    try:
+        amount = float(request.form.get("amount", 0))
+        payment_type = request.form.get("payment_type", "deposit")
+        notes = request.form.get("notes", "").strip() or None
+        execute_query(
+            "INSERT INTO payments (job_id, user_id, amount, payment_type, notes) VALUES (%s, %s, %s, %s, %s)",
+            (job_id, user_id, amount, payment_type, notes), fetch=False
+        )
+        flash(f"Payment of ${amount:,.2f} recorded.", "success")
+    except Exception as e:
+        flash("Could not record payment.", "danger")
+    return redirect(url_for("job_details", job_id=job_id))
+
+
+@app.route("/job/<job_id>/delete-payment/<payment_id>", methods=["POST"])
+def delete_payment(job_id, payment_id):
+    if "user_id" not in session:
+        return redirect(url_for("login"))
+    execute_query(
+        "DELETE FROM payments WHERE id = %s AND user_id = %s",
+        (payment_id, session["user_id"]), fetch=False
+    )
+    return redirect(url_for("job_details", job_id=job_id))
+
+
+# ===== INVOICE CONVERSION =====
+
+@app.route("/estimate/<estimate_id>/to-invoice", methods=["POST"])
+def convert_to_invoice(estimate_id):
+    if "user_id" not in session:
+        return redirect(url_for("login"))
+    user_id = session["user_id"]
+    est = execute_single(
+        "SELECT e.*, j.user_id as owner FROM estimates e JOIN jobs j ON e.job_id = j.id WHERE e.id = %s",
+        (estimate_id,)
+    )
+    if not est or str(est['owner']) != str(user_id):
+        flash("Estimate not found.", "danger")
+        return redirect(url_for("jobs"))
+    execute_query(
+        "UPDATE estimates SET estimate_type = 'invoice' WHERE id = %s",
+        (estimate_id,), fetch=False
+    )
+    flash("Estimate converted to invoice.", "success")
+    return redirect(url_for("view_estimate", estimate_id=estimate_id))
+
+
+# ===== CLIENT HISTORY =====
+
+@app.route("/clients")
+def clients():
+    if "user_id" not in session:
+        return redirect(url_for("login"))
+    user_id = session["user_id"]
+    jobs = execute_query(
+        "SELECT id, client_name, email, phone, status, final_price, created_at FROM jobs WHERE user_id = %s ORDER BY client_name, created_at DESC",
+        (user_id,), fetch=True
+    )
+    # Group by client_name
+    from collections import OrderedDict
+    grouped = OrderedDict()
+    for j in jobs:
+        key = (j['client_name'] or '').strip().lower()
+        if key not in grouped:
+            grouped[key] = {'name': j['client_name'], 'email': j['email'], 'phone': j['phone'], 'jobs': []}
+        grouped[key]['jobs'].append(j)
+    clients_list = list(grouped.values())
+    return render_template("clients.html", clients=clients_list)
+
+
+# ===== SEND DEADLINE REMINDER =====
+
+@app.route("/job/<job_id>/send-reminder", methods=["POST"])
+def send_reminder(job_id):
+    if "user_id" not in session:
+        return redirect(url_for("login"))
+    user_id = session["user_id"]
+    job = execute_single("SELECT * FROM jobs WHERE id = %s AND user_id = %s", (job_id, user_id))
+    if not job or not job.get('email'):
+        flash("Client email not set — add it in Edit Job.", "warning")
+        return redirect(url_for("job_details", job_id=job_id))
+    deadline = execute_single("SELECT * FROM deadlines WHERE job_id = %s", (job_id,))
+    due_str = ""
+    if deadline and deadline.get('hard_deadline'):
+        due_str = f"<p>Your project is due on <strong>{deadline['hard_deadline'].strftime('%B %d, %Y')}</strong>.</p>"
+    send_email(
+        job['email'],
+        f"Reminder: Your Cabinet Project — {job['client_name']}",
+        f"""<p>Hi {job['client_name']},</p>
+        <p>This is a friendly reminder about your cabinet project with byZewo.</p>
+        {due_str}
+        <p>Please don't hesitate to reach out if you have any questions.</p>
+        <p>— byZewo Cabinet Specialists</p>"""
+    )
+    flash(f"Reminder sent to {job['email']}.", "success")
+    return redirect(url_for("job_details", job_id=job_id))
+
+
 # ===== PUBLIC CATALOG =====
 
 def _calc_template_price(tpl):
@@ -1045,6 +1240,21 @@ def shared_estimate(token):
         grouped_items[item["item_type"]].append(item)
         if item["item_type"] in totals:
             totals[item["item_type"]] += float(item.get("total_price") or 0)
+    # Notify the job owner that their estimate was viewed
+    try:
+        owner = execute_single("SELECT * FROM users WHERE id = %s", (job['user_id'],))
+        if owner and owner.get('email'):
+            send_email(
+                owner['email'],
+                f"Your estimate was viewed — {job['client_name']}",
+                f"""<p>Hi,</p>
+                <p>Your client <strong>{job['client_name']}</strong> just viewed the shared estimate
+                (${estimate['amount']:,.2f}).</p>
+                <p>Log in to follow up or convert it to an invoice.</p>
+                <p>— byZewo</p>"""
+            )
+    except Exception:
+        pass
     return render_template(
         "shared_estimate.html",
         estimate=estimate, job=job,
