@@ -57,7 +57,7 @@
         <span>${{ "{:,.2f}".format(totals.material) }}</span>
       </div>
       <div class="card-body p-0">
-        <table class="table table-sm mb-0">
+        <div class="table-responsive"><table class="table table-sm mb-0">
           <thead class="table-light"><tr><th>Item</th><th>Qty</th><th class="text-end">Unit Price</th><th class="text-end">Total</th></tr></thead>
           <tbody>
             {% for item in grouped_items.material %}
@@ -69,7 +69,7 @@
             </tr>
             {% endfor %}
           </tbody>
-        </table>
+        </table></div>
       </div>
     </div>
     {% endif %}
@@ -82,7 +82,7 @@
         <span>${{ "{:,.2f}".format(totals.hardware) }}</span>
       </div>
       <div class="card-body p-0">
-        <table class="table table-sm mb-0">
+        <div class="table-responsive"><table class="table table-sm mb-0">
           <thead class="table-light"><tr><th>Item</th><th>Qty</th><th class="text-end">Unit Price</th><th class="text-end">Total</th></tr></thead>
           <tbody>
             {% for item in grouped_items.hardware %}
@@ -94,7 +94,7 @@
             </tr>
             {% endfor %}
           </tbody>
-        </table>
+        </table></div>
       </div>
     </div>
     {% endif %}
@@ -107,7 +107,7 @@
         <span>${{ "{:,.2f}".format(totals.labor) }}</span>
       </div>
       <div class="card-body p-0">
-        <table class="table table-sm mb-0">
+        <div class="table-responsive"><table class="table table-sm mb-0">
           <thead class="table-light"><tr><th>Service</th><th>Qty</th><th class="text-end">Rate</th><th class="text-end">Total</th></tr></thead>
           <tbody>
             {% for item in grouped_items.labor %}
@@ -119,7 +119,7 @@
             </tr>
             {% endfor %}
           </tbody>
-        </table>
+        </table></div>
       </div>
     </div>
     {% endif %}
@@ -127,7 +127,7 @@
     <!-- Summary -->
     <div class="row justify-content-end mb-4">
       <div class="col-md-5">
-        <table class="table table-sm">
+        <div class="table-responsive"><table class="table table-sm">
           <tbody>
             {% if totals.material > 0 %}<tr><td>Materials</td><td class="text-end">${{ "{:,.2f}".format(totals.material) }}</td></tr>{% endif %}
             {% if totals.hardware > 0 %}<tr><td>Hardware</td><td class="text-end">${{ "{:,.2f}".format(totals.hardware) }}</td></tr>{% endif %}
@@ -135,7 +135,7 @@
             {% if estimate.markup_percentage and estimate.markup_percentage > 0 %}<tr><td>Commission</td><td class="text-end">${{ "{:,.2f}".format(estimate.markup_percentage) }}</td></tr>{% endif %}
             <tr class="table-success fw-bold fs-5"><td>Total</td><td class="text-end">${{ "{:,.2f}".format(estimate.amount) }}</td></tr>
           </tbody>
-        </table>
+        </table></div>
       </div>
     </div>
 

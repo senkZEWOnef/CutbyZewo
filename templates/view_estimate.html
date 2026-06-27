@@ -215,6 +215,7 @@
         <h5 class="mb-0">Estimate Summary</h5>
       </div>
       <div class="card-body">
+        <div class="table-responsive">
         <table class="table table-sm mb-0">
           <tbody>
             {% if totals.material > 0 %}
@@ -241,7 +242,8 @@
             </tr>
           </tbody>
         </table>
-        
+        </div>
+
         <!-- Pricing Details -->
         {% if estimate.labor_rate or estimate.markup_percentage %}
         <hr>
