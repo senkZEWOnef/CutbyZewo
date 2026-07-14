@@ -75,6 +75,7 @@
       </button>
       {% if estimate.estimate_type != 'invoice' %}
       <form method="POST" action="{{ url_for('convert_to_invoice', estimate_id=estimate.id) }}" class="d-inline">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
         <button type="submit" class="btn btn-warning" onclick="return confirm('Convert this quote to an invoice?')">
           <i class="fas fa-file-invoice"></i> Convert to Invoice
         </button>

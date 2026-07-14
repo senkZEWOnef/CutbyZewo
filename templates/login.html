@@ -212,12 +212,13 @@
       {% endwith %}
 
       <form method="POST">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
         <div class="form-floating position-relative">
           <input type="email" name="email" class="form-control" id="floatingEmail" placeholder="name@example.com" required>
           <label for="floatingEmail">Email Address</label>
           <i class="fas fa-envelope input-icon"></i>
         </div>
-        
+
         <div class="form-floating position-relative">
           <input type="password" name="password" class="form-control" id="floatingPassword" placeholder="Password" required>
           <label for="floatingPassword">Password</label>
@@ -225,12 +226,16 @@
             <i class="fas fa-eye" id="passwordIcon"></i>
           </button>
         </div>
-        
+
+        <div class="text-end mb-3">
+          <a href="{{ url_for('forgot_password') }}" class="small">Forgot password?</a>
+        </div>
+
         <button type="submit" class="btn login-btn w-100 mb-3">
           <i class="fas fa-sign-in-alt me-2"></i>
           Sign In
         </button>
-        
+
         <div class="divider">
           <span>Don't have an account?</span>
         </div>

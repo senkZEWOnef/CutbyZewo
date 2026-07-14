@@ -55,6 +55,7 @@
 <div class="card shadow-sm">
   <div class="card-body p-4">
     <form method="POST" enctype="multipart/form-data">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
 
       <h5 class="fw-semibold mb-3">Add Parts</h5>
 

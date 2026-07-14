@@ -4,6 +4,7 @@ content %}
 
 <div class="card shadow-sm p-4 mb-4">
   <form method="POST" action="{{ url_for('add_stock') }}">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
     <div class="row mb-3">
       <div class="col">
         <input
@@ -63,6 +64,7 @@ content %}
     action="{{ url_for('update_stock', stock_id=s.id) }}"
     class="d-inline"
   >
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
     <input type="hidden" name="action" value="increase" />
     <button class="btn btn-sm btn-outline-success">+1</button>
   </form>
@@ -71,6 +73,7 @@ content %}
     action="{{ url_for('update_stock', stock_id=s.id) }}"
     class="d-inline"
   >
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
     <input type="hidden" name="action" value="decrease" />
     <button class="btn btn-sm btn-outline-warning">-1</button>
   </form>
@@ -79,6 +82,7 @@ content %}
     action="{{ url_for('delete_stock', stock_id=s.id) }}"
     class="d-inline float-end"
   >
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
     <button class="btn btn-sm btn-outline-danger">🗑️ Delete</button>
   </form>
 </div>

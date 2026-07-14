@@ -39,6 +39,7 @@
       </div>
       <div class="card-body">
         <form method="POST" action="{% if edit_mode %}{{ url_for('edit_estimate', estimate_id=estimate.id) }}{% else %}{{ url_for('create_detailed_estimate', job_id=job.id) }}{% endif %}" id="estimateForm">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
           <!-- Estimate Details -->
           <div class="row mb-4">
             <div class="col-md-6">

@@ -138,6 +138,7 @@
       <div class="card-body">
         <!-- Update Price Form -->
         <form method="POST" action="{{ url_for('set_price', job_id=job.id) }}" class="mb-3">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
           <label class="form-label">
             <i class="fas fa-dollar-sign"></i> Update Final Price
           </label>
@@ -158,6 +159,7 @@
 
         <!-- Update Status Form -->
         <form method="POST" action="{{ url_for('update_job_status', job_id=job.id) }}" class="mb-3">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
           <label class="form-label"><i class="fas fa-tasks"></i> Update Status</label>
           <div class="input-group">
             <select name="status" class="form-select">
@@ -175,6 +177,7 @@
         <!-- Send Reminder -->
         {% if job.email %}
         <form method="POST" action="{{ url_for('send_reminder', job_id=job.id) }}" class="mb-3">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
           <button type="submit" class="btn btn-outline-info btn-sm w-100">
             <i class="fas fa-bell me-1"></i> Send Deadline Reminder to Client
           </button>
@@ -224,6 +227,7 @@
               <td>
                 <form method="POST" action="{{ url_for('delete_part', part_id=part.first_id) }}"
                       onsubmit="return confirm('Remove one of this part?')">
+                  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                   <button type="submit" class="btn btn-outline-danger btn-sm py-0 px-1">✕</button>
                 </form>
               </td>
@@ -259,6 +263,7 @@
               <td>
                 <form method="POST" action="{{ url_for('delete_accessory', acc_id=acc.id) }}"
                       onsubmit="return confirm('Remove this accessory?')">
+                  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                   <button type="submit" class="btn btn-outline-danger btn-sm py-0 px-1">✕</button>
                 </form>
               </td>
@@ -287,6 +292,7 @@
       <div class="collapse" id="paymentForm">
         <div class="card-body border-bottom">
           <form method="POST" action="{{ url_for('add_payment', job_id=job.id) }}">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
             <div class="row g-2 align-items-end">
               <div class="col-5">
                 <label class="form-label small fw-semibold">Amount ($)</label>
@@ -332,6 +338,7 @@
               <td>
                 <form method="POST" action="{{ url_for('delete_payment', job_id=job.id, payment_id=p.id) }}"
                       onsubmit="return confirm('Remove this payment?')">
+                  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                   <button type="submit" class="btn btn-outline-danger btn-sm py-0 px-1">✕</button>
                 </form>
               </td>
@@ -363,7 +370,7 @@
           {% for sheet in sheet_images %}
           <div class="col-md-6 mb-3">
             <div class="cut-sheet-container">
-              <h6 class="text-center mb-2">{{ sheet.label }} Material</h6>
+              <h6 class="text-center mb-2">{{ sheet.label }}</h6>
               <img
                 src="/static/{{ sheet.src }}"
                 class="img-fluid rounded"
@@ -596,6 +603,7 @@
       <div class="modal-footer">
         <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
         <form method="POST" action="{{ url_for('delete_job', job_id=job.id) }}" style="display: inline;">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
           <button type="submit" class="btn btn-danger">
             <i class="fas fa-trash"></i> Delete Job
           </button>
@@ -614,6 +622,7 @@
         <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
       </div>
       <form method="POST" action="{{ url_for('save_as_template', job_id=job.id) }}">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
         <div class="modal-body">
           <div class="mb-3">
             <label class="form-label fw-semibold">Template Name</label>
@@ -779,13 +788,8 @@ function clearCanvas() {
 function saveSketch() {
   const dataURL = canvas.toDataURL('image/png');
   const jobId = "{{ job.id }}";
-  
-  // Create a temporary download link
-  const link = document.createElement('a');
-  link.download = `sketch-${jobId}-${Date.now()}.png`;
-  link.href = dataURL;
-  
-  // Save to localStorage for persistence
+
+  // Keep a local draft history so "Previous Sketches" still works offline
   const savedSketches = JSON.parse(localStorage.getItem(`sketches_${jobId}`) || '[]');
   savedSketches.push({
     timestamp: Date.now(),
@@ -793,16 +797,31 @@ function saveSketch() {
     name: `Sketch ${savedSketches.length + 1}`
   });
   localStorage.setItem(`sketches_${jobId}`, JSON.stringify(savedSketches));
-  
-  // Trigger download
-  link.click();
-  
-  // Show success message
-  alert('Sketch saved successfully! The file has been downloaded to your device.');
-  
-  // Refresh saved sketches display
   loadSavedSketches();
-  
+
+  // Upload to the server so it shows up alongside the job's uploaded photos
+  const formData = new FormData();
+  formData.append('image_data', dataURL);
+
+  const csrfToken = document.querySelector('meta[name="csrf-token"]').content;
+  fetch(`/job/${jobId}/save-sketch`, {
+    method: 'POST',
+    headers: { 'X-CSRFToken': csrfToken },
+    body: formData
+  })
+    .then(res => res.json())
+    .then(data => {
+      if (data.success) {
+        window.location.reload();
+      } else {
+        alert('Could not save sketch: ' + (data.error || 'unknown error'));
+      }
+    })
+    .catch(err => {
+      console.error('Sketch upload failed:', err);
+      alert('Could not save sketch — check your connection and try again.');
+    });
+
   console.log('💾 Sketch saved for job', jobId);
 }
 

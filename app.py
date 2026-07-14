@@ -1,7 +1,7 @@
 # ✅ Complete Rebuilt Neon-based Flask Application
 from flask import Flask, render_template, request, redirect, url_for, flash, session, send_file, make_response, current_app, jsonify
 from werkzeug.utils import secure_filename
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 import os, uuid, shutil, glob, json, math, secrets, base64 as _b64
 from io import BytesIO
 from PIL import Image
@@ -16,7 +16,8 @@ from reportlab.pdfgen import canvas
 from reportlab.lib.pagesizes import letter
 from reportlab.lib.units import inch
 
-from neon_client import execute_query, execute_single
+from flask_wtf import CSRFProtect
+from neon_client import execute_query, execute_single, execute_batch_insert
 from planner import optimize_cuts
 from visualizer import draw_sheets_to_files
 from collections import defaultdict
@@ -30,6 +31,7 @@ load_dotenv()
 # ✅ Flask Init
 app = Flask(__name__)
 app.secret_key = os.environ.get('SECRET_KEY', 'dev-key-change-in-production')
+csrf = CSRFProtect(app)
 
 # ✅ Ensure folders exist
 os.makedirs("static/sheets", exist_ok=True)
@@ -106,6 +108,15 @@ for _col, _def in [
     except Exception as _e:
         print(f"Warning: could not add {_col} to jobs:", _e)
 
+for _col, _def in [
+    ("reset_token_hash", "VARCHAR(64)"),
+    ("reset_token_expires", "TIMESTAMP WITH TIME ZONE"),
+]:
+    try:
+        execute_query(f"ALTER TABLE users ADD COLUMN IF NOT EXISTS {_col} {_def}", fetch=False)
+    except Exception as _e:
+        print(f"Warning: could not add {_col} to users:", _e)
+
 try:
     execute_query("""
         CREATE TABLE IF NOT EXISTS payments (
@@ -181,6 +192,50 @@ def current_user():
     except Exception as e:
         print("Error fetching user:", e)
         return None
+
+THICKNESS_ORDER = ['3/4', '1/2', '1/4']
+
+def _sorted_thicknesses(thicknesses):
+    return sorted(
+        thicknesses,
+        key=lambda t: (THICKNESS_ORDER.index(t) if t in THICKNESS_ORDER else len(THICKNESS_ORDER), t)
+    )
+
+def regenerate_cut_sheets(job_id, panel_width=96, panel_height=48):
+    """(Re)build a job's cut sheet images, grouped by material thickness so
+    each sheet is labeled with the stock it actually represents — parts of
+    different thicknesses never come from the same physical sheet."""
+    parts = execute_query("SELECT * FROM parts WHERE job_id = %s", (job_id,), fetch=True)
+    execute_query("DELETE FROM cut_sheets WHERE job_id = %s", (job_id,), fetch=False)
+
+    if not parts:
+        return []
+
+    groups = defaultdict(list)
+    for p in parts:
+        thickness = p.get('thickness') or '3/4'
+        groups[thickness].append((float(p['width']), float(p['height'])))
+
+    sheet_images = []
+    sheet_number = 0
+    for thickness in _sorted_thicknesses(groups.keys()):
+        optimized = optimize_cuts(panel_width, panel_height, groups[thickness])
+        imgs = draw_sheets_to_files(
+            optimized, f"static/sheets/{job_id}",
+            start_index=sheet_number + 1, label_prefix=f'{thickness}"'
+        )
+        for src, label in imgs:
+            sheet_number += 1
+            sheet_images.append((src, label))
+
+    cut_sheet_rows = [
+        (job_id, src, label, n) for n, (src, label) in enumerate(sheet_images, start=1)
+    ]
+    execute_batch_insert(
+        "INSERT INTO cut_sheets (job_id, src, label, sheet_number) VALUES %s",
+        cut_sheet_rows
+    )
+    return sheet_images
 
 # Password hashing utilities
 def hash_password(password: str) -> str:
@@ -262,6 +317,72 @@ def logout():
     session.clear()
     flash("You have been logged out.", "info")
     return redirect(url_for("home"))
+
+@app.route("/forgot-password", methods=["GET", "POST"])
+def forgot_password():
+    if request.method == "POST":
+        email = request.form.get("email", "").lower().strip()
+        try:
+            user = execute_single("SELECT id, email FROM users WHERE email = %s", (email,))
+            if user:
+                token = secrets.token_urlsafe(32)
+                token_hash = hashlib.sha256(token.encode()).hexdigest()
+                expires = datetime.now(timezone.utc) + timedelta(hours=1)
+                execute_query(
+                    "UPDATE users SET reset_token_hash = %s, reset_token_expires = %s WHERE id = %s",
+                    (token_hash, expires, user["id"]),
+                    fetch=False
+                )
+                reset_url = url_for("reset_password", token=token, _external=True)
+                send_email(
+                    user["email"],
+                    "Reset your Cut byZewo password",
+                    f"""
+                    <p>Someone requested a password reset for your Cut byZewo account.</p>
+                    <p><a href="{reset_url}">Click here to reset your password</a> (this link expires in 1 hour).</p>
+                    <p>If you didn't request this, you can safely ignore this email.</p>
+                    """
+                )
+        except Exception as e:
+            print("Error in forgot_password:", e)
+        # Same message whether or not the email exists, so we don't leak account info
+        flash("If an account exists with that email, a reset link has been sent.", "info")
+        return redirect(url_for("login"))
+    return render_template("forgot_password.html")
+
+@app.route("/reset-password/<token>", methods=["GET", "POST"])
+def reset_password(token):
+    token_hash = hashlib.sha256(token.encode()).hexdigest()
+    user = execute_single(
+        "SELECT id, reset_token_expires FROM users WHERE reset_token_hash = %s",
+        (token_hash,)
+    )
+    valid = bool(user) and user["reset_token_expires"] and user["reset_token_expires"] > datetime.now(timezone.utc)
+
+    if not valid:
+        flash("That reset link is invalid or has expired. Please request a new one.", "danger")
+        return redirect(url_for("forgot_password"))
+
+    if request.method == "POST":
+        password = request.form.get("password", "")
+        confirm = request.form.get("confirm_password", "")
+        if not password or len(password) < 8:
+            flash("Password must be at least 8 characters.", "warning")
+            return render_template("reset_password.html", token=token)
+        if password != confirm:
+            flash("Passwords do not match.", "warning")
+            return render_template("reset_password.html", token=token)
+
+        hashed = hash_password(password)
+        execute_query(
+            "UPDATE users SET password_hash = %s, reset_token_hash = NULL, reset_token_expires = NULL WHERE id = %s",
+            (hashed, user["id"]),
+            fetch=False
+        )
+        flash("Password updated. Please log in.", "success")
+        return redirect(url_for("login"))
+
+    return render_template("reset_password.html", token=token)
 
 # ===== MAIN ROUTES =====
 
@@ -412,7 +533,7 @@ def create_job():
             if tpl:
                 tpl_parts = tpl['parts'] if isinstance(tpl['parts'], list) else json.loads(tpl['parts'] or '[]')
                 tpl_accs  = tpl['accessories'] if isinstance(tpl['accessories'], list) else json.loads(tpl['accessories'] or '[]')
-                parts_xy = []
+                has_parts = False
                 for p in tpl_parts:
                     for _ in range(int(p.get('quantity', 1))):
                         execute_query(
@@ -420,22 +541,16 @@ def create_job():
                             (job_uuid, p['width'], p['height'], p.get('thickness','3/4'), p.get('material','Plywood')),
                             fetch=False
                         )
-                        parts_xy.append((float(p['width']), float(p['height'])))
+                        has_parts = True
                 for a in tpl_accs:
                     execute_query(
                         "INSERT INTO job_accessories (job_id, name, quantity, unit, unit_price) VALUES (%s, %s, %s, %s, %s)",
                         (job_uuid, a['name'], a.get('quantity', 1), a.get('unit','pieces'), a.get('unit_price', 0)),
                         fetch=False
                     )
-                if parts_xy:
+                if has_parts:
                     try:
-                        optimized = optimize_cuts(96, 48, parts_xy)
-                        sheet_images = draw_sheets_to_files(optimized, f"static/sheets/{job_uuid}")
-                        for n, (src, label) in enumerate(sheet_images, 1):
-                            execute_query(
-                                "INSERT INTO cut_sheets (job_id, src, label, sheet_number) VALUES (%s, %s, %s, %s)",
-                                (job_uuid, src, label, n), fetch=False
-                            )
+                        regenerate_cut_sheets(job_uuid)
                     except Exception as e:
                         print("Error generating cut sheets from template:", e)
                 flash(f"Job created from template — review parts and go to estimate.", "info")
@@ -492,7 +607,7 @@ def job_step_parts(job_id):
     panel_width = float(request.form.get('panel_width', 96))
     panel_height = float(request.form.get('panel_height', 48))
 
-    new_parts = []
+    new_part_rows = []
     for i in range(len(widths)):
         if i < len(heights) and widths[i] and heights[i]:
             try:
@@ -500,38 +615,57 @@ def job_step_parts(job_id):
                 qty = int(quantities[i]) if i < len(quantities) and quantities[i] else 1
                 thickness = thicknesses[i] if i < len(thicknesses) and thicknesses[i] else "3/4"
                 for _ in range(qty):
-                    new_parts.append((w, h, thickness))
-                    execute_query(
-                        "INSERT INTO parts (job_id, width, height, thickness, material) VALUES (%s, %s, %s, %s, %s)",
-                        (job_id, w, h, thickness, "Plywood"),
-                        fetch=False
-                    )
+                    new_part_rows.append((job_id, w, h, thickness, "Plywood"))
             except ValueError:
                 continue
 
+    execute_batch_insert(
+        "INSERT INTO parts (job_id, width, height, thickness, material) VALUES %s",
+        new_part_rows
+    )
+
     # Regenerate cut sheets from all parts for this job
-    all_parts = execute_query("SELECT * FROM parts WHERE job_id = %s", (job_id,), fetch=True)
-    if all_parts:
-        try:
-            parts_xy = [(float(p['width']), float(p['height'])) for p in all_parts]
-            optimized = optimize_cuts(panel_width, panel_height, parts_xy)
-            execute_query("DELETE FROM cut_sheets WHERE job_id = %s", (job_id,), fetch=False)
-            sheet_images = draw_sheets_to_files(optimized, f"static/sheets/{job_id}")
-            for sheet_number, (src, label) in enumerate(sheet_images, start=1):
-                execute_query(
-                    "INSERT INTO cut_sheets (job_id, src, label, sheet_number) VALUES (%s, %s, %s, %s)",
-                    (job_id, src, label, sheet_number),
-                    fetch=False
-                )
-        except Exception as e:
-            print("Error generating cut sheets:", e)
-            flash(f"Parts saved but cut sheet generation failed: {e}", "warning")
+    try:
+        regenerate_cut_sheets(job_id, panel_width, panel_height)
+    except Exception as e:
+        print("Error generating cut sheets:", e)
+        flash(f"Parts saved but cut sheet generation failed: {e}", "warning")
 
     action = request.form.get('action', 'next')
     if action == 'save_exit':
         flash("Parts saved.", "success")
         return redirect(url_for('job_details', job_id=job_id))
     return redirect(url_for('job_step_accessories', job_id=job_id))
+
+
+@app.route("/job/<job_id>/save-sketch", methods=["POST"])
+def save_sketch(job_id):
+    if "user_id" not in session:
+        return jsonify({"error": "Not logged in"}), 401
+
+    user_id = session["user_id"]
+    job = execute_single("SELECT id FROM jobs WHERE id = %s AND user_id = %s", (job_id, user_id))
+    if not job:
+        return jsonify({"error": "Job not found"}), 404
+
+    data_url = request.form.get("image_data", "")
+    if not data_url.startswith("data:image/png;base64,"):
+        return jsonify({"error": "Invalid image data"}), 400
+
+    png_bytes = _b64.b64decode(data_url.split(",", 1)[1])
+    filename = f"sketch-{int(datetime.utcnow().timestamp())}.png"
+    file_path = f"static/uploads/{job_id}/{filename}"
+    os.makedirs(os.path.dirname(file_path), exist_ok=True)
+    with open(file_path, "wb") as f:
+        f.write(png_bytes)
+
+    execute_query(
+        "INSERT INTO files (job_id, user_id, filename, storage_path, subfolder) VALUES (%s, %s, %s, %s, %s)",
+        (job_id, user_id, filename, file_path, "Sketch"),
+        fetch=False
+    )
+
+    return jsonify({"success": True})
 
 
 @app.route("/job/<job_id>/step/accessories", methods=["GET", "POST"])
@@ -706,7 +840,7 @@ def job_details(job_id):
             if os.path.splitext(f['filename'])[1].lower() in image_exts
         ]
 
-        # Get cut sheets; regenerate PNGs if missing from disk (ephemeral filesystem)
+        # Get cut sheets; regenerate if missing from disk (ephemeral filesystem)
         cut_sheet_rows = execute_query(
             "SELECT * FROM cut_sheets WHERE job_id = %s ORDER BY sheet_number",
             (job_id,), fetch=True
@@ -718,9 +852,8 @@ def job_details(job_id):
             )
             if files_missing and parts:
                 try:
-                    parts_xy = [(float(p['width']), float(p['height'])) for p in parts]
-                    optimized = optimize_cuts(96, 48, parts_xy)
-                    draw_sheets_to_files(optimized, f"static/sheets/{job_id}")
+                    regenerated = regenerate_cut_sheets(job_id)
+                    cut_sheet_rows = [{"src": src, "label": label} for src, label in regenerated]
                 except Exception as _regen_err:
                     print("Error regenerating cut sheets:", _regen_err)
             sheet_images = [{"src": row["src"], "label": row["label"]} for row in cut_sheet_rows]
@@ -886,20 +1019,10 @@ def delete_part(part_id):
     job_id = str(part['job_id'])
     execute_query("DELETE FROM parts WHERE id = %s", (part_id,), fetch=False)
     # Regenerate cut sheets from remaining parts
-    remaining = execute_query("SELECT * FROM parts WHERE job_id = %s", (job_id,), fetch=True)
-    execute_query("DELETE FROM cut_sheets WHERE job_id = %s", (job_id,), fetch=False)
-    if remaining:
-        try:
-            parts_xy = [(float(p['width']), float(p['height'])) for p in remaining]
-            optimized = optimize_cuts(96, 48, parts_xy)
-            sheet_images = draw_sheets_to_files(optimized, f"static/sheets/{job_id}")
-            for n, (src, label) in enumerate(sheet_images, 1):
-                execute_query(
-                    "INSERT INTO cut_sheets (job_id, src, label, sheet_number) VALUES (%s, %s, %s, %s)",
-                    (job_id, src, label, n), fetch=False
-                )
-        except Exception as e:
-            print("Error regenerating cut sheets after part delete:", e)
+    try:
+        regenerate_cut_sheets(job_id)
+    except Exception as e:
+        print("Error regenerating cut sheets after part delete:", e)
     flash("Part removed.", "success")
     return redirect(url_for("job_details", job_id=job_id))
 
