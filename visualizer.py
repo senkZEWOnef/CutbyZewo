@@ -6,14 +6,15 @@ import matplotlib.pyplot as plt
 import matplotlib.patches as patches
 import os
 
-def draw_sheets_to_files(sheets, output_dir):
+def draw_sheets_to_files(sheets, output_dir, start_index=1, label_prefix=None):
     os.makedirs(output_dir, exist_ok=True)
 
     results = []
 
-    for sheet_idx, sheet in enumerate(sheets, start=1):
+    for offset, sheet in enumerate(sheets):
         if not sheet['cut_plan']:
             continue
+        sheet_idx = start_index + offset
 
         fig, ax = plt.subplots(figsize=(10, 5))
         panel_w, panel_h = sheet['panel_size']
@@ -53,7 +54,11 @@ def draw_sheets_to_files(sheets, output_dir):
         ax.set_yticks(range(0, int(panel_h)+1, 12))
         ax.grid(True, which='both', linestyle='--', linewidth=0.5, color='gray')
 
-        ax.set_title(f"Sheet #{sheet_idx} — {panel_w} x {panel_h} inches")
+        title = f"Sheet #{sheet_idx}"
+        if label_prefix:
+            title += f" — {label_prefix}"
+        title += f" — {panel_w} x {panel_h} inches"
+        ax.set_title(title)
         ax.invert_yaxis()
 
         file_path = os.path.join(output_dir, f"sheet_{sheet_idx}.png")
@@ -62,6 +67,9 @@ def draw_sheets_to_files(sheets, output_dir):
 
         # Return path relative to static/ and a label for the template
         relative_path = file_path.replace("static/", "", 1)
-        results.append((relative_path, f"{int(panel_w)} x {int(panel_h)}"))
+        label = f"{int(panel_w)} x {int(panel_h)}"
+        if label_prefix:
+            label = f"{label_prefix} — {label}"
+        results.append((relative_path, label))
 
     return results

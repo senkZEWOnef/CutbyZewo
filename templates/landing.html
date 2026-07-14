@@ -112,7 +112,7 @@
         <div class="card-body">
           {% if recent_jobs and recent_jobs|length > 0 %}
           {% for job in recent_jobs %}
-          <div class="d-flex align-items-center p-3 border-bottom">
+          <a href="{{ url_for('job_details', job_id=job.id) }}" class="d-flex align-items-center p-3 border-bottom text-decoration-none text-dark job-row-link">
             <div class="me-3">
               <div class="rounded-circle bg-primary d-flex align-items-center justify-content-center" style="width: 40px; height: 40px;">
                 <i class="fas fa-user text-white"></i>
@@ -125,14 +125,14 @@
             <div>
               {% set status_class = {
                 'draft': 'status-draft',
-                'quoted': 'status-quoted', 
+                'quoted': 'status-quoted',
                 'in_progress': 'status-progress',
                 'completed': 'status-completed',
                 'cancelled': 'status-cancelled'
               }.get(job.status, 'status-draft') %}
               <span class="status-badge {{ status_class }}">{{ job.status.replace('_', ' ').title() if job.status else 'Draft' }}</span>
             </div>
-          </div>
+          </a>
           {% endfor %}
           {% else %}
           <div class="text-center py-4">
