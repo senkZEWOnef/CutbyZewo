@@ -17,6 +17,23 @@ from reportlab.lib.pagesizes import letter
 from reportlab.lib.units import inch
 
 from flask_wtf import CSRFProtect
+
+_SENTRY_DSN = os.environ.get("SENTRY_DSN")
+if _SENTRY_DSN:
+    import sentry_sdk
+    from sentry_sdk.integrations.flask import FlaskIntegration
+    sentry_sdk.init(
+        dsn=_SENTRY_DSN,
+        integrations=[FlaskIntegration()],
+        traces_sample_rate=0.0,
+        environment=os.environ.get("FLASK_ENV", "production"),
+    )
+
+def capture_exception(e):
+    """Report a handled exception to Sentry, if configured. No-op otherwise."""
+    if _SENTRY_DSN:
+        sentry_sdk.capture_exception(e)
+
 from neon_client import execute_query, execute_single, execute_batch_insert
 from planner import optimize_cuts
 from visualizer import draw_sheets_to_files
@@ -190,6 +207,7 @@ def current_user():
         user = execute_single("SELECT * FROM users WHERE id = %s", (uid,))
         return user
     except Exception as e:
+        capture_exception(e)
         print("Error fetching user:", e)
         return None
 
@@ -286,6 +304,7 @@ def signup():
             return redirect(url_for("login"))
             
         except Exception as e:
+            capture_exception(e)
             print("Error creating user:", e)
             flash("Error creating account. Please try again.", "danger")
             return render_template("signup.html")
@@ -307,6 +326,7 @@ def login():
             else:
                 flash("Invalid email or password.", "danger")
         except Exception as e:
+            capture_exception(e)
             print("Error logging in:", e)
             flash("Login error. Please try again.", "danger")
     
@@ -344,6 +364,7 @@ def forgot_password():
                     """
                 )
         except Exception as e:
+            capture_exception(e)
             print("Error in forgot_password:", e)
         # Same message whether or not the email exists, so we don't leak account info
         flash("If an account exists with that email, a reset link has been sent.", "info")
@@ -469,6 +490,7 @@ def home():
                 })
 
         except Exception as e:
+            capture_exception(e)
             print("Error loading home page:", e)
 
     current_date = datetime.now().date()
@@ -552,6 +574,7 @@ def create_job():
                     try:
                         regenerate_cut_sheets(job_uuid)
                     except Exception as e:
+                        capture_exception(e)
                         print("Error generating cut sheets from template:", e)
                 flash(f"Job created from template — review parts and go to estimate.", "info")
                 return redirect(url_for('job_step_parts', job_id=job_uuid))
@@ -563,6 +586,7 @@ def create_job():
         return redirect(url_for('job_step_parts', job_id=job_uuid))
 
     except Exception as e:
+        capture_exception(e)
         print("Error creating job:", e)
         flash("Error creating job. Please try again.", "danger")
         return redirect(url_for("create_job"))
@@ -628,6 +652,7 @@ def job_step_parts(job_id):
     try:
         regenerate_cut_sheets(job_id, panel_width, panel_height)
     except Exception as e:
+        capture_exception(e)
         print("Error generating cut sheets:", e)
         flash(f"Parts saved but cut sheet generation failed: {e}", "warning")
 
@@ -758,6 +783,7 @@ def jobs():
         return render_template("jobs.html", jobs=job_data, current_date=current_date, q=q, status_filter=status_filter)
 
     except Exception as e:
+        capture_exception(e)
         print("Error loading jobs:", e)
         flash("Could not load jobs. Please try again later.", "danger")
         return redirect(url_for("home"))
@@ -877,6 +903,7 @@ def job_details(job_id):
         )
         
     except Exception as e:
+        capture_exception(e)
         print("Error loading job details:", e)
         flash("Could not load job details.", "danger")
         return redirect(url_for("jobs"))
@@ -1000,6 +1027,7 @@ def edit_job(job_id):
         return render_template("edit_job.html", job=job, deadline=deadline)
         
     except Exception as e:
+        capture_exception(e)
         print("Error editing job:", e)
         flash("Could not edit job.", "danger")
         return redirect(url_for("jobs"))
@@ -1022,6 +1050,7 @@ def delete_part(part_id):
     try:
         regenerate_cut_sheets(job_id)
     except Exception as e:
+        capture_exception(e)
         print("Error regenerating cut sheets after part delete:", e)
     flash("Part removed.", "success")
     return redirect(url_for("job_details", job_id=job_id))
@@ -1160,6 +1189,7 @@ def add_payment(job_id):
         )
         flash(f"Payment of ${amount:,.2f} recorded.", "success")
     except Exception as e:
+        capture_exception(e)
         flash("Could not record payment.", "danger")
     return redirect(url_for("job_details", job_id=job_id))
 
@@ -1416,6 +1446,7 @@ def job_gallery(job_id):
         return render_template("job_gallery.html", job=job, sheet_images=sheet_images)
         
     except Exception as e:
+        capture_exception(e)
         print("Error loading job gallery:", e)
         flash("Could not load job gallery.", "danger")
         return redirect(url_for("jobs"))
@@ -1462,6 +1493,7 @@ def delete_job(job_id):
         return redirect(url_for("jobs"))
         
     except Exception as e:
+        capture_exception(e)
         print("Error deleting job:", e)
         flash("Could not delete job.", "danger")
         return redirect(url_for("jobs"))
@@ -1495,6 +1527,7 @@ def set_price(job_id):
         return redirect(url_for("job_details", job_id=job_id))
         
     except Exception as e:
+        capture_exception(e)
         print("Error setting price:", e)
         flash("Could not update price.", "danger")
         return redirect(url_for("job_details", job_id=job_id))
@@ -1528,6 +1561,7 @@ def update_job_status(job_id):
         return redirect(url_for("job_details", job_id=job_id))
         
     except Exception as e:
+        capture_exception(e)
         print("Error updating status:", e)
         flash("Could not update status.", "danger")
         return redirect(url_for("job_details", job_id=job_id))
@@ -1584,6 +1618,7 @@ def calendar():
         return render_template("calendar.html", calendar_events=events)
 
     except Exception as e:
+        capture_exception(e)
         print("Error loading calendar:", e)
         flash("Could not load calendar.", "warning")
         return redirect(url_for("home"))
@@ -1707,6 +1742,7 @@ def create_detailed_estimate(job_id):
         )
 
     except Exception as e:
+        capture_exception(e)
         print("Error creating estimate:", e)
         flash("Could not create estimate.", "danger")
         return redirect(url_for("job_details", job_id=job_id))
@@ -1749,6 +1785,7 @@ def view_estimate(estimate_id):
         return render_template("view_estimate.html", estimate=estimate, grouped_items=dict(grouped_items), job=job, totals=totals)
         
     except Exception as e:
+        capture_exception(e)
         print("Error viewing estimate:", e)
         flash("Could not load estimate.", "danger")
         return redirect(url_for("jobs"))
@@ -1840,6 +1877,7 @@ def edit_estimate(estimate_id):
             estimate=estimate
         )
     except Exception as e:
+        capture_exception(e)
         print("Error editing estimate:", e)
         flash("Could not load estimate for editing.", "danger")
         return redirect(url_for("jobs"))
@@ -1923,6 +1961,7 @@ def save_estimate(job_id):
         return redirect(url_for("job_details", job_id=job_id))
         
     except Exception as e:
+        capture_exception(e)
         print("Error saving estimate:", e)
         flash("Could not save estimate.", "danger")
         return redirect(url_for("job_details", job_id=job_id))
@@ -2002,6 +2041,7 @@ def download_job_pdf(job_id):
         )
         
     except Exception as e:
+        capture_exception(e)
         print("Error generating PDF:", e)
         flash("Could not generate PDF.", "danger")
         return redirect(url_for("job_details", job_id=job_id))
@@ -2025,6 +2065,7 @@ def view_stocks():
         return render_template("stocks.html", stocks=stocks)
         
     except Exception as e:
+        capture_exception(e)
         print("Error loading stocks:", e)
         flash("Could not load stocks.", "danger")
         return redirect(url_for("home"))
@@ -2053,6 +2094,7 @@ def add_stock():
         flash("Stock item added successfully!", "success")
         
     except Exception as e:
+        capture_exception(e)
         print("Error adding stock:", e)
         flash("Could not add stock item.", "danger")
     
@@ -2077,6 +2119,7 @@ def update_stock(stock_id):
         flash("Stock updated successfully!", "success")
         
     except Exception as e:
+        capture_exception(e)
         print("Error updating stock:", e)
         flash("Could not update stock.", "danger")
     
@@ -2099,6 +2142,7 @@ def delete_stock(stock_id):
         flash("Stock item deleted successfully!", "success")
         
     except Exception as e:
+        capture_exception(e)
         print("Error deleting stock:", e)
         flash("Could not delete stock item.", "danger")
     
@@ -2142,6 +2186,7 @@ def cabinet_designer_job(job_id):
         return render_template("ipad_cabinet_designer.html", job=job, parts=parts)
     
     except Exception as e:
+        capture_exception(e)
         print("Error loading cabinet designer:", e)
         flash("Could not load cabinet designer.", "danger")
         return redirect(url_for("jobs"))
@@ -2174,6 +2219,7 @@ def simple_designer_job(job_id):
         return render_template("simple_cabinet_designer.html", job=job, parts=parts)
     
     except Exception as e:
+        capture_exception(e)
         print("Error loading simple designer:", e)
         flash("Could not load designer.", "danger")
         return redirect(url_for("jobs"))

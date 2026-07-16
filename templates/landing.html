@@ -164,7 +164,7 @@
               </div>
             </div>
             <div class="flex-grow-1">
-              <h6 class="mb-1">{{ job.jobs.client_name if job.jobs else 'Unknown Client' }}</h6>
+              <h6 class="mb-1">{{ job.client_name or 'Unknown Client' }}</h6>
               <small class="text-muted">Due: {{ job.hard_deadline.strftime('%Y-%m-%d') if job.hard_deadline else 'No date' }}</small>
             </div>
           </div>
