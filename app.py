@@ -2,8 +2,8 @@
 from flask import Flask, render_template, request, redirect, url_for, flash, session, send_file, make_response, current_app, jsonify
 from werkzeug.utils import secure_filename
 from datetime import datetime, timedelta, timezone
-import os, uuid, shutil, glob, json, math, secrets, base64 as _b64
-from io import BytesIO
+import os, uuid, shutil, glob, json, math, secrets, csv, zipfile, base64 as _b64
+from io import BytesIO, StringIO
 from PIL import Image
 
 try:
@@ -49,6 +49,10 @@ load_dotenv()
 app = Flask(__name__)
 app.secret_key = os.environ.get('SECRET_KEY', 'dev-key-change-in-production')
 csrf = CSRFProtect(app)
+
+@app.context_processor
+def inject_now():
+    return {"now": datetime.now()}
 
 # ✅ Ensure folders exist
 os.makedirs("static/sheets", exist_ok=True)
@@ -136,6 +140,21 @@ for _col, _def in [
 
 try:
     execute_query("""
+        CREATE TABLE IF NOT EXISTS job_hours (
+            id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+            job_id UUID NOT NULL REFERENCES jobs(id) ON DELETE CASCADE,
+            user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            hours NUMERIC(6,2) NOT NULL,
+            work_date DATE,
+            notes TEXT,
+            created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+        )
+    """, fetch=False)
+except Exception as _e:
+    print("Warning: could not ensure job_hours table:", _e)
+
+try:
+    execute_query("""
         CREATE TABLE IF NOT EXISTS payments (
             id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
             job_id UUID NOT NULL REFERENCES jobs(id) ON DELETE CASCADE,
@@ -219,13 +238,12 @@ def _sorted_thicknesses(thicknesses):
         key=lambda t: (THICKNESS_ORDER.index(t) if t in THICKNESS_ORDER else len(THICKNESS_ORDER), t)
     )
 
-def regenerate_cut_sheets(job_id, panel_width=96, panel_height=48):
-    """(Re)build a job's cut sheet images, grouped by material thickness so
-    each sheet is labeled with the stock it actually represents — parts of
-    different thicknesses never come from the same physical sheet."""
-    parts = execute_query("SELECT * FROM parts WHERE job_id = %s", (job_id,), fetch=True)
-    execute_query("DELETE FROM cut_sheets WHERE job_id = %s", (job_id,), fetch=False)
-
+def _optimized_sheets_by_thickness(job_id, panel_width=96, panel_height=48):
+    """Fetch a job's parts, grouped by material thickness, and run the cut
+    optimizer on each group. Returns an ordered list of (thickness, sheet)
+    tuples — shared by cut sheet image generation and the printable checklist
+    so both always agree on the same layout."""
+    parts = execute_query("SELECT * FROM parts WHERE job_id = %s ORDER BY created_at", (job_id,), fetch=True)
     if not parts:
         return []
 
@@ -234,17 +252,31 @@ def regenerate_cut_sheets(job_id, panel_width=96, panel_height=48):
         thickness = p.get('thickness') or '3/4'
         groups[thickness].append((float(p['width']), float(p['height'])))
 
-    sheet_images = []
-    sheet_number = 0
+    result = []
     for thickness in _sorted_thicknesses(groups.keys()):
         optimized = optimize_cuts(panel_width, panel_height, groups[thickness])
+        for sheet in optimized:
+            if sheet['cut_plan']:
+                result.append((thickness, sheet))
+    return result
+
+def regenerate_cut_sheets(job_id, panel_width=96, panel_height=48):
+    """(Re)build a job's cut sheet images, grouped by material thickness so
+    each sheet is labeled with the stock it actually represents — parts of
+    different thicknesses never come from the same physical sheet."""
+    execute_query("DELETE FROM cut_sheets WHERE job_id = %s", (job_id,), fetch=False)
+    thickness_sheets = _optimized_sheets_by_thickness(job_id, panel_width, panel_height)
+
+    if not thickness_sheets:
+        return []
+
+    sheet_images = []
+    for i, (thickness, sheet) in enumerate(thickness_sheets, start=1):
         imgs = draw_sheets_to_files(
-            optimized, f"static/sheets/{job_id}",
-            start_index=sheet_number + 1, label_prefix=f'{thickness}"'
+            [sheet], f"static/sheets/{job_id}",
+            start_index=i, label_prefix=f'{thickness}"'
         )
-        for src, label in imgs:
-            sheet_number += 1
-            sheet_images.append((src, label))
+        sheet_images.extend(imgs)
 
     cut_sheet_rows = [
         (job_id, src, label, n) for n, (src, label) in enumerate(sheet_images, start=1)
@@ -254,6 +286,56 @@ def regenerate_cut_sheets(job_id, panel_width=96, panel_height=48):
         cut_sheet_rows
     )
     return sheet_images
+
+def build_cut_checklist(job_id, panel_width=96, panel_height=48):
+    """Same layout as the cut sheet images, but as plain part lists — meant
+    to be printed and checked off at the saw instead of squinting at a PNG."""
+    thickness_sheets = _optimized_sheets_by_thickness(job_id, panel_width, panel_height)
+    checklist = []
+    for i, (thickness, sheet) in enumerate(thickness_sheets, start=1):
+        panel_w, panel_h = sheet['panel_size']
+        parts = sorted(sheet['cut_plan'], key=lambda c: c['part_number'])
+        checklist.append({
+            "sheet_number": i,
+            "thickness": thickness,
+            "panel_size": f"{int(panel_w)} x {int(panel_h)}",
+            "parts": parts,
+        })
+    return checklist
+
+def check_material_stock(user_id, job_id, panel_width=96, panel_height=48):
+    """Estimate sheets needed per thickness for this job and compare against
+    the user's Stock Inventory (fuzzy-matched by thickness appearing in the
+    stock item's name, since stock items don't have a dedicated thickness
+    column)."""
+    parts = execute_query("SELECT thickness, width, height FROM parts WHERE job_id = %s", (job_id,), fetch=True)
+    if not parts:
+        return []
+
+    thickness_areas = {}
+    for p in parts:
+        t = p['thickness'] or '3/4'
+        area = float(p['width']) * float(p['height'])
+        thickness_areas[t] = thickness_areas.get(t, 0) + area
+
+    sheet_area = float(panel_width) * float(panel_height)
+    results = []
+    for thickness in _sorted_thicknesses(thickness_areas.keys()):
+        needed = math.ceil(thickness_areas[thickness] / sheet_area * 1.15)  # 15% waste, matches the estimate prefill
+        row = execute_single(
+            "SELECT COALESCE(SUM(quantity), 0) as total, COUNT(*) as matches FROM stocks WHERE user_id = %s AND name ILIKE %s",
+            (user_id, f"%{thickness}%")
+        )
+        tracked = bool(row and int(row["matches"]) > 0)
+        on_hand = int(row["total"]) if tracked else 0
+        results.append({
+            "thickness": thickness,
+            "needed": needed,
+            "on_hand": on_hand,
+            "tracked": tracked,
+            "short_by": max(needed - on_hand, 0) if tracked else None,
+        })
+    return results
 
 # Password hashing utilities
 def hash_password(password: str) -> str:
@@ -892,6 +974,15 @@ def job_details(job_id):
         total_estimate = float(job.get('final_price') or 0)
         balance_due = max(total_estimate - total_paid, 0)
 
+        hours_logged = execute_query(
+            "SELECT * FROM job_hours WHERE job_id = %s ORDER BY work_date DESC NULLS LAST, created_at DESC",
+            (job_id,), fetch=True
+        )
+        total_hours = sum(float(h['hours']) for h in hours_logged)
+        estimated_labor = float(estimates[0]['labor_rate']) if estimates and estimates[0].get('labor_rate') is not None else None
+
+        material_check = check_material_stock(user_id, job_id)
+
         return render_template(
             "job_details.html",
             job=job, parts=parts, grouped_parts=grouped_parts,
@@ -900,6 +991,9 @@ def job_details(job_id):
             accessories=accessories,
             payments=payments, total_paid=total_paid,
             balance_due=balance_due,
+            hours_logged=hours_logged, total_hours=total_hours,
+            estimated_labor=estimated_labor,
+            material_check=material_check,
         )
         
     except Exception as e:
@@ -1203,6 +1297,67 @@ def delete_payment(job_id, payment_id):
         (payment_id, session["user_id"]), fetch=False
     )
     return redirect(url_for("job_details", job_id=job_id))
+
+
+# ===== LABOR HOURS =====
+
+@app.route("/job/<job_id>/log-hours", methods=["POST"])
+def log_hours(job_id):
+    if "user_id" not in session:
+        return redirect(url_for("login"))
+    user_id = session["user_id"]
+    job = execute_single("SELECT * FROM jobs WHERE id = %s AND user_id = %s", (job_id, user_id))
+    if not job:
+        flash("Job not found.", "danger")
+        return redirect(url_for("jobs"))
+    try:
+        hours = float(request.form.get("hours", 0))
+        work_date = request.form.get("work_date") or None
+        notes = request.form.get("notes", "").strip() or None
+        if hours <= 0:
+            flash("Hours must be greater than 0.", "warning")
+        else:
+            execute_query(
+                "INSERT INTO job_hours (job_id, user_id, hours, work_date, notes) VALUES (%s, %s, %s, %s, %s)",
+                (job_id, user_id, hours, work_date, notes), fetch=False
+            )
+            flash(f"Logged {hours} hour(s).", "success")
+    except Exception as e:
+        capture_exception(e)
+        flash("Could not log hours.", "danger")
+    return redirect(url_for("job_details", job_id=job_id))
+
+
+@app.route("/job/<job_id>/delete-hours/<entry_id>", methods=["POST"])
+def delete_hours(job_id, entry_id):
+    if "user_id" not in session:
+        return redirect(url_for("login"))
+    execute_query(
+        "DELETE FROM job_hours WHERE id = %s AND user_id = %s",
+        (entry_id, session["user_id"]), fetch=False
+    )
+    return redirect(url_for("job_details", job_id=job_id))
+
+
+# ===== CUT CHECKLIST =====
+
+@app.route("/job/<job_id>/cut-checklist")
+def cut_checklist(job_id):
+    if "user_id" not in session:
+        return redirect(url_for("login"))
+    user_id = session["user_id"]
+    job = execute_single("SELECT * FROM jobs WHERE id = %s AND user_id = %s", (job_id, user_id))
+    if not job:
+        flash("Job not found.", "danger")
+        return redirect(url_for("jobs"))
+    try:
+        sheets = build_cut_checklist(job_id)
+    except Exception as e:
+        capture_exception(e)
+        print("Error building cut checklist:", e)
+        flash("Could not build the cut checklist.", "danger")
+        return redirect(url_for("job_details", job_id=job_id))
+    return render_template("cut_checklist.html", job=job, sheets=sheets)
 
 
 # ===== INVOICE CONVERSION =====
@@ -2229,6 +2384,91 @@ def simple_designer_job(job_id):
 @app.route("/help")
 def help():
     return render_template("help.html")
+
+@app.route("/terms")
+def terms():
+    return render_template("terms.html")
+
+@app.route("/privacy")
+def privacy():
+    return render_template("privacy.html")
+
+@app.route("/export-data")
+def export_data():
+    if "user_id" not in session:
+        flash("Please log in to export your data.", "warning")
+        return redirect(url_for("login"))
+
+    user_id = session["user_id"]
+
+    def write_csv(zf, filename, rows):
+        if not rows:
+            return
+        buf = StringIO()
+        writer = csv.DictWriter(buf, fieldnames=list(rows[0].keys()))
+        writer.writeheader()
+        writer.writerows(rows)
+        zf.writestr(filename, buf.getvalue())
+
+    try:
+        jobs = execute_query("SELECT * FROM jobs WHERE user_id = %s ORDER BY created_at", (user_id,), fetch=True)
+        job_ids = [str(j["id"]) for j in jobs]
+
+        zip_buffer = BytesIO()
+        with zipfile.ZipFile(zip_buffer, "w", zipfile.ZIP_DEFLATED) as zf:
+            write_csv(zf, "jobs.csv", jobs)
+
+            if job_ids:
+                placeholders = ','.join(['%s'] * len(job_ids))
+                params = tuple(job_ids)
+
+                parts = execute_query(f"SELECT * FROM parts WHERE job_id::text IN ({placeholders})", params, fetch=True)
+                write_csv(zf, "parts.csv", parts)
+
+                estimates = execute_query(f"SELECT * FROM estimates WHERE job_id::text IN ({placeholders})", params, fetch=True)
+                write_csv(zf, "estimates.csv", estimates)
+
+                estimate_ids = [str(e["id"]) for e in estimates]
+                if estimate_ids:
+                    e_placeholders = ','.join(['%s'] * len(estimate_ids))
+                    estimate_items = execute_query(
+                        f"SELECT * FROM estimate_items WHERE estimate_id::text IN ({e_placeholders})",
+                        tuple(estimate_ids), fetch=True
+                    )
+                    write_csv(zf, "estimate_items.csv", estimate_items)
+
+                payments = execute_query(f"SELECT * FROM payments WHERE job_id::text IN ({placeholders})", params, fetch=True)
+                write_csv(zf, "payments.csv", payments)
+
+                accessories = execute_query(f"SELECT * FROM job_accessories WHERE job_id::text IN ({placeholders})", params, fetch=True)
+                write_csv(zf, "accessories.csv", accessories)
+
+                deadlines = execute_query(f"SELECT * FROM deadlines WHERE job_id::text IN ({placeholders})", params, fetch=True)
+                write_csv(zf, "deadlines.csv", deadlines)
+
+                # Uploaded photos/sketches live only on disk (not in the database) and
+                # aren't recoverable if the server's filesystem is ever wiped, so bundle
+                # the originals into the export rather than just listing their paths.
+                for job_id in job_ids:
+                    upload_dir = f"static/uploads/{job_id}"
+                    if os.path.isdir(upload_dir):
+                        for fname in os.listdir(upload_dir):
+                            fpath = os.path.join(upload_dir, fname)
+                            if os.path.isfile(fpath):
+                                zf.write(fpath, arcname=f"uploads/{job_id}/{fname}")
+
+        zip_buffer.seek(0)
+        return send_file(
+            zip_buffer,
+            as_attachment=True,
+            download_name=f"cutbyzewo_export_{datetime.now().strftime('%Y%m%d')}.zip",
+            mimetype="application/zip"
+        )
+    except Exception as e:
+        capture_exception(e)
+        print("Error exporting data:", e)
+        flash("Could not export your data. Please try again.", "danger")
+        return redirect(url_for("jobs"))
 
 @app.route("/dashboard")
 def dashboard():

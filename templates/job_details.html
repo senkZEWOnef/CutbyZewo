@@ -242,6 +242,45 @@
       </div>
     </div>
 
+    <!-- Material Check Card -->
+    {% if material_check %}
+    <div class="card mb-4">
+      <div class="card-header bg-dark text-white">
+        <h6 class="mb-0"><i class="fas fa-boxes"></i> Material Check</h6>
+      </div>
+      <div class="card-body p-0">
+        <table class="table table-sm mb-0">
+          <thead class="table-light">
+            <tr><th>Thickness</th><th>Sheets Needed</th><th>In Stock</th><th>Status</th></tr>
+          </thead>
+          <tbody>
+            {% for m in material_check %}
+            <tr>
+              <td class="small">{{ m.thickness }}"</td>
+              <td class="small">{{ m.needed }}</td>
+              <td class="small">
+                {% if m.tracked %}{{ m.on_hand }}{% else %}<span class="text-muted">—</span>{% endif %}
+              </td>
+              <td class="small">
+                {% if not m.tracked %}
+                <span class="badge bg-secondary">Not tracked</span>
+                {% elif m.short_by > 0 %}
+                <span class="badge bg-danger">Short {{ m.short_by }}</span>
+                {% else %}
+                <span class="badge bg-success">OK</span>
+                {% endif %}
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+        <p class="small text-muted px-3 py-2 mb-0">
+          Matched against your <a href="{{ url_for('view_stocks') }}">Stock Inventory</a> by thickness in the item name (e.g. "3/4 Plywood"). "Not tracked" means no matching stock item was found.
+        </p>
+      </div>
+    </div>
+    {% endif %}
+
     <!-- Accessories Card -->
     <div class="card mb-4">
       <div class="card-header bg-secondary text-white">
@@ -353,16 +392,91 @@
       </div>
     </div>
 
+    <!-- Labor Hours Card -->
+    <div class="card mb-4">
+      <div class="card-header bg-info text-white d-flex justify-content-between align-items-center">
+        <h6 class="mb-0"><i class="fas fa-clock"></i> Labor Hours</h6>
+        <button class="btn btn-sm btn-light" data-bs-toggle="collapse" data-bs-target="#hoursForm">
+          + Log Hours
+        </button>
+      </div>
+
+      <!-- Log hours form (collapsed by default) -->
+      <div class="collapse" id="hoursForm">
+        <div class="card-body border-bottom">
+          <form method="POST" action="{{ url_for('log_hours', job_id=job.id) }}">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <div class="row g-2 align-items-end">
+              <div class="col-5">
+                <label class="form-label small fw-semibold">Hours</label>
+                <input type="number" name="hours" class="form-control form-control-sm" step="0.25" min="0" required placeholder="0.0" />
+              </div>
+              <div class="col-4">
+                <label class="form-label small fw-semibold">Date</label>
+                <input type="date" name="work_date" class="form-control form-control-sm" value="{{ now.strftime('%Y-%m-%d') }}" />
+              </div>
+              <div class="col-3">
+                <button type="submit" class="btn btn-info btn-sm w-100 text-white">Save</button>
+              </div>
+              <div class="col-12">
+                <input type="text" name="notes" class="form-control form-control-sm" placeholder="Notes (optional)" />
+              </div>
+            </div>
+          </form>
+        </div>
+      </div>
+
+      <div class="card-body p-0">
+        <!-- Hours summary -->
+        <div class="px-3 py-2 bg-light border-bottom d-flex justify-content-between small">
+          <span>Logged: <strong>{{ total_hours }} hrs</strong></span>
+          {% if estimated_labor is not none %}
+          <span>Estimated Labor: <strong>${{ "{:,.2f}".format(estimated_labor) }}</strong></span>
+          {% endif %}
+        </div>
+
+        {% if hours_logged %}
+        <div class="table-responsive">
+        <table class="table table-sm mb-0">
+          <tbody>
+            {% for h in hours_logged %}
+            <tr>
+              <td class="small">{{ h.work_date.strftime('%m/%d/%Y') if h.work_date else '' }}</td>
+              <td class="small fw-semibold text-info">{{ h.hours }} hrs</td>
+              <td class="small text-muted">{{ h.notes or '' }}</td>
+              <td>
+                <form method="POST" action="{{ url_for('delete_hours', job_id=job.id, entry_id=h.id) }}"
+                      onsubmit="return confirm('Remove this entry?')">
+                  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                  <button type="submit" class="btn btn-outline-danger btn-sm py-0 px-1">✕</button>
+                </form>
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+        </div>
+        {% else %}
+        <p class="text-muted text-center py-3 mb-0 small">No hours logged</p>
+        {% endif %}
+      </div>
+    </div>
+
   </div>
 
   <!-- Right Column: Cut Sheets & Images -->
   <div class="col-lg-8">
     <!-- Cut Sheets -->
     <div class="card mb-4">
-      <div class="card-header bg-warning">
+      <div class="card-header bg-warning d-flex justify-content-between align-items-center">
         <h5 class="mb-0">
           <i class="fas fa-cut"></i> Cut Sheets
         </h5>
+        {% if sheet_images %}
+        <a href="{{ url_for('cut_checklist', job_id=job.id) }}" class="btn btn-sm btn-dark">
+          <i class="fas fa-print"></i> Print Checklist
+        </a>
+        {% endif %}
       </div>
       <div class="card-body">
         {% if sheet_images %}

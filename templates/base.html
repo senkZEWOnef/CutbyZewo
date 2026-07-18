@@ -173,6 +173,9 @@
                 <li><a class="dropdown-item" href="{{ url_for('help') }}">
                   <i class="fas fa-question-circle"></i> Help
                 </a></li>
+                <li><a class="dropdown-item" href="{{ url_for('export_data') }}">
+                  <i class="fas fa-download"></i> Export My Data
+                </a></li>
                 <li><hr class="dropdown-divider"></li>
                 <li><a class="dropdown-item text-danger" href="{{ url_for('logout') }}">
                   <i class="fas fa-sign-out-alt"></i> Sign Out
@@ -212,6 +215,12 @@
 
       {% block content %}{% endblock %}
     </main>
+
+    <footer class="text-center text-muted small py-4 mt-4 border-top">
+      <a href="{{ url_for('terms') }}" class="text-muted me-3">Terms of Service</a>
+      <a href="{{ url_for('privacy') }}" class="text-muted">Privacy Policy</a>
+      <div class="mt-1">&copy; {{ now.year }} Cut byZewo</div>
+    </footer>
 
     <!-- Scripts -->
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
