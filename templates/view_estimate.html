@@ -70,6 +70,12 @@
       <button class="btn btn-outline-primary" onclick="window.print()">
         <i class="fas fa-print"></i> Print Estimate
       </button>
+      <a href="{{ url_for('download_estimate_pdf', estimate_id=estimate.id) }}" class="btn btn-outline-success">
+        <i class="fas fa-download"></i> Download PDF
+      </a>
+      <a href="{{ url_for('client_package_form', estimate_id=estimate.id) }}" class="btn btn-outline-dark">
+        <i class="fas fa-file-contract"></i> Client Package
+      </a>
       <button class="btn btn-outline-warning" onclick="openShareModal()">
         <i class="fas fa-share-alt"></i> Share with Client
       </button>

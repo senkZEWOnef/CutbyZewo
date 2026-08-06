@@ -37,6 +37,7 @@ def capture_exception(e):
 from neon_client import execute_query, execute_single, execute_batch_insert
 from planner import optimize_cuts
 from visualizer import draw_sheets_to_files
+from client_package import build_client_package_pdf, STANDARD_RULES
 from collections import defaultdict
 from dotenv import load_dotenv
 from local_storage_manager import LocalStorageManager
@@ -175,6 +176,16 @@ try:
     )
 except Exception as _e:
     print("Warning: could not add estimate_type column:", _e)
+
+for _col, _def in [
+    ("contract_terms",       "TEXT"),
+    ("contract_extra_rules", "TEXT"),
+    ("contract_language",    "VARCHAR(5) DEFAULT 'en'"),
+]:
+    try:
+        execute_query(f"ALTER TABLE estimates ADD COLUMN IF NOT EXISTS {_col} {_def}", fetch=False)
+    except Exception as _e:
+        print(f"Warning: could not add {_col} to estimates:", _e)
 
 def send_email(to_addr, subject, body_html):
     """Send email via SMTP. Silently skips if SMTP_HOST env var is not set."""
@@ -1382,6 +1393,116 @@ def convert_to_invoice(estimate_id):
     return redirect(url_for("view_estimate", estimate_id=estimate_id))
 
 
+# ===== CLIENT PACKAGE (printable invoice + contract + photos) =====
+
+def _fetch_estimate_for_package(estimate_id, user_id):
+    estimate = execute_single(
+        "SELECT e.*, j.user_id as owner FROM estimates e JOIN jobs j ON e.job_id = j.id WHERE e.id = %s",
+        (estimate_id,)
+    )
+    if not estimate or str(estimate['owner']) != str(user_id):
+        return None, None
+    job = execute_single("SELECT * FROM jobs WHERE id = %s", (estimate['job_id'],))
+    return estimate, job
+
+
+@app.route("/estimate/<estimate_id>/package", methods=["GET"])
+def client_package_form(estimate_id):
+    if "user_id" not in session:
+        return redirect(url_for("login"))
+    user_id = session["user_id"]
+    estimate, job = _fetch_estimate_for_package(estimate_id, user_id)
+    if not estimate:
+        flash("Estimate not found.", "danger")
+        return redirect(url_for("jobs"))
+
+    language = estimate.get("contract_language") or "en"
+    contract_terms = estimate.get("contract_terms") or STANDARD_RULES.get(language, STANDARD_RULES["en"])
+
+    files = execute_query(
+        "SELECT * FROM files WHERE job_id = %s ORDER BY uploaded_at",
+        (str(job['id']),), fetch=True
+    )
+    image_exts = {'.jpg', '.jpeg', '.png', '.gif', '.webp', '.bmp'}
+    uploaded_images = [
+        {'url': '/' + f['storage_path'], 'filename': f['filename']}
+        for f in files
+        if os.path.splitext(f['filename'])[1].lower() in image_exts
+    ]
+
+    return render_template(
+        "package_form.html",
+        job=job, estimate=estimate,
+        contract_terms=contract_terms,
+        extra_rules=estimate.get("contract_extra_rules") or "",
+        language=language,
+        standard_rules_en=STANDARD_RULES["en"],
+        standard_rules_es=STANDARD_RULES["es"],
+        uploaded_images=uploaded_images,
+    )
+
+
+@app.route("/estimate/<estimate_id>/package", methods=["POST"])
+def client_package_generate(estimate_id):
+    if "user_id" not in session:
+        return redirect(url_for("login"))
+    user_id = session["user_id"]
+    estimate, job = _fetch_estimate_for_package(estimate_id, user_id)
+    if not estimate:
+        flash("Estimate not found.", "danger")
+        return redirect(url_for("jobs"))
+
+    language = request.form.get("language", "en")
+    if language not in STANDARD_RULES:
+        language = "en"
+    contract_terms = request.form.get("contract_terms", "").strip() or STANDARD_RULES[language]
+    extra_rules = request.form.get("extra_rules", "").strip()
+
+    execute_query(
+        "UPDATE estimates SET contract_terms = %s, contract_extra_rules = %s, contract_language = %s WHERE id = %s",
+        (contract_terms, extra_rules, language, estimate_id), fetch=False
+    )
+
+    try:
+        items = execute_query(
+            "SELECT * FROM estimate_items WHERE estimate_id = %s ORDER BY item_type, created_at",
+            (estimate_id,), fetch=True
+        )
+        totals = {"material": 0.0, "hardware": 0.0, "labor": 0.0}
+        for item in items:
+            if item["item_type"] in totals:
+                totals[item["item_type"]] += float(item.get("total_price") or 0)
+
+        files = execute_query(
+            "SELECT * FROM files WHERE job_id = %s ORDER BY uploaded_at",
+            (str(job['id']),), fetch=True
+        )
+        image_exts = {'.jpg', '.jpeg', '.png', '.gif', '.webp', '.bmp'}
+        images = [
+            {'path': f['storage_path']}
+            for f in files
+            if os.path.splitext(f['filename'])[1].lower() in image_exts
+        ]
+
+        buffer = build_client_package_pdf(
+            job, estimate, items, totals, images,
+            contract_terms, extra_rules, language
+        )
+
+        safe_client = (job.get('client_name') or 'unnamed').replace(' ', '_')
+        return send_file(
+            buffer,
+            as_attachment=True,
+            download_name=f"client_package_{safe_client}_{estimate_id[:8]}.pdf",
+            mimetype='application/pdf'
+        )
+    except Exception as e:
+        capture_exception(e)
+        print("Error generating client package PDF:", e)
+        flash("Could not generate client package.", "danger")
+        return redirect(url_for("client_package_form", estimate_id=estimate_id))
+
+
 # ===== CLIENT HISTORY =====
 
 @app.route("/clients")
@@ -1944,6 +2065,97 @@ def view_estimate(estimate_id):
         print("Error viewing estimate:", e)
         flash("Could not load estimate.", "danger")
         return redirect(url_for("jobs"))
+
+@app.route("/download_estimate_pdf/<estimate_id>")
+def download_estimate_pdf(estimate_id):
+    if "user_id" not in session:
+        return redirect(url_for("login"))
+
+    user_id = session["user_id"]
+
+    try:
+        estimate = execute_single(
+            "SELECT e.*, j.client_name FROM estimates e JOIN jobs j ON e.job_id = j.id WHERE e.id = %s AND j.user_id = %s",
+            (estimate_id, user_id)
+        )
+
+        if not estimate:
+            flash("Estimate not found.", "danger")
+            return redirect(url_for("jobs"))
+
+        items = execute_query(
+            "SELECT * FROM estimate_items WHERE estimate_id = %s ORDER BY item_type, created_at",
+            (estimate_id,),
+            fetch=True
+        )
+
+        doc_type = "Invoice" if estimate.get("estimate_type") == "invoice" else "Estimate"
+
+        buffer = BytesIO()
+        p = canvas.Canvas(buffer, pagesize=letter)
+        width, height = letter
+
+        p.setFont("Helvetica-Bold", 16)
+        p.drawString(50, height - 50, f"{doc_type}: {estimate.get('name') or 'Cabinet Estimate'}")
+
+        p.setFont("Helvetica", 12)
+        y_position = height - 80
+        p.drawString(50, y_position, f"Client: {estimate.get('client_name', 'Unknown')}")
+        y_position -= 20
+        created_at = estimate.get('created_at')
+        p.drawString(50, y_position, f"Date: {created_at.strftime('%B %d, %Y') if hasattr(created_at, 'strftime') else created_at}")
+
+        if estimate.get('description'):
+            y_position -= 20
+            p.drawString(50, y_position, f"Description: {estimate['description']}")
+
+        item_type_labels = {"material": "Materials", "hardware": "Hardware", "labor": "Labor"}
+        current_type = None
+        for item in items:
+            if item['item_type'] != current_type:
+                current_type = item['item_type']
+                y_position -= 30
+                if y_position < 100:
+                    p.showPage()
+                    y_position = height - 50
+                p.setFont("Helvetica-Bold", 13)
+                p.drawString(50, y_position, item_type_labels.get(current_type, current_type.title()))
+                y_position -= 20
+                p.setFont("Helvetica", 10)
+
+            if y_position < 80:
+                p.showPage()
+                y_position = height - 50
+                p.setFont("Helvetica", 10)
+
+            line = f"{item['name']} - {item['quantity']} {item['unit']} x ${item['unit_price']} = ${item['total_price']}"
+            p.drawString(60, y_position, line)
+            y_position -= 15
+
+        y_position -= 25
+        if y_position < 80:
+            p.showPage()
+            y_position = height - 50
+        p.setFont("Helvetica-Bold", 14)
+        p.drawString(50, y_position, f"Total: ${estimate['amount']:,.2f}")
+
+        p.save()
+        buffer.seek(0)
+
+        safe_client = (estimate.get('client_name') or 'unnamed').replace(' ', '_')
+        return send_file(
+            buffer,
+            as_attachment=True,
+            download_name=f"{doc_type.lower()}_{safe_client}_{estimate_id[:8]}.pdf",
+            mimetype='application/pdf'
+        )
+
+    except Exception as e:
+        capture_exception(e)
+        print("Error generating estimate PDF:", e)
+        flash("Could not generate PDF.", "danger")
+        return redirect(url_for("view_estimate", estimate_id=estimate_id))
+
 
 @app.route("/edit_estimate/<estimate_id>", methods=["GET", "POST"])
 def edit_estimate(estimate_id):

@@ -1,0 +1,113 @@
+{% extends "base.html" %}
+{% block title %}Client Package - {{ job.client_name }} - Cut byZewo{% endblock %}
+{% block content %}
+
+<div class="row mb-4">
+  <div class="col-12">
+    <nav aria-label="breadcrumb">
+      <ol class="breadcrumb">
+        <li class="breadcrumb-item"><a href="{{ url_for('home') }}">Dashboard</a></li>
+        <li class="breadcrumb-item"><a href="{{ url_for('jobs') }}">Jobs</a></li>
+        <li class="breadcrumb-item"><a href="{{ url_for('job_details', job_id=job.id) }}">{{ job.client_name }}</a></li>
+        <li class="breadcrumb-item"><a href="{{ url_for('view_estimate', estimate_id=estimate.id) }}">Estimate</a></li>
+        <li class="breadcrumb-item active">Client Package</li>
+      </ol>
+    </nav>
+  </div>
+</div>
+
+<h1 class="display-6 mb-2"><i class="fas fa-file-contract text-success"></i> Client Package</h1>
+<p class="text-muted mb-4">
+  Builds one printable PDF — invoice &amp; materials, project photos, and a contract page with a
+  50% deposit / 50% balance split and a signature line. Print it and have the client sign in person.
+</p>
+
+<form method="POST" action="{{ url_for('client_package_generate', estimate_id=estimate.id) }}">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+  <div class="card mb-4">
+    <div class="card-header bg-secondary text-white">
+      <i class="fas fa-language"></i> Language
+    </div>
+    <div class="card-body">
+      <div class="btn-group mb-2" role="group">
+        <button type="button" class="btn btn-outline-primary" onclick="loadStandard('en')">Use English Standard Text</button>
+        <button type="button" class="btn btn-outline-primary" onclick="loadStandard('es')">Usar Texto Estándar en Español</button>
+      </div>
+      <div class="mt-2">
+        <label class="form-label small text-muted">Language tag saved with this package:</label>
+        <select name="language" id="languageSelect" class="form-select" style="max-width: 220px;">
+          <option value="en" {% if language == 'en' %}selected{% endif %}>English</option>
+          <option value="es" {% if language == 'es' %}selected{% endif %}>Español</option>
+        </select>
+      </div>
+    </div>
+  </div>
+
+  <div class="card mb-4">
+    <div class="card-header bg-secondary text-white">
+      <i class="fas fa-gavel"></i> Standard Rules
+    </div>
+    <div class="card-body">
+      <p class="text-muted small">Pre-filled with the standard rules (50% deposit to lock the date, balance due after installation, plus the usual protective clauses). Edit as needed for this job.</p>
+      <textarea name="contract_terms" id="contractTerms" class="form-control" rows="12">{{ contract_terms }}</textarea>
+    </div>
+  </div>
+
+  <div class="card mb-4">
+    <div class="card-header bg-secondary text-white">
+      <i class="fas fa-plus-circle"></i> Additional Rules for This Job (optional)
+    </div>
+    <div class="card-body">
+      <p class="text-muted small">Only for jobs that need extra terms — left blank, nothing extra is added to the contract.</p>
+      <textarea name="extra_rules" class="form-control" rows="4" placeholder="e.g. Client to supply their own hardware; job requires after-hours access; special warranty terms...">{{ extra_rules }}</textarea>
+    </div>
+  </div>
+
+  <div class="card mb-4">
+    <div class="card-header bg-secondary text-white">
+      <i class="fas fa-images"></i> Project Photos
+      <span class="badge bg-light text-dark">{{ uploaded_images|length }}</span>
+    </div>
+    <div class="card-body">
+      {% if uploaded_images %}
+      <p class="text-muted small">All {{ uploaded_images|length }} photo(s) from this job's files will be included in the package.</p>
+      <div class="row">
+        {% for img in uploaded_images[:8] %}
+        <div class="col-3 col-md-2 mb-2">
+          <img src="{{ img.url }}" class="img-fluid border rounded" alt="{{ img.filename }}">
+        </div>
+        {% endfor %}
+      </div>
+      {% if uploaded_images|length > 8 %}
+      <p class="text-muted small mb-0">+ {{ uploaded_images|length - 8 }} more</p>
+      {% endif %}
+      {% else %}
+      <div class="alert alert-info mb-0">No photos uploaded for this job yet — the package will skip the photos section.</div>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="d-flex gap-2">
+    <a href="{{ url_for('view_estimate', estimate_id=estimate.id) }}" class="btn btn-outline-secondary">
+      <i class="fas fa-arrow-left"></i> Back
+    </a>
+    <button type="submit" class="btn btn-success">
+      <i class="fas fa-file-pdf"></i> Generate Client Package PDF
+    </button>
+  </div>
+</form>
+
+<script>
+const STANDARD_RULES = {
+  en: {{ standard_rules_en|tojson }},
+  es: {{ standard_rules_es|tojson }}
+};
+function loadStandard(lang) {
+  if (!confirm('Replace the Standard Rules text with the ' + (lang === 'es' ? 'Spanish' : 'English') + ' default? Any edits you made to that box will be lost.')) return;
+  document.getElementById('contractTerms').value = STANDARD_RULES[lang];
+  document.getElementById('languageSelect').value = lang;
+}
+</script>
+
+{% endblock %}

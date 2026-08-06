@@ -56,6 +56,9 @@ CREATE TABLE estimates (
     description TEXT,
     labor_rate DECIMAL(6,2),
     markup_percentage DECIMAL(5,2),
+    contract_terms TEXT,
+    contract_extra_rules TEXT,
+    contract_language VARCHAR(5) DEFAULT 'en',
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 

@@ -577,6 +577,14 @@
                    class="btn btn-sm btn-outline-secondary mb-1">
                   <i class="fas fa-edit"></i> Edit
                 </a>
+                <a href="{{ url_for('download_estimate_pdf', estimate_id=estimate.id) }}"
+                   class="btn btn-sm btn-outline-success mb-1">
+                  <i class="fas fa-download"></i> PDF
+                </a>
+                <a href="{{ url_for('client_package_form', estimate_id=estimate.id) }}"
+                   class="btn btn-sm btn-outline-warning mb-1">
+                  <i class="fas fa-file-contract"></i> Client Package
+                </a>
                 <br>
                 <small class="text-muted">
                   {% if estimate.created_at %}
