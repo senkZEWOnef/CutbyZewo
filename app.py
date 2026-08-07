@@ -187,6 +187,14 @@ for _col, _def in [
     except Exception as _e:
         print(f"Warning: could not add {_col} to estimates:", _e)
 
+try:
+    execute_query(
+        "ALTER TABLE files ADD COLUMN IF NOT EXISTS include_in_package BOOLEAN DEFAULT TRUE",
+        fetch=False
+    )
+except Exception as _e:
+    print("Warning: could not add include_in_package to files:", _e)
+
 def send_email(to_addr, subject, body_html):
     """Send email via SMTP. Silently skips if SMTP_HOST env var is not set."""
     import smtplib
@@ -1425,7 +1433,12 @@ def client_package_form(estimate_id):
     )
     image_exts = {'.jpg', '.jpeg', '.png', '.gif', '.webp', '.bmp'}
     uploaded_images = [
-        {'url': '/' + f['storage_path'], 'filename': f['filename']}
+        {
+            'url': '/' + f['storage_path'],
+            'filename': f['filename'],
+            'id': str(f['id']),
+            'include_in_package': f.get('include_in_package') is not False,
+        }
         for f in files
         if os.path.splitext(f['filename'])[1].lower() in image_exts
     ]
@@ -1478,11 +1491,17 @@ def client_package_generate(estimate_id):
             (str(job['id']),), fetch=True
         )
         image_exts = {'.jpg', '.jpeg', '.png', '.gif', '.webp', '.bmp'}
-        images = [
-            {'path': f['storage_path']}
-            for f in files
-            if os.path.splitext(f['filename'])[1].lower() in image_exts
-        ]
+        image_files = [f for f in files if os.path.splitext(f['filename'])[1].lower() in image_exts]
+
+        selected_ids = set(request.form.getlist("photo_ids"))
+        for f in image_files:
+            include = str(f['id']) in selected_ids
+            execute_query(
+                "UPDATE files SET include_in_package = %s WHERE id = %s",
+                (include, f['id']), fetch=False
+            )
+
+        images = [{'path': f['storage_path']} for f in image_files if str(f['id']) in selected_ids]
 
         buffer = build_client_package_pdf(
             job, estimate, items, totals, images,
@@ -1689,6 +1708,67 @@ def shared_estimate(token):
         estimate=estimate, job=job,
         grouped_items=dict(grouped_items), totals=totals
     )
+
+
+@app.route("/job/<job_id>/upload-photos", methods=["POST"])
+def upload_job_photos(job_id):
+    if "user_id" not in session:
+        return redirect(url_for("login"))
+    user_id = session["user_id"]
+
+    job = execute_single("SELECT id FROM jobs WHERE id = %s AND user_id = %s", (job_id, user_id))
+    if not job:
+        flash("Job not found.", "danger")
+        return redirect(url_for("jobs"))
+
+    uploaded_files = request.files.getlist("photos")
+    saved = 0
+    for file in uploaded_files:
+        if file and file.filename:
+            filename = secure_filename(file.filename)
+            file_path = f"static/uploads/{job_id}/{filename}"
+            os.makedirs(os.path.dirname(file_path), exist_ok=True)
+            file.save(file_path)
+            execute_query(
+                "INSERT INTO files (job_id, user_id, filename, storage_path, subfolder) VALUES (%s, %s, %s, %s, %s)",
+                (job_id, user_id, filename, file_path, job_id),
+                fetch=False
+            )
+            saved += 1
+
+    if saved:
+        flash(f"Uploaded {saved} photo(s).", "success")
+    else:
+        flash("No photos were selected.", "warning")
+    return redirect(url_for("job_details", job_id=job_id))
+
+
+@app.route("/job/<job_id>/photos/<file_id>/delete", methods=["POST"])
+def delete_job_photo(job_id, file_id):
+    if "user_id" not in session:
+        return redirect(url_for("login"))
+    user_id = session["user_id"]
+
+    job = execute_single("SELECT id FROM jobs WHERE id = %s AND user_id = %s", (job_id, user_id))
+    if not job:
+        flash("Job not found.", "danger")
+        return redirect(url_for("jobs"))
+
+    file_row = execute_single(
+        "SELECT * FROM files WHERE id = %s AND job_id = %s", (file_id, job_id)
+    )
+    if file_row:
+        execute_query("DELETE FROM files WHERE id = %s", (file_id,), fetch=False)
+        try:
+            if file_row.get("storage_path") and os.path.exists(file_row["storage_path"]):
+                os.remove(file_row["storage_path"])
+        except Exception as e:
+            capture_exception(e)
+            print("Error removing photo file from disk:", e)
+        flash("Photo deleted.", "success")
+    else:
+        flash("Photo not found.", "warning")
+    return redirect(url_for("job_details", job_id=job_id))
 
 
 @app.route("/job_gallery/<job_id>")

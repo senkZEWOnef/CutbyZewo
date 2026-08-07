@@ -513,6 +513,14 @@
         </h5>
       </div>
       <div class="card-body">
+        <form method="POST" action="{{ url_for('upload_job_photos', job_id=job.id) }}"
+              enctype="multipart/form-data" class="d-flex gap-2 align-items-center mb-3 flex-wrap">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <input type="file" name="photos" multiple accept="image/*" class="form-control" style="max-width: 320px;" required>
+          <button type="submit" class="btn btn-success">
+            <i class="fas fa-upload"></i> Upload Photos
+          </button>
+        </form>
         {% if uploaded_images %}
         <div class="row">
           {% for img in uploaded_images %}
@@ -525,6 +533,14 @@
                 style="cursor: pointer; aspect-ratio: 1; object-fit: cover;"
                 onclick="openImageModal('{{ img.url }}')"
               />
+              <form method="POST" action="{{ url_for('delete_job_photo', job_id=job.id, file_id=img.id) }}"
+                    class="position-absolute top-0 end-0 m-1"
+                    onsubmit="return confirm('Delete this photo?');">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <button type="submit" class="btn btn-sm btn-danger" title="Delete photo">
+                  <i class="fas fa-trash"></i>
+                </button>
+              </form>
               <div class="position-absolute bottom-0 start-0 end-0 bg-dark bg-opacity-75 text-white p-2 rounded-bottom">
                 <small class="d-block text-truncate">{{ img.filename }}</small>
                 {% if img.subfolder %}
@@ -538,8 +554,7 @@
         {% else %}
         <div class="text-center py-4">
           <i class="fas fa-image fa-2x text-muted mb-3"></i>
-          <p class="text-muted">No photos uploaded</p>
-          <p class="small text-muted">Upload photos when editing this job</p>
+          <p class="text-muted">No photos uploaded yet</p>
         </div>
         {% endif %}
       </div>

@@ -67,21 +67,28 @@
   <div class="card mb-4">
     <div class="card-header bg-secondary text-white">
       <i class="fas fa-images"></i> Project Photos
-      <span class="badge bg-light text-dark">{{ uploaded_images|length }}</span>
+      <span class="badge bg-light text-dark">{{ uploaded_images|selectattr('include_in_package')|list|length }} / {{ uploaded_images|length }} selected</span>
     </div>
     <div class="card-body">
       {% if uploaded_images %}
-      <p class="text-muted small">All {{ uploaded_images|length }} photo(s) from this job's files will be included in the package.</p>
+      <p class="text-muted small">Check the photos to include in this package — unchecked photos stay in the job but won't appear in the PDF.</p>
+      <div class="d-flex gap-2 mb-3">
+        <button type="button" class="btn btn-sm btn-outline-secondary" onclick="setAllPhotos(true)">Select All</button>
+        <button type="button" class="btn btn-sm btn-outline-secondary" onclick="setAllPhotos(false)">Deselect All</button>
+      </div>
       <div class="row">
-        {% for img in uploaded_images[:8] %}
-        <div class="col-3 col-md-2 mb-2">
-          <img src="{{ img.url }}" class="img-fluid border rounded" alt="{{ img.filename }}">
+        {% for img in uploaded_images %}
+        <div class="col-4 col-md-3 mb-3">
+          <label class="d-block position-relative" style="cursor: pointer;">
+            <img src="{{ img.url }}" class="img-fluid border rounded {{ 'opacity-50' if not img.include_in_package }}" alt="{{ img.filename }}">
+            <input type="checkbox" name="photo_ids" value="{{ img.id }}" class="form-check-input position-absolute top-0 start-0 m-2 photo-checkbox"
+                   style="width: 1.3em; height: 1.3em;"
+                   {% if img.include_in_package %}checked{% endif %}
+                   onchange="this.previousElementSibling.classList.toggle('opacity-50', !this.checked);">
+          </label>
         </div>
         {% endfor %}
       </div>
-      {% if uploaded_images|length > 8 %}
-      <p class="text-muted small mb-0">+ {{ uploaded_images|length - 8 }} more</p>
-      {% endif %}
       {% else %}
       <div class="alert alert-info mb-0">No photos uploaded for this job yet — the package will skip the photos section.</div>
       {% endif %}
@@ -107,6 +114,12 @@ function loadStandard(lang) {
   if (!confirm('Replace the Standard Rules text with the ' + (lang === 'es' ? 'Spanish' : 'English') + ' default? Any edits you made to that box will be lost.')) return;
   document.getElementById('contractTerms').value = STANDARD_RULES[lang];
   document.getElementById('languageSelect').value = lang;
+}
+function setAllPhotos(checked) {
+  document.querySelectorAll('.photo-checkbox').forEach(function (cb) {
+    cb.checked = checked;
+    cb.previousElementSibling.classList.toggle('opacity-50', !checked);
+  });
 }
 </script>
 

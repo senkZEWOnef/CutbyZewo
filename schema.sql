@@ -86,6 +86,7 @@ CREATE TABLE files (
     subfolder VARCHAR(255),
     file_size INTEGER,
     mime_type VARCHAR(100),
+    include_in_package BOOLEAN DEFAULT TRUE,
     uploaded_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
