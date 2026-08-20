@@ -2,6 +2,23 @@
 {% block title %}Estimate Details - {{ job.client_name }} - Cut byZewo{% endblock %}
 {% block content %}
 
+<style>
+  :root {
+    --pdf-brand-dark: #3d2314; --pdf-brand-accent: #8B4513;
+    --pdf-green: #198754; --pdf-green-dark: #146c43;
+    --pdf-tan: #f3ece2; --pdf-row-alt: #faf7f3; --pdf-border: #e2d9cc;
+  }
+  .section-header-brand { background: var(--pdf-brand-dark); color: #fff; }
+  .total-box-brand { background: var(--pdf-green-dark); color: #fff; }
+  .badge-invoice { background: var(--pdf-green); color: #fff; }
+  .badge-quote { background: var(--pdf-brand-accent); color: #fff; }
+  .table-brand tbody tr:nth-child(even) td { background: var(--pdf-row-alt); }
+  .summary-total-row { background: var(--pdf-green-dark) !important; color: #fff; }
+  .doc-number { color: var(--pdf-brand-accent); font-weight: 600; letter-spacing: .03em; }
+  .contact-block { font-size: .85rem; color: #6c757d; }
+</style>
+
+
 <div class="row mb-4">
   <div class="col-12">
     <nav aria-label="breadcrumb">
@@ -26,14 +43,15 @@
       {% endif %}
       {{ estimate.name or "Cabinet Estimate" }}
       {% if estimate.estimate_type == 'invoice' %}
-      <span class="badge bg-warning text-dark ms-2 fs-6">Invoice</span>
+      <span class="badge badge-invoice ms-2 fs-6">Invoice</span>
       {% else %}
-      <span class="badge bg-secondary ms-2 fs-6">Quote</span>
+      <span class="badge badge-quote ms-2 fs-6">Quote</span>
       {% endif %}
     </h1>
-    <p class="text-muted mb-3">
+    <p class="doc-number small mb-1">No. {{ doc_number }}</p>
+    <p class="text-muted mb-1">
       <strong>Client:</strong> {{ job.client_name }} |
-      <strong>Created:</strong> 
+      <strong>Created:</strong>
       {% if estimate.created_at %}
         {% if estimate.created_at.strftime %}
           {{ estimate.created_at.strftime('%B %d, %Y at %I:%M %p') }}
@@ -44,14 +62,21 @@
         Unknown
       {% endif %}
     </p>
-    
+    {% if job.phone or job.email or job.address %}
+    <p class="contact-block mb-3">
+      {% if job.phone %}<i class="fas fa-phone"></i> {{ job.phone }}{% endif %}
+      {% if job.email %}{% if job.phone %}&nbsp;·&nbsp;{% endif %}<i class="fas fa-envelope"></i> {{ job.email }}{% endif %}
+      {% if job.address %}{% if job.phone or job.email %}&nbsp;·&nbsp;{% endif %}<i class="fas fa-location-dot"></i> {{ job.address }}{% endif %}
+    </p>
+    {% endif %}
+
     {% if estimate.description %}
     <p class="text-muted">{{ estimate.description }}</p>
     {% endif %}
   </div>
   
   <div class="col-md-4 text-end">
-    <div class="card bg-success text-white">
+    <div class="card total-box-brand">
       <div class="card-body text-center">
         <h2 class="mb-0">${{ "{:,.2f}".format(estimate.amount) }}</h2>
         <small>Total Estimate</small>
@@ -97,7 +122,7 @@
 <!-- Materials Section -->
 {% if grouped_items.material %}
 <div class="card mb-4">
-  <div class="card-header bg-primary text-white">
+  <div class="card-header section-header-brand">
     <div class="d-flex justify-content-between align-items-center">
       <h5 class="mb-0">
         <i class="fas fa-boxes"></i> Materials
@@ -107,7 +132,7 @@
   </div>
   <div class="card-body">
     <div class="table-responsive">
-      <table class="table table-hover">
+      <table class="table table-hover table-brand">
         <thead class="table-light">
           <tr>
             <th>Item</th>
@@ -137,7 +162,7 @@
 <!-- Hardware Section -->
 {% if grouped_items.hardware %}
 <div class="card mb-4">
-  <div class="card-header bg-info text-white">
+  <div class="card-header section-header-brand">
     <div class="d-flex justify-content-between align-items-center">
       <h5 class="mb-0">
         <i class="fas fa-tools"></i> Hardware
@@ -147,7 +172,7 @@
   </div>
   <div class="card-body">
     <div class="table-responsive">
-      <table class="table table-hover">
+      <table class="table table-hover table-brand">
         <thead class="table-light">
           <tr>
             <th>Item</th>
@@ -177,7 +202,7 @@
 <!-- Labor Section -->
 {% if grouped_items.labor %}
 <div class="card mb-4">
-  <div class="card-header bg-warning text-dark">
+  <div class="card-header section-header-brand">
     <div class="d-flex justify-content-between align-items-center">
       <h5 class="mb-0">
         <i class="fas fa-user-hard-hat"></i> Labor
@@ -187,7 +212,7 @@
   </div>
   <div class="card-body">
     <div class="table-responsive">
-      <table class="table table-hover">
+      <table class="table table-hover table-brand">
         <thead class="table-light">
           <tr>
             <th>Service</th>
@@ -243,7 +268,7 @@
               <td class="text-end">${{ "{:,.2f}".format(totals.labor) }}</td>
             </tr>
             {% endif %}
-            <tr class="table-success">
+            <tr class="summary-total-row">
               <th>Total Estimate:</th>
               <th class="text-end">${{ "{:,.2f}".format(estimate.amount) }}</th>
             </tr>

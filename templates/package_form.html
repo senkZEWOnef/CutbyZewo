@@ -2,6 +2,10 @@
 {% block title %}Client Package - {{ job.client_name }} - Cut byZewo{% endblock %}
 {% block content %}
 
+<style>
+  .section-header-brand { background: #3d2314; color: #fff; }
+</style>
+
 <div class="row mb-4">
   <div class="col-12">
     <nav aria-label="breadcrumb">
@@ -26,7 +30,7 @@
   <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
 
   <div class="card mb-4">
-    <div class="card-header bg-secondary text-white">
+    <div class="card-header section-header-brand">
       <i class="fas fa-language"></i> Language
     </div>
     <div class="card-body">
@@ -45,7 +49,7 @@
   </div>
 
   <div class="card mb-4">
-    <div class="card-header bg-secondary text-white">
+    <div class="card-header section-header-brand">
       <i class="fas fa-gavel"></i> Standard Rules
     </div>
     <div class="card-body">
@@ -55,7 +59,7 @@
   </div>
 
   <div class="card mb-4">
-    <div class="card-header bg-secondary text-white">
+    <div class="card-header section-header-brand">
       <i class="fas fa-plus-circle"></i> Additional Rules for This Job (optional)
     </div>
     <div class="card-body">
@@ -65,7 +69,7 @@
   </div>
 
   <div class="card mb-4">
-    <div class="card-header bg-secondary text-white">
+    <div class="card-header section-header-brand">
       <i class="fas fa-images"></i> Project Photos
       <span class="badge bg-light text-dark">{{ uploaded_images|selectattr('include_in_package')|list|length }} / {{ uploaded_images|length }} selected</span>
     </div>

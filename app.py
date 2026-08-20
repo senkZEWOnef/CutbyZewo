@@ -37,7 +37,8 @@ def capture_exception(e):
 from neon_client import execute_query, execute_single, execute_batch_insert
 from planner import optimize_cuts
 from visualizer import draw_sheets_to_files
-from client_package import build_client_package_pdf, STANDARD_RULES
+from client_package import build_client_package_pdf, build_estimate_pdf, STANDARD_RULES
+import pdf_common
 from collections import defaultdict
 from dotenv import load_dotenv
 from local_storage_manager import LocalStorageManager
@@ -1703,10 +1704,13 @@ def shared_estimate(token):
             )
     except Exception:
         pass
+    doc_number = str(estimate['id'])[:8].upper()
+    logo_exists = os.path.exists(pdf_common.LOGO_PATH)
     return render_template(
         "shared_estimate.html",
         estimate=estimate, job=job,
-        grouped_items=dict(grouped_items), totals=totals
+        grouped_items=dict(grouped_items), totals=totals,
+        doc_number=doc_number, logo_exists=logo_exists
     )
 
 
@@ -2112,21 +2116,22 @@ def view_estimate(estimate_id):
     
     try:
         estimate = execute_single(
-            "SELECT e.*, j.client_name FROM estimates e JOIN jobs j ON e.job_id = j.id WHERE e.id = %s AND j.user_id = %s",
+            "SELECT e.*, j.client_name, j.phone, j.email, j.address FROM estimates e "
+            "JOIN jobs j ON e.job_id = j.id WHERE e.id = %s AND j.user_id = %s",
             (estimate_id, user_id)
         )
-        
+
         if not estimate:
             flash("Estimate not found.", "danger")
             return redirect(url_for("jobs"))
-        
+
         # Get estimate items
         items = execute_query(
             "SELECT * FROM estimate_items WHERE estimate_id = %s ORDER BY created_at",
             (estimate_id,),
             fetch=True
         )
-        
+
         # Group items by type and compute totals per category
         grouped_items = defaultdict(list)
         totals = {"material": 0.0, "hardware": 0.0, "labor": 0.0}
@@ -2136,9 +2141,15 @@ def view_estimate(estimate_id):
                 totals[item["item_type"]] += float(item.get("total_price") or 0)
 
         # Build a minimal job object the template expects
-        job = {"id": str(estimate["job_id"]), "client_name": estimate["client_name"]}
+        job = {
+            "id": str(estimate["job_id"]), "client_name": estimate["client_name"],
+            "phone": estimate.get("phone"), "email": estimate.get("email"),
+            "address": estimate.get("address"),
+        }
+        doc_number = str(estimate['id'])[:8].upper()
 
-        return render_template("view_estimate.html", estimate=estimate, grouped_items=dict(grouped_items), job=job, totals=totals)
+        return render_template("view_estimate.html", estimate=estimate, grouped_items=dict(grouped_items),
+                                job=job, totals=totals, doc_number=doc_number)
         
     except Exception as e:
         capture_exception(e)
@@ -2155,7 +2166,8 @@ def download_estimate_pdf(estimate_id):
 
     try:
         estimate = execute_single(
-            "SELECT e.*, j.client_name FROM estimates e JOIN jobs j ON e.job_id = j.id WHERE e.id = %s AND j.user_id = %s",
+            "SELECT e.*, j.client_name, j.phone, j.email, j.address FROM estimates e "
+            "JOIN jobs j ON e.job_id = j.id WHERE e.id = %s AND j.user_id = %s",
             (estimate_id, user_id)
         )
 
@@ -2169,64 +2181,25 @@ def download_estimate_pdf(estimate_id):
             fetch=True
         )
 
-        doc_type = "Invoice" if estimate.get("estimate_type") == "invoice" else "Estimate"
-
-        buffer = BytesIO()
-        p = canvas.Canvas(buffer, pagesize=letter)
-        width, height = letter
-
-        p.setFont("Helvetica-Bold", 16)
-        p.drawString(50, height - 50, f"{doc_type}: {estimate.get('name') or 'Cabinet Estimate'}")
-
-        p.setFont("Helvetica", 12)
-        y_position = height - 80
-        p.drawString(50, y_position, f"Client: {estimate.get('client_name', 'Unknown')}")
-        y_position -= 20
-        created_at = estimate.get('created_at')
-        p.drawString(50, y_position, f"Date: {created_at.strftime('%B %d, %Y') if hasattr(created_at, 'strftime') else created_at}")
-
-        if estimate.get('description'):
-            y_position -= 20
-            p.drawString(50, y_position, f"Description: {estimate['description']}")
-
-        item_type_labels = {"material": "Materials", "hardware": "Hardware", "labor": "Labor"}
-        current_type = None
+        totals = {"material": 0.0, "hardware": 0.0, "labor": 0.0}
         for item in items:
-            if item['item_type'] != current_type:
-                current_type = item['item_type']
-                y_position -= 30
-                if y_position < 100:
-                    p.showPage()
-                    y_position = height - 50
-                p.setFont("Helvetica-Bold", 13)
-                p.drawString(50, y_position, item_type_labels.get(current_type, current_type.title()))
-                y_position -= 20
-                p.setFont("Helvetica", 10)
+            if item["item_type"] in totals:
+                totals[item["item_type"]] += float(item.get("total_price") or 0)
 
-            if y_position < 80:
-                p.showPage()
-                y_position = height - 50
-                p.setFont("Helvetica", 10)
+        job = {
+            "client_name": estimate.get("client_name"), "phone": estimate.get("phone"),
+            "email": estimate.get("email"), "address": estimate.get("address"),
+        }
+        doc_type = "invoice" if estimate.get("estimate_type") == "invoice" else "estimate"
 
-            line = f"{item['name']} - {item['quantity']} {item['unit']} x ${item['unit_price']} = ${item['total_price']}"
-            p.drawString(60, y_position, line)
-            y_position -= 15
-
-        y_position -= 25
-        if y_position < 80:
-            p.showPage()
-            y_position = height - 50
-        p.setFont("Helvetica-Bold", 14)
-        p.drawString(50, y_position, f"Total: ${estimate['amount']:,.2f}")
-
-        p.save()
-        buffer.seek(0)
+        buffer = build_estimate_pdf(job, estimate, items, totals,
+                                     language=estimate.get("contract_language") or "en")
 
         safe_client = (estimate.get('client_name') or 'unnamed').replace(' ', '_')
         return send_file(
             buffer,
             as_attachment=True,
-            download_name=f"{doc_type.lower()}_{safe_client}_{estimate_id[:8]}.pdf",
+            download_name=f"{doc_type}_{safe_client}_{estimate_id[:8]}.pdf",
             mimetype='application/pdf'
         )
 
