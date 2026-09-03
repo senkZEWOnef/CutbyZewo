@@ -1,0 +1,135 @@
+{% extends "base.html" %}
+{% block title %}Scratchpad - Cut byZewo{% endblock %}
+{% block content %}
+
+<!-- Page Header -->
+<div class="row mb-3">
+  <div class="col-md-6">
+    <h1 class="display-6 mb-0">
+      <i class="fas fa-note-sticky text-primary"></i> Scratchpad
+    </h1>
+    <p class="text-muted">Quick notes and draft cut lists — no client or price needed</p>
+  </div>
+  <div class="col-md-6">
+    <div class="d-flex gap-2 justify-content-end">
+      <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#newScratchModal">
+        <i class="fas fa-plus"></i> New Note
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- Search -->
+<form method="GET" action="{{ url_for('scratchpad_list') }}" class="mb-4">
+  <div class="row g-2 align-items-end">
+    <div class="col-md-8">
+      <div class="input-group">
+        <span class="input-group-text"><i class="fas fa-search"></i></span>
+        <input type="text" name="q" class="form-control" placeholder="Search by title…" value="{{ q or '' }}">
+      </div>
+    </div>
+    <div class="col-md-2">
+      <button type="submit" class="btn btn-primary w-100">Search</button>
+    </div>
+    <div class="col-md-2">
+      <a href="{{ url_for('scratchpad_list') }}" class="btn btn-outline-secondary w-100" title="Clear">✕</a>
+    </div>
+  </div>
+</form>
+
+<!-- Notes Grid -->
+<div class="row">
+  {% if notes %}
+    {% for note in notes %}
+    <div class="col-lg-4 col-md-6 mb-4">
+      <div class="card h-100 shadow-sm">
+        <div class="card-header d-flex justify-content-between align-items-center">
+          <h6 class="card-title mb-0 text-truncate">
+            <i class="fas fa-note-sticky text-muted me-1"></i>
+            {{ note.client_name }}
+          </h6>
+          <span class="badge bg-light text-dark border">{{ note.part_count }} part{{ 's' if note.part_count != 1 else '' }}</span>
+        </div>
+        <div class="card-body">
+          <small class="text-muted d-block mb-2">
+            <i class="fas fa-calendar-plus"></i>
+            {{ note.created_at.strftime('%m/%d/%Y') if note.created_at and note.created_at.strftime else note.created_at }}
+          </small>
+          {% if note.notes %}
+          <p class="small mb-0">
+            {{ note.notes[:120] }}{{ '…' if note.notes|length > 120 else '' }}
+          </p>
+          {% else %}
+          <p class="small text-muted mb-0">No notes</p>
+          {% endif %}
+        </div>
+        <div class="card-footer bg-light">
+          <div class="row g-1">
+            <div class="col-6">
+              <a href="{{ url_for('job_details', job_id=note.id) }}" class="btn btn-primary btn-sm w-100">
+                <i class="fas fa-eye"></i> View
+              </a>
+            </div>
+            <div class="col-6">
+              <form action="{{ url_for('delete_job', job_id=note.id) }}" method="POST"
+                    onsubmit="return confirm('Delete this note?');">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <button type="submit" class="btn btn-outline-danger btn-sm w-100">
+                  <i class="fas fa-trash"></i> Delete
+                </button>
+              </form>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    {% endfor %}
+  {% else %}
+    <div class="col-12">
+      <div class="card">
+        <div class="card-body text-center py-5">
+          <i class="fas fa-note-sticky fa-3x text-muted mb-3"></i>
+          <h4 class="text-muted">No notes yet</h4>
+          <p class="text-muted">Jot down a quick cut list reminder — no client or price needed.</p>
+          <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#newScratchModal">
+            <i class="fas fa-plus"></i> New Note
+          </button>
+        </div>
+      </div>
+    </div>
+  {% endif %}
+</div>
+
+<!-- New Note Modal -->
+<div class="modal fade" id="newScratchModal" tabindex="-1">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title"><i class="fas fa-note-sticky"></i> New Note</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <form method="POST" action="{{ url_for('create_scratch') }}">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <div class="modal-body">
+          <div class="mb-3">
+            <label class="form-label fw-semibold">Title <span class="text-muted fw-normal">(optional)</span></label>
+            <input type="text" name="title" class="form-control" placeholder="e.g. Kitchen door — missing one" autofocus>
+          </div>
+          <div class="mb-3">
+            <label class="form-label fw-semibold">Notes <span class="text-muted fw-normal">(optional)</span></label>
+            <textarea name="notes" class="form-control" rows="3" placeholder="e.g. missing 1 door, 24x30, white shaker"></textarea>
+          </div>
+          <p class="small text-muted mb-0">
+            You can add a cut list and accessories on the next page.
+          </p>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+          <button type="submit" class="btn btn-primary">Save</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+{% endblock %}

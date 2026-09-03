@@ -125,6 +125,8 @@ for _col, _def in [
     ("email",   "VARCHAR(255)"),
     ("address", "TEXT"),
     ("notes",   "TEXT"),
+    ("installation_date", "DATE"),
+    ("is_scratch", "BOOLEAN DEFAULT FALSE"),
 ]:
     try:
         execute_query(f"ALTER TABLE jobs ADD COLUMN IF NOT EXISTS {_col} {_def}", fetch=False)
@@ -527,7 +529,7 @@ def home():
     if user_id:
         try:
             all_jobs = execute_query(
-                "SELECT id, client_name, final_price, status, created_at FROM jobs WHERE user_id = %s",
+                "SELECT id, client_name, final_price, status, created_at FROM jobs WHERE user_id = %s AND is_scratch IS NOT TRUE",
                 (user_id,),
                 fetch=True
             )
@@ -839,6 +841,53 @@ def job_step_accessories(job_id):
     return redirect(url_for('create_detailed_estimate', job_id=job_id))
 
 
+# ===== SCRATCHPAD (unofficial draft entries — no client/date/money) =====
+
+@app.route("/scratchpad/create", methods=["POST"])
+def create_scratch():
+    if "user_id" not in session:
+        return redirect(url_for("login"))
+    user_id = session["user_id"]
+    title = request.form.get("title", "").strip() or f"Note — {datetime.now().strftime('%b %d, %I:%M %p')}"
+    notes = request.form.get("notes", "").strip()
+    job_uuid = str(uuid.uuid4())
+    execute_query(
+        "INSERT INTO jobs (id, user_id, client_name, status, notes, is_scratch) VALUES (%s, %s, %s, %s, %s, %s)",
+        (job_uuid, user_id, title, "draft", notes or None, True),
+        fetch=False
+    )
+    flash("Scratchpad note created.", "success")
+    return redirect(url_for("job_details", job_id=job_uuid))
+
+
+@app.route("/scratchpad")
+def scratchpad_list():
+    if "user_id" not in session:
+        return redirect(url_for("login"))
+    user_id = session["user_id"]
+    q = request.args.get("q", "").strip()
+    base_q = "SELECT id, client_name, notes, created_at FROM jobs WHERE user_id = %s AND is_scratch IS TRUE"
+    params = [user_id]
+    if q:
+        base_q += " AND client_name ILIKE %s"
+        params.append(f"%{q}%")
+    base_q += " ORDER BY created_at DESC"
+    notes = execute_query(base_q, tuple(params), fetch=True)
+    note_ids = [str(n["id"]) for n in notes]
+    part_counts = {nid: 0 for nid in note_ids}
+    if note_ids:
+        placeholders = ','.join(['%s'] * len(note_ids))
+        parts_data = execute_query(
+            f"SELECT job_id, COUNT(*) as cnt FROM parts WHERE job_id::text IN ({placeholders}) GROUP BY job_id",
+            tuple(note_ids), fetch=True
+        )
+        for p in parts_data:
+            part_counts[str(p["job_id"])] = p["cnt"]
+    for n in notes:
+        n["part_count"] = part_counts.get(str(n["id"]), 0)
+    return render_template("scratchpad.html", notes=notes, q=q)
+
+
 @app.route("/jobs")
 def jobs():
     if "user_id" not in session:
@@ -849,7 +898,7 @@ def jobs():
     status_filter = request.args.get("status", "").strip()
 
     try:
-        base_q = "SELECT id, client_name, email, phone, final_price, status, created_at FROM jobs WHERE user_id = %s"
+        base_q = "SELECT id, client_name, email, phone, final_price, status, created_at FROM jobs WHERE user_id = %s AND is_scratch IS NOT TRUE"
         params = [user_id]
         if q:
             base_q += " AND client_name ILIKE %s"
@@ -1504,9 +1553,15 @@ def client_package_generate(estimate_id):
 
         images = [{'path': f['storage_path']} for f in image_files if str(f['id']) in selected_ids]
 
+        deposit_payment = execute_single(
+            "SELECT * FROM payments WHERE job_id = %s AND payment_type = 'deposit' ORDER BY paid_at DESC LIMIT 1",
+            (str(job['id']),)
+        )
+
         buffer = build_client_package_pdf(
             job, estimate, items, totals, images,
-            contract_terms, extra_rules, language
+            contract_terms, extra_rules, language,
+            deposit_payment=deposit_payment
         )
 
         safe_client = (job.get('client_name') or 'unnamed').replace(' ', '_')
@@ -1531,7 +1586,7 @@ def clients():
         return redirect(url_for("login"))
     user_id = session["user_id"]
     jobs = execute_query(
-        "SELECT id, client_name, email, phone, status, final_price, created_at FROM jobs WHERE user_id = %s ORDER BY client_name, created_at DESC",
+        "SELECT id, client_name, email, phone, status, final_price, created_at FROM jobs WHERE user_id = %s AND is_scratch IS NOT TRUE ORDER BY client_name, created_at DESC",
         (user_id,), fetch=True
     )
     # Group by client_name
@@ -1835,22 +1890,24 @@ def delete_job(job_id):
         execute_query("DELETE FROM estimate_items WHERE estimate_id IN (SELECT id FROM estimates WHERE job_id = %s)", (job_id,), fetch=False)
         execute_query("DELETE FROM estimates WHERE job_id = %s", (job_id,), fetch=False)
         execute_query("DELETE FROM parts WHERE job_id = %s", (job_id,), fetch=False)
+        execute_query("DELETE FROM job_accessories WHERE job_id = %s", (job_id,), fetch=False)
         execute_query("DELETE FROM deadlines WHERE job_id = %s", (job_id,), fetch=False)
-        
+
         # Delete the job
         execute_query("DELETE FROM jobs WHERE id = %s", (job_id,), fetch=False)
-        
+
         # Clean up files
         job_folder = f"static/uploads/{job_id}"
         sheet_folder = f"static/sheets/{job_id}"
-        
+
         if os.path.exists(job_folder):
             shutil.rmtree(job_folder)
         if os.path.exists(sheet_folder):
             shutil.rmtree(sheet_folder)
-        
+
         flash("Job deleted successfully.", "success")
-        return redirect(url_for("jobs"))
+        redirect_target = "scratchpad_list" if job.get("is_scratch") else "jobs"
+        return redirect(url_for(redirect_target))
         
     except Exception as e:
         capture_exception(e)
@@ -1891,6 +1948,41 @@ def set_price(job_id):
         print("Error setting price:", e)
         flash("Could not update price.", "danger")
         return redirect(url_for("job_details", job_id=job_id))
+
+
+@app.route("/job/<job_id>/set-installation-date", methods=["POST"])
+def set_installation_date(job_id):
+    if "user_id" not in session:
+        return redirect(url_for("login"))
+
+    user_id = session["user_id"]
+    installation_date = request.form.get("installation_date")
+
+    try:
+        job = execute_single(
+            "SELECT * FROM jobs WHERE id = %s AND user_id = %s",
+            (job_id, user_id)
+        )
+
+        if not job:
+            flash("Job not found.", "danger")
+            return redirect(url_for("jobs"))
+
+        execute_query(
+            "UPDATE jobs SET installation_date = %s WHERE id = %s",
+            (datetime.strptime(installation_date, '%Y-%m-%d').date() if installation_date else None, job_id),
+            fetch=False
+        )
+
+        flash("Installation date updated.", "success")
+        return redirect(url_for("job_details", job_id=job_id))
+
+    except Exception as e:
+        capture_exception(e)
+        print("Error setting installation date:", e)
+        flash("Could not update installation date.", "danger")
+        return redirect(url_for("job_details", job_id=job_id))
+
 
 @app.route("/update_job_status/<job_id>", methods=["POST"])
 def update_job_status(job_id):

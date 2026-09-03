@@ -59,6 +59,17 @@ LABELS = {
         "phone": "Phone",
         "email": "Email",
         "address": "Address",
+        "receipt_title": "Deposit Receipt",
+        "received_from": "Received From",
+        "receipt_for": "For",
+        "amount_received": "Amount Received",
+        "balance_remaining": "Balance Remaining",
+        "payment_method": "Payment Method / Notes",
+        "received_by": "Received By (Contractor)",
+        "date_received": "Date Received",
+        "receipt_note": "This receipt confirms the deposit payment noted above. Keep for your records.",
+        "receipt_fillable_note": "To be completed by the contractor at the time the deposit is collected.",
+        "installation_date": "Installation Date",
     },
     "es": {
         "brand": "BYZEWO CABINET WORKS",
@@ -91,6 +102,17 @@ LABELS = {
         "phone": "Teléfono",
         "email": "Correo Electrónico",
         "address": "Dirección",
+        "receipt_title": "Recibo de Depósito",
+        "received_from": "Recibido de",
+        "receipt_for": "Por",
+        "amount_received": "Monto Recibido",
+        "balance_remaining": "Saldo Restante",
+        "payment_method": "Método de Pago / Notas",
+        "received_by": "Recibido Por (Contratista)",
+        "date_received": "Fecha de Recepción",
+        "receipt_note": "Este recibo confirma el pago del depósito indicado arriba. Consérvelo para sus registros.",
+        "receipt_fillable_note": "A ser completado por el contratista al momento de recibir el depósito.",
+        "installation_date": "Fecha de Instalación",
     },
 }
 
@@ -109,6 +131,8 @@ def _styles(lang):
                                       textColor=MUTED, leading=11),
         "meta_contact": ParagraphStyle("meta_contact", fontName="Helvetica", fontSize=8.5,
                                         textColor=MUTED, leading=12),
+        "meta_install": ParagraphStyle("meta_install", fontName="Helvetica-Bold", fontSize=10,
+                                        textColor=BRAND_ACCENT, leading=15),
         "section": ParagraphStyle("section", fontName="Helvetica-Bold", fontSize=13,
                                    textColor=BRAND_DARK, leading=16),
         "section_total": ParagraphStyle("section_total", fontName="Helvetica-Bold", fontSize=11,
@@ -286,9 +310,11 @@ def build_total_box(label, amount, content_w, bg=GREEN_DARK):
     return box
 
 
-def build_meta_block(L, styles, client_name, date_str, doc_number, contact_lines, content_w):
-    """Two-column meta table: prepared-for/date labels + values, an optional
-    doc number under the date, and an optional contact line under the name."""
+def build_meta_block(L, styles, client_name, date_str, doc_number, contact_lines, content_w,
+                      installation_date_str=None):
+    """Meta table: prepared-for/date labels + values, an optional doc number
+    under the date, an optional contact line under the name, and an optional
+    third "Installation Date" column highlighted in the accent color."""
     name_para = Paragraph(client_name, styles["meta"])
     if contact_lines:
         name_para = [name_para, Paragraph(" · ".join(contact_lines), styles["meta_contact"])]
@@ -300,11 +326,21 @@ def build_meta_block(L, styles, client_name, date_str, doc_number, contact_lines
     else:
         date_val = Paragraph(str(date_str), styles["meta"])
 
-    meta = Table([
-        [Paragraph(L["prepared_for"].upper(), styles["meta_label"]),
-         Paragraph(L["date"].upper(), styles["meta_label"])],
-        [name_para, date_val],
-    ], colWidths=[content_w / 2, content_w / 2])
+    if installation_date_str:
+        install_val = Paragraph(str(installation_date_str), styles["meta_install"])
+        meta = Table([
+            [Paragraph(L["prepared_for"].upper(), styles["meta_label"]),
+             Paragraph(L["date"].upper(), styles["meta_label"]),
+             Paragraph(L["installation_date"].upper(), styles["meta_label"])],
+            [name_para, date_val, install_val],
+        ], colWidths=[content_w * 0.4, content_w * 0.3, content_w * 0.3])
+    else:
+        meta = Table([
+            [Paragraph(L["prepared_for"].upper(), styles["meta_label"]),
+             Paragraph(L["date"].upper(), styles["meta_label"])],
+            [name_para, date_val],
+        ], colWidths=[content_w / 2, content_w / 2])
+
     meta.setStyle(TableStyle([
         ("BOTTOMPADDING", (0, 0), (-1, 0), 2),
         ("VALIGN", (0, 0), (-1, -1), "TOP"),

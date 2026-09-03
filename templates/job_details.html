@@ -1,12 +1,16 @@
-{% extends "base.html" %} 
-{% block title %}{{ job.client_name }} - Job Details - Cut byZewo{% endblock %} 
+{% extends "base.html" %}
+{% block title %}{{ job.client_name }} - {{ 'Scratchpad' if job.is_scratch else 'Job Details' }} - Cut byZewo{% endblock %}
 {% block content %}
 
 <!-- Job Header -->
 <div class="row mb-4">
   <div class="col-md-8">
     <h1 class="display-6 mb-2">
+      {% if job.is_scratch %}
+      <i class="fas fa-note-sticky text-primary"></i>
+      {% else %}
       <i class="fas fa-briefcase text-primary"></i>
+      {% endif %}
       {{ job.client_name or "Unnamed Client" }}
     </h1>
     <p class="text-muted mb-2">
@@ -34,6 +38,7 @@
     </div>
 
     <!-- Status pipeline -->
+    {% if not job.is_scratch %}
     {% set statuses = [('draft','Draft'),('quoted','Quoted'),('deposit_paid','Deposit Paid'),('in_progress','In Progress'),('done','Done')] %}
     {% set cur = job.status or 'draft' %}
     <div class="d-flex align-items-center flex-wrap gap-1 mb-3">
@@ -51,6 +56,7 @@
       <span class="badge bg-danger px-2 py-1">Cancelled</span>
       {% endif %}
     </div>
+    {% endif %}
 
     <!-- Notes -->
     {% if job.notes %}
@@ -82,6 +88,7 @@
   <!-- Left Column: Job Info & Actions -->
   <div class="col-lg-4">
     <!-- Job Overview Card -->
+    {% if not job.is_scratch %}
     <div class="card mb-4">
       <div class="card-header bg-primary text-white">
         <h5 class="mb-0">
@@ -101,7 +108,7 @@
             {% endif %}
           </div>
         </div>
-        
+
         <div class="row mb-3">
           <div class="col-sm-6">
             <strong>Soft Deadline:</strong>
@@ -110,7 +117,7 @@
             {{ deadline.soft_deadline.strftime('%m/%d/%Y') if (deadline and deadline.soft_deadline) else 'Not set' }}
           </div>
         </div>
-        
+
         <div class="row mb-3">
           <div class="col-sm-6">
             <strong>Hard Deadline:</strong>
@@ -125,8 +132,24 @@
             {% endif %}
           </div>
         </div>
+
+        <div class="row mb-3">
+          <div class="col-sm-6">
+            <strong>Installation Date:</strong>
+          </div>
+          <div class="col-sm-6">
+            {% if job.installation_date %}
+              <span class="text-success fw-bold">
+                {{ job.installation_date.strftime('%m/%d/%Y') }}
+              </span>
+            {% else %}
+              <span class="text-muted">Not set</span>
+            {% endif %}
+          </div>
+        </div>
       </div>
     </div>
+    {% endif %}
 
     <!-- Quick Actions Card -->
     <div class="card mb-4">
@@ -136,6 +159,7 @@
         </h6>
       </div>
       <div class="card-body">
+        {% if not job.is_scratch %}
         <!-- Update Price Form -->
         <form method="POST" action="{{ url_for('set_price', job_id=job.id) }}" class="mb-3">
           <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
@@ -148,6 +172,20 @@
                    placeholder="0.00" step="0.01" value="{{ job.final_price or '' }}" />
             <button class="btn btn-primary" type="submit"><i class="fas fa-save"></i></button>
           </div>
+        </form>
+
+        <!-- Installation Date -->
+        <form method="POST" action="{{ url_for('set_installation_date', job_id=job.id) }}" class="mb-3">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <label class="form-label">
+            <i class="fas fa-truck-ramp-box"></i> Installation Date
+          </label>
+          <div class="input-group">
+            <input type="date" name="installation_date" class="form-control"
+                   value="{{ job.installation_date.strftime('%Y-%m-%d') if job.installation_date else '' }}" />
+            <button class="btn btn-primary" type="submit"><i class="fas fa-save"></i></button>
+          </div>
+          <div class="form-text">Shown on the Client Package PDF once set.</div>
         </form>
 
         <!-- Estimate -->
@@ -173,6 +211,7 @@
             <button class="btn btn-outline-primary" type="submit"><i class="fas fa-sync"></i></button>
           </div>
         </form>
+        {% endif %}
 
         <!-- Send Reminder -->
         {% if job.email %}
@@ -319,6 +358,7 @@
   </div>
 
     <!-- Payments Card -->
+    {% if not job.is_scratch %}
     <div class="card mb-4">
       <div class="card-header bg-success text-white d-flex justify-content-between align-items-center">
         <h6 class="mb-0"><i class="fas fa-money-bill-wave"></i> Payments</h6>
@@ -391,8 +431,10 @@
         {% endif %}
       </div>
     </div>
+    {% endif %}
 
     <!-- Labor Hours Card -->
+    {% if not job.is_scratch %}
     <div class="card mb-4">
       <div class="card-header bg-info text-white d-flex justify-content-between align-items-center">
         <h6 class="mb-0"><i class="fas fa-clock"></i> Labor Hours</h6>
@@ -461,6 +503,7 @@
         {% endif %}
       </div>
     </div>
+    {% endif %}
 
   </div>
 

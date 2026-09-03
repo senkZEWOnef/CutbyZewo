@@ -149,11 +149,100 @@ def build_estimate_pdf(job, estimate, items, totals, language="en"):
     return buffer
 
 
+def _build_receipt_page(story, L, styles, client_name, estimate_name, doc_number,
+                         deposit, balance, deposit_payment):
+    """Appends a final Deposit Receipt page. If `deposit_payment` (a row from
+    the payments table) is given, the receipt shows the actual amount/date/
+    notes recorded; otherwise it prints as a fillable template — blank lines
+    the contractor fills in by hand when the deposit is actually collected.
+    """
+    story.append(PageBreak())
+    story.append(Paragraph(L["receipt_title"], styles["section"]))
+    story.append(Spacer(1, 4))
+    story.append(HRFlowable(width=60, color=BRAND_ACCENT, thickness=2))
+    story.append(Spacer(1, 4))
+
+    is_actual = bool(deposit_payment)
+    if not is_actual:
+        story.append(Paragraph(L["receipt_fillable_note"],
+                                ParagraphStyle("rfn", fontName="Helvetica-Oblique", fontSize=9,
+                                               textColor=MUTED)))
+    story.append(Spacer(1, 16))
+
+    amount = float(deposit_payment["amount"]) if is_actual else deposit
+    paid_at = deposit_payment.get("paid_at") if is_actual else None
+    date_str = paid_at.strftime("%B %d, %Y") if hasattr(paid_at, "strftime") else (str(paid_at) if paid_at else "")
+    notes = (deposit_payment.get("notes") or "") if is_actual else ""
+
+    blank = "_" * 28
+    blank_short = "_" * 16
+
+    meta = Table([
+        [Paragraph(L["received_from"].upper(), styles["meta_label"]),
+         Paragraph(L["date_received"].upper(), styles["meta_label"])],
+        [Paragraph(client_name, styles["meta"]),
+         Paragraph(date_str or blank_short, styles["meta"])],
+        [Paragraph(L["receipt_for"].upper(), styles["meta_label"]), ""],
+        [Paragraph(f"{estimate_name} — {L['doc_number']} {doc_number}", styles["meta"]), ""],
+    ], colWidths=[CONTENT_W / 2, CONTENT_W / 2])
+    meta.setStyle(TableStyle([
+        ("BOTTOMPADDING", (0, 0), (-1, 0), 2),
+        ("BOTTOMPADDING", (0, 2), (-1, 2), 2),
+        ("TOPPADDING", (0, 2), (-1, 2), 10),
+        ("VALIGN", (0, 0), (-1, -1), "TOP"),
+    ]))
+    story.append(meta)
+    story.append(Spacer(1, 18))
+
+    story.append(build_total_box(L["amount_received"], amount, CONTENT_W))
+    story.append(Spacer(1, 10))
+
+    detail_rows = [
+        [Paragraph(L["balance_remaining"], styles["cell"]),
+         Paragraph(f"${balance:,.2f}", ParagraphStyle("br", fontName="Helvetica-Bold",
+                                                        fontSize=10.5, textColor=BRAND_DARK,
+                                                        alignment=TA_RIGHT))],
+        [Paragraph(L["payment_method"], styles["cell"]),
+         Paragraph(notes or blank, styles["cell_right"])],
+    ]
+    detail_table = Table(detail_rows, colWidths=[CONTENT_W * 0.5, CONTENT_W * 0.5])
+    detail_table.setStyle(TableStyle([
+        ("BACKGROUND", (0, 0), (-1, -1), TAN),
+        ("BOX", (0, 0), (-1, -1), 0.5, BORDER),
+        ("LINEBELOW", (0, 0), (-1, 0), 0.5, BORDER),
+        ("TOPPADDING", (0, 0), (-1, -1), 9),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 9),
+        ("LEFTPADDING", (0, 0), (-1, -1), 12),
+        ("RIGHTPADDING", (0, 0), (-1, -1), 12),
+        ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+    ]))
+    story.append(detail_table)
+    story.append(Spacer(1, 46))
+
+    sig_col_w = (CONTENT_W - 30) / 2
+    story.append(KeepTogether([
+        HRFlowable(width=sig_col_w, color=TEXT_DARK, thickness=0.75),
+        Spacer(1, 4),
+        Paragraph(L["received_by"], styles["sig_label"]),
+        Spacer(1, 30),
+        HRFlowable(width=sig_col_w, color=TEXT_DARK, thickness=0.75),
+        Spacer(1, 4),
+        Paragraph(L["print_name"], styles["sig_sub"]),
+    ]))
+    story.append(Spacer(1, 10))
+    story.append(Paragraph(L["receipt_note"],
+                            ParagraphStyle("rn", fontName="Helvetica-Oblique", fontSize=8.5,
+                                           textColor=MUTED)))
+
+
 def build_client_package_pdf(job, estimate, items, totals, images, contract_terms,
-                              extra_rules, language="en"):
+                              extra_rules, language="en", deposit_payment=None):
     """Returns a BytesIO PDF combining a branded invoice breakdown, project
-    photos, and a printable contract page with a deposit/balance summary
-    and signature lines.
+    photos, a printable contract page with a deposit/balance summary and
+    signature lines, and a final Deposit Receipt page. `deposit_payment`,
+    if given, is a row from the `payments` table (payment_type='deposit')
+    used to fill the receipt with the actual amount/date/notes recorded;
+    omit it to print a blank fillable receipt instead.
     """
     lang = language if language in LABELS else "en"
     L = LABELS[lang]
@@ -175,6 +264,9 @@ def build_client_package_pdf(job, estimate, items, totals, images, contract_term
     deposit = total_amount / 2
     balance = total_amount - deposit
 
+    install_date = job.get("installation_date")
+    installation_date_str = install_date.strftime("%B %d, %Y") if hasattr(install_date, "strftime") else (install_date or None)
+
     story = []
 
     # ---- Title row: name + type badge ----
@@ -191,7 +283,8 @@ def build_client_package_pdf(job, estimate, items, totals, images, contract_term
     story.append(HRFlowable(width=CONTENT_W, color=BORDER, thickness=1))
     story.append(Spacer(1, 10))
 
-    story.append(build_meta_block(L, styles, client_name, date_str, doc_number, contact_lines, CONTENT_W))
+    story.append(build_meta_block(L, styles, client_name, date_str, doc_number, contact_lines, CONTENT_W,
+                                   installation_date_str=installation_date_str))
     story.append(Spacer(1, 20))
 
     # ---- Item breakdown ----
@@ -336,6 +429,10 @@ def build_client_package_pdf(job, estimate, items, totals, images, contract_term
         ("VALIGN", (0, 0), (-1, -1), "TOP"),
     ]))
     story.append(KeepTogether(sig_table))
+
+    # ---- Deposit receipt (final page) ----
+    _build_receipt_page(story, L, styles, client_name, estimate.get("name") or L["title"],
+                         doc_number, deposit, balance, deposit_payment)
 
     doc.build(story, onFirstPage=_on_page, onLaterPages=_on_page, canvasmaker=_make_canvas(lang))
     buffer.seek(0)
