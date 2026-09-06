@@ -100,6 +100,41 @@ CREATE TABLE IF NOT EXISTS cut_sheets (
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
+-- Journal entries (one per user per day — notes + free-form measurements)
+CREATE TABLE journal_entries (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    entry_date DATE NOT NULL,
+    notes TEXT,
+    measurements JSONB DEFAULT '[]',
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    UNIQUE (user_id, entry_date)
+);
+
+-- Photos/files attached to a journal entry
+CREATE TABLE journal_files (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    entry_id UUID NOT NULL REFERENCES journal_entries(id) ON DELETE CASCADE,
+    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    filename VARCHAR(255) NOT NULL,
+    storage_path VARCHAR(500) NOT NULL,
+    mime_type VARCHAR(100),
+    uploaded_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+-- Reminders (checked in-app on every page load; no push/email)
+CREATE TABLE reminders (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    title VARCHAR(255) NOT NULL,
+    notes TEXT,
+    remind_at TIMESTAMP WITH TIME ZONE NOT NULL,
+    is_done BOOLEAN DEFAULT FALSE,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    completed_at TIMESTAMP WITH TIME ZONE
+);
+
 -- Stocks table (inventory management)
 CREATE TABLE stocks (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
@@ -136,6 +171,10 @@ CREATE INDEX idx_files_user_id ON files(user_id);
 
 CREATE INDEX idx_stocks_user_id ON stocks(user_id);
 CREATE INDEX idx_stocks_category ON stocks(category);
+
+CREATE INDEX idx_journal_entries_user_date ON journal_entries(user_id, entry_date DESC);
+CREATE INDEX idx_journal_files_entry_id ON journal_files(entry_id);
+CREATE INDEX idx_reminders_user_due ON reminders(user_id, is_done, remind_at);
 
 -- Update triggers for updated_at timestamps
 CREATE OR REPLACE FUNCTION update_updated_at_column()

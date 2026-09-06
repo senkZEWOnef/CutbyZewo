@@ -130,17 +130,25 @@
 
         <div class="collapse navbar-collapse" id="navbarNav">
           <ul class="navbar-nav me-auto">
+            {% if user %}
             <li class="nav-item">
-              <a class="nav-link" href="{{ url_for('catalog') }}">
-                <i class="fas fa-store"></i> Catalog
+              <a class="nav-link" href="{{ url_for('view_stocks') }}">
+                <i class="fas fa-toolbox"></i> Workshop
               </a>
             </li>
-            {% if user %}
             <li class="nav-item">
               <a class="nav-link" href="{{ url_for('create_job') }}">
                 <i class="fas fa-plus"></i> New Job
               </a>
             </li>
+            {% else %}
+            <li class="nav-item">
+              <a class="nav-link" href="{{ url_for('catalog') }}">
+                <i class="fas fa-store"></i> Catalog
+              </a>
+            </li>
+            {% endif %}
+            {% if user %}
             <li class="nav-item">
               <a class="nav-link" href="{{ url_for('jobs') }}">
                 <i class="fas fa-folder"></i> My Jobs
@@ -152,15 +160,31 @@
               </a>
             </li>
             <li class="nav-item">
+              <a class="nav-link" href="{{ url_for('journal_home') }}">
+                <i class="fas fa-book"></i> Journal
+              </a>
+            </li>
+            <li class="nav-item">
               <a class="nav-link" href="{{ url_for('calendar') }}">
                 <i class="fas fa-calendar"></i> Calendar
               </a>
             </li>
             {% endif %}
           </ul>
-          
+
           <ul class="navbar-nav">
             {% if user %}
+            <li class="nav-item">
+              <a class="nav-link position-relative" href="{{ url_for('reminders_list') }}" title="Reminders">
+                <i class="fas fa-bell"></i>
+                {% if due_reminders_count and due_reminders_count > 0 %}
+                <span class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger">
+                  {{ due_reminders_count }}
+                  <span class="visually-hidden">due reminders</span>
+                </span>
+                {% endif %}
+              </a>
+            </li>
             <li class="nav-item dropdown">
               <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown">
                 <i class="fas fa-user"></i> {{ user.username }}
@@ -172,8 +196,8 @@
                 <li><a class="dropdown-item" href="{{ url_for('list_templates') }}">
                   <i class="fas fa-bookmark"></i> Templates
                 </a></li>
-                <li><a class="dropdown-item" href="{{ url_for('view_stocks') }}">
-                  <i class="fas fa-boxes"></i> Stock Inventory
+                <li><a class="dropdown-item" href="{{ url_for('catalog') }}">
+                  <i class="fas fa-store"></i> Browse Catalog
                 </a></li>
                 <li><a class="dropdown-item" href="{{ url_for('help') }}">
                   <i class="fas fa-question-circle"></i> Help

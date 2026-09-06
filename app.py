@@ -198,6 +198,65 @@ try:
 except Exception as _e:
     print("Warning: could not add include_in_package to files:", _e)
 
+try:
+    execute_query("ALTER TABLE stocks ADD COLUMN IF NOT EXISTS notes TEXT", fetch=False)
+except Exception as _e:
+    print("Warning: could not add notes to stocks:", _e)
+
+try:
+    execute_query("""
+        CREATE TABLE IF NOT EXISTS journal_entries (
+            id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+            user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            entry_date DATE NOT NULL,
+            notes TEXT,
+            measurements JSONB DEFAULT '[]',
+            created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+            updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+            UNIQUE (user_id, entry_date)
+        )
+    """, fetch=False)
+except Exception as _e:
+    print("Warning: could not ensure journal_entries table:", _e)
+
+try:
+    execute_query("""
+        CREATE TABLE IF NOT EXISTS journal_files (
+            id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+            entry_id UUID NOT NULL REFERENCES journal_entries(id) ON DELETE CASCADE,
+            user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            filename VARCHAR(255) NOT NULL,
+            storage_path VARCHAR(500) NOT NULL,
+            mime_type VARCHAR(100),
+            uploaded_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+        )
+    """, fetch=False)
+except Exception as _e:
+    print("Warning: could not ensure journal_files table:", _e)
+
+try:
+    execute_query("""
+        CREATE TABLE IF NOT EXISTS reminders (
+            id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+            user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            title VARCHAR(255) NOT NULL,
+            notes TEXT,
+            remind_at TIMESTAMP WITH TIME ZONE NOT NULL,
+            is_done BOOLEAN DEFAULT FALSE,
+            created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+            completed_at TIMESTAMP WITH TIME ZONE
+        )
+    """, fetch=False)
+except Exception as _e:
+    print("Warning: could not ensure reminders table:", _e)
+
+try:
+    execute_query("CREATE INDEX IF NOT EXISTS idx_journal_entries_user_date ON journal_entries(user_id, entry_date DESC)", fetch=False)
+    execute_query("CREATE INDEX IF NOT EXISTS idx_journal_files_entry_id ON journal_files(entry_id)", fetch=False)
+    execute_query("CREATE INDEX IF NOT EXISTS idx_reminders_user_due ON reminders(user_id, is_done, remind_at)", fetch=False)
+except Exception as _e:
+    print("Warning: could not ensure journal/reminders indexes:", _e)
+
 def send_email(to_addr, subject, body_html):
     """Send email via SMTP. Silently skips if SMTP_HOST env var is not set."""
     import smtplib
@@ -371,7 +430,18 @@ def verify_password(password: str, hashed: str) -> bool:
 @app.context_processor
 def inject_user():
     u = current_user()
-    return dict(current_user=u, user=u)
+    due_reminders_count = 0
+    if u:
+        try:
+            row = execute_single(
+                "SELECT COUNT(*) as cnt FROM reminders WHERE user_id = %s AND is_done = FALSE AND remind_at <= NOW()",
+                (u["id"],)
+            )
+            due_reminders_count = int(row["cnt"]) if row else 0
+        except Exception as e:
+            capture_exception(e)
+            print("Error counting due reminders:", e)
+    return dict(current_user=u, user=u, due_reminders_count=due_reminders_count)
 
 @app.context_processor  
 def expose_helpers():
@@ -886,6 +956,303 @@ def scratchpad_list():
     for n in notes:
         n["part_count"] = part_counts.get(str(n["id"]), 0)
     return render_template("scratchpad.html", notes=notes, q=q)
+
+
+def _get_or_create_journal_entry(user_id, day):
+    """One journal page per (user, date) — fetch it, or create an empty one."""
+    entry = execute_single(
+        "SELECT * FROM journal_entries WHERE user_id = %s AND entry_date = %s",
+        (user_id, day)
+    )
+    if entry:
+        return entry
+    return execute_single(
+        "INSERT INTO journal_entries (user_id, entry_date) VALUES (%s, %s) RETURNING *",
+        (user_id, day)
+    )
+
+
+def _parse_journal_date(date_str):
+    return datetime.strptime(date_str, "%Y-%m-%d").date()
+
+
+@app.route("/journal")
+def journal_home():
+    if "user_id" not in session:
+        return redirect(url_for("login"))
+    return redirect(url_for("journal_day", date_str=datetime.now().strftime("%Y-%m-%d")))
+
+
+@app.route("/journal/<date_str>")
+def journal_day(date_str):
+    if "user_id" not in session:
+        return redirect(url_for("login"))
+    user_id = session["user_id"]
+
+    try:
+        day = _parse_journal_date(date_str)
+    except ValueError:
+        flash("Invalid date.", "danger")
+        return redirect(url_for("journal_home"))
+
+    entry = execute_single(
+        "SELECT * FROM journal_entries WHERE user_id = %s AND entry_date = %s",
+        (user_id, day)
+    )
+    files = []
+    if entry:
+        files = execute_query(
+            "SELECT * FROM journal_files WHERE entry_id = %s ORDER BY uploaded_at DESC",
+            (entry["id"],), fetch=True
+        )
+        for f in files:
+            f["url"] = "/" + f["storage_path"] if f["storage_path"] else None
+
+    today = datetime.now().date()
+    recent_days = execute_query(
+        "SELECT entry_date FROM journal_entries WHERE user_id = %s AND entry_date BETWEEN %s AND %s "
+        "ORDER BY entry_date DESC",
+        (user_id, today - timedelta(days=29), today), fetch=True
+    )
+    recent_dates = {r["entry_date"] for r in recent_days}
+    # Always let today be picked from the strip even before it has an entry
+    recent_dates.add(today)
+
+    upcoming_reminders = execute_query(
+        "SELECT * FROM reminders WHERE user_id = %s AND is_done = FALSE ORDER BY remind_at ASC LIMIT 5",
+        (user_id,), fetch=True
+    )
+
+    return render_template(
+        "journal.html",
+        day=day,
+        date_str=date_str,
+        today=today,
+        entry=entry,
+        measurements=(entry["measurements"] if entry else []),
+        files=files,
+        recent_dates=sorted(recent_dates, reverse=True),
+        prev_date=(day - timedelta(days=1)).strftime("%Y-%m-%d"),
+        next_date=(day + timedelta(days=1)).strftime("%Y-%m-%d"),
+        upcoming_reminders=upcoming_reminders,
+        now=datetime.now(timezone.utc),
+    )
+
+
+@app.route("/journal/<date_str>/save-notes", methods=["POST"])
+def journal_save_notes(date_str):
+    if "user_id" not in session:
+        return redirect(url_for("login"))
+    user_id = session["user_id"]
+    try:
+        day = _parse_journal_date(date_str)
+    except ValueError:
+        flash("Invalid date.", "danger")
+        return redirect(url_for("journal_home"))
+
+    notes = request.form.get("notes", "").strip()
+    entry = _get_or_create_journal_entry(user_id, day)
+    execute_query(
+        "UPDATE journal_entries SET notes = %s, updated_at = NOW() WHERE id = %s",
+        (notes or None, entry["id"]), fetch=False
+    )
+    flash("Journal entry saved.", "success")
+    return redirect(url_for("journal_day", date_str=date_str))
+
+
+@app.route("/journal/<date_str>/measurement/add", methods=["POST"])
+def journal_add_measurement(date_str):
+    if "user_id" not in session:
+        return redirect(url_for("login"))
+    user_id = session["user_id"]
+    try:
+        day = _parse_journal_date(date_str)
+    except ValueError:
+        flash("Invalid date.", "danger")
+        return redirect(url_for("journal_home"))
+
+    label = request.form.get("label", "").strip()
+    value = request.form.get("value", "").strip()
+    if not label and not value:
+        flash("Enter a label or a measurement.", "warning")
+        return redirect(url_for("journal_day", date_str=date_str))
+
+    entry = _get_or_create_journal_entry(user_id, day)
+    current = list(entry.get("measurements") or [])
+    current.append({
+        "id": uuid.uuid4().hex,
+        "label": label,
+        "value": value,
+    })
+    execute_query(
+        "UPDATE journal_entries SET measurements = %s, updated_at = NOW() WHERE id = %s",
+        (json.dumps(current), entry["id"]), fetch=False
+    )
+    return redirect(url_for("journal_day", date_str=date_str))
+
+
+@app.route("/journal/<date_str>/measurement/<mid>/delete", methods=["POST"])
+def journal_delete_measurement(date_str, mid):
+    if "user_id" not in session:
+        return redirect(url_for("login"))
+    user_id = session["user_id"]
+    try:
+        day = _parse_journal_date(date_str)
+    except ValueError:
+        flash("Invalid date.", "danger")
+        return redirect(url_for("journal_home"))
+
+    entry = execute_single(
+        "SELECT * FROM journal_entries WHERE user_id = %s AND entry_date = %s",
+        (user_id, day)
+    )
+    if entry:
+        current = [m for m in (entry.get("measurements") or []) if m.get("id") != mid]
+        execute_query(
+            "UPDATE journal_entries SET measurements = %s, updated_at = NOW() WHERE id = %s",
+            (json.dumps(current), entry["id"]), fetch=False
+        )
+    return redirect(url_for("journal_day", date_str=date_str))
+
+
+@app.route("/journal/<date_str>/upload", methods=["POST"])
+def journal_upload(date_str):
+    if "user_id" not in session:
+        return redirect(url_for("login"))
+    user_id = session["user_id"]
+    try:
+        day = _parse_journal_date(date_str)
+    except ValueError:
+        flash("Invalid date.", "danger")
+        return redirect(url_for("journal_home"))
+
+    uploaded_files = request.files.getlist("photos")
+    entry = None
+    saved = 0
+    for file in uploaded_files:
+        if file and file.filename:
+            if entry is None:
+                entry = _get_or_create_journal_entry(user_id, day)
+            filename = secure_filename(file.filename)
+            unique_name = f"{uuid.uuid4().hex[:8]}_{filename}"
+            file_path = f"static/uploads/journal/{user_id}/{date_str}/{unique_name}"
+            os.makedirs(os.path.dirname(file_path), exist_ok=True)
+            file.save(file_path)
+            execute_query(
+                "INSERT INTO journal_files (entry_id, user_id, filename, storage_path, mime_type) VALUES (%s, %s, %s, %s, %s)",
+                (entry["id"], user_id, filename, file_path, file.mimetype),
+                fetch=False
+            )
+            saved += 1
+
+    if saved:
+        flash(f"Uploaded {saved} file(s).", "success")
+    else:
+        flash("No files were selected.", "warning")
+    return redirect(url_for("journal_day", date_str=date_str))
+
+
+@app.route("/journal/file/<file_id>/delete", methods=["POST"])
+def journal_delete_file(file_id):
+    if "user_id" not in session:
+        return redirect(url_for("login"))
+    user_id = session["user_id"]
+
+    file_row = execute_single(
+        "SELECT jf.*, je.entry_date FROM journal_files jf "
+        "JOIN journal_entries je ON je.id = jf.entry_id "
+        "WHERE jf.id = %s AND jf.user_id = %s",
+        (file_id, user_id)
+    )
+    if not file_row:
+        flash("File not found.", "warning")
+        return redirect(url_for("journal_home"))
+
+    execute_query("DELETE FROM journal_files WHERE id = %s", (file_id,), fetch=False)
+    try:
+        if file_row.get("storage_path") and os.path.exists(file_row["storage_path"]):
+            os.remove(file_row["storage_path"])
+    except Exception as e:
+        capture_exception(e)
+        print("Error removing journal file from disk:", e)
+
+    flash("File deleted.", "success")
+    return redirect(url_for("journal_day", date_str=file_row["entry_date"].strftime("%Y-%m-%d")))
+
+
+@app.route("/reminders")
+def reminders_list():
+    if "user_id" not in session:
+        return redirect(url_for("login"))
+    user_id = session["user_id"]
+    upcoming = execute_query(
+        "SELECT * FROM reminders WHERE user_id = %s AND is_done = FALSE ORDER BY remind_at ASC",
+        (user_id,), fetch=True
+    )
+    done = execute_query(
+        "SELECT * FROM reminders WHERE user_id = %s AND is_done = TRUE ORDER BY completed_at DESC LIMIT 30",
+        (user_id,), fetch=True
+    )
+    return render_template("reminders.html", upcoming=upcoming, done=done, now=datetime.now(timezone.utc))
+
+
+@app.route("/reminders/add", methods=["POST"])
+def reminders_add():
+    if "user_id" not in session:
+        return redirect(url_for("login"))
+    user_id = session["user_id"]
+    title = request.form.get("title", "").strip()
+    notes = request.form.get("notes", "").strip()
+    remind_at_raw = request.form.get("remind_at", "").strip()
+    redirect_date = request.form.get("redirect_date", "").strip()
+
+    if not title or not remind_at_raw:
+        flash("A title and a date/time are required.", "warning")
+    else:
+        try:
+            remind_at = datetime.strptime(remind_at_raw, "%Y-%m-%dT%H:%M")
+        except ValueError:
+            flash("Invalid date/time.", "danger")
+            remind_at = None
+
+        if remind_at:
+            execute_query(
+                "INSERT INTO reminders (user_id, title, notes, remind_at) VALUES (%s, %s, %s, %s)",
+                (user_id, title, notes or None, remind_at), fetch=False
+            )
+            flash("Reminder set.", "success")
+
+    if redirect_date:
+        return redirect(url_for("journal_day", date_str=redirect_date))
+    return redirect(url_for("reminders_list"))
+
+
+@app.route("/reminders/<reminder_id>/complete", methods=["POST"])
+def reminders_complete(reminder_id):
+    if "user_id" not in session:
+        return redirect(url_for("login"))
+    user_id = session["user_id"]
+    execute_query(
+        "UPDATE reminders SET is_done = TRUE, completed_at = NOW() WHERE id = %s AND user_id = %s",
+        (reminder_id, user_id), fetch=False
+    )
+    redirect_date = request.form.get("redirect_date", "").strip()
+    if redirect_date:
+        return redirect(url_for("journal_day", date_str=redirect_date))
+    return redirect(url_for("reminders_list"))
+
+
+@app.route("/reminders/<reminder_id>/delete", methods=["POST"])
+def reminders_delete(reminder_id):
+    if "user_id" not in session:
+        return redirect(url_for("login"))
+    user_id = session["user_id"]
+    execute_query(
+        "DELETE FROM reminders WHERE id = %s AND user_id = %s",
+        (reminder_id, user_id), fetch=False
+    )
+    flash("Reminder deleted.", "success")
+    return redirect(url_for("reminders_list"))
 
 
 @app.route("/jobs")
@@ -2573,9 +2940,14 @@ def view_stocks():
             (user_id,),
             fetch=True
         )
-        
-        return render_template("stocks.html", stocks=stocks)
-        
+        categories = sorted({(s.get("category") or "Uncategorized") for s in stocks})
+
+        grouped = defaultdict(list)
+        for s in stocks:
+            grouped[s.get("category") or "Uncategorized"].append(s)
+
+        return render_template("stocks.html", stocks=stocks, grouped_stocks=dict(grouped), categories=categories)
+
     except Exception as e:
         capture_exception(e)
         print("Error loading stocks:", e)
@@ -2586,55 +2958,81 @@ def view_stocks():
 def add_stock():
     if "user_id" not in session:
         return redirect(url_for("login"))
-    
+
     user_id = session["user_id"]
-    
+
     try:
-        name = request.form.get("name")
-        category = request.form.get("category", "Uncategorized")
+        name = request.form.get("name", "").strip()
+        category = request.form.get("category", "").strip() or "Uncategorized"
         quantity = request.form.get("quantity", 0)
-        unit = request.form.get("unit")
-        code = request.form.get("code")
-        color = request.form.get("color")
-        
+        unit = request.form.get("unit", "").strip()
+        code = request.form.get("code", "").strip()
+        color = request.form.get("color", "").strip()
+        notes = request.form.get("notes", "").strip()
+
+        if not name:
+            flash("Item name is required.", "warning")
+            return redirect(url_for("view_stocks"))
+
         execute_query(
-            "INSERT INTO stocks (user_id, name, category, quantity, unit, code, color) VALUES (%s, %s, %s, %s, %s, %s, %s)",
-            (user_id, name, category, int(quantity), unit, code, color),
+            "INSERT INTO stocks (user_id, name, category, quantity, unit, code, color, notes) VALUES (%s, %s, %s, %s, %s, %s, %s, %s)",
+            (user_id, name, category, int(quantity or 0), unit or None, code or None, color or None, notes or None),
             fetch=False
         )
-        
+
         flash("Stock item added successfully!", "success")
-        
+
     except Exception as e:
         capture_exception(e)
         print("Error adding stock:", e)
         flash("Could not add stock item.", "danger")
-    
+
     return redirect(url_for("view_stocks"))
 
 @app.route("/update_stock/<stock_id>", methods=["POST"])
 def update_stock(stock_id):
     if "user_id" not in session:
         return redirect(url_for("login"))
-    
+
     user_id = session["user_id"]
-    
+
     try:
-        quantity = request.form.get("quantity")
-        
-        execute_query(
-            "UPDATE stocks SET quantity = %s WHERE id = %s AND user_id = %s",
-            (int(quantity), stock_id, user_id),
-            fetch=False
-        )
-        
+        stock = execute_single("SELECT * FROM stocks WHERE id = %s AND user_id = %s", (stock_id, user_id))
+        if not stock:
+            flash("Stock item not found.", "danger")
+            return redirect(url_for("view_stocks"))
+
+        action = request.form.get("action", "").strip()
+
+        if action in ("increase", "decrease"):
+            amount = int(request.form.get("amount", 1) or 1)
+            delta = amount if action == "increase" else -amount
+            new_qty = max(0, stock["quantity"] + delta)
+            execute_query(
+                "UPDATE stocks SET quantity = %s WHERE id = %s AND user_id = %s",
+                (new_qty, stock_id, user_id), fetch=False
+            )
+        else:
+            name = request.form.get("name", "").strip() or stock["name"]
+            category = request.form.get("category", "").strip() or stock.get("category") or "Uncategorized"
+            quantity = int(request.form.get("quantity", stock["quantity"]) or 0)
+            unit = request.form.get("unit", "").strip() or None
+            code = request.form.get("code", "").strip() or None
+            color = request.form.get("color", "").strip() or None
+            notes = request.form.get("notes", "").strip() or None
+            execute_query(
+                "UPDATE stocks SET name = %s, category = %s, quantity = %s, unit = %s, code = %s, color = %s, notes = %s "
+                "WHERE id = %s AND user_id = %s",
+                (name, category, quantity, unit, code, color, notes, stock_id, user_id), fetch=False
+            )
+
         flash("Stock updated successfully!", "success")
-        
+
     except Exception as e:
         capture_exception(e)
         print("Error updating stock:", e)
         flash("Could not update stock.", "danger")
-    
+
     return redirect(url_for("view_stocks"))
 
 @app.route("/delete_stock/<stock_id>", methods=["POST"])
