@@ -1,0 +1,168 @@
+{% extends "base.html" %}
+{% block title %}{{ item.name }} - Store - Cut byZewo{% endblock %}
+{% block content %}
+
+<nav aria-label="breadcrumb">
+  <ol class="breadcrumb">
+    <li class="breadcrumb-item"><a href="{{ url_for('store_list') }}">Store</a></li>
+    <li class="breadcrumb-item active">{{ item.name }}</li>
+  </ol>
+</nav>
+
+<div class="row">
+  <div class="col-lg-7 mb-4">
+    <div class="card shadow-sm">
+      <div class="card-header d-flex justify-content-between align-items-center">
+        <span><i class="fas fa-images"></i> Photos</span>
+        <span class="badge bg-secondary">{{ photos|length }}</span>
+      </div>
+      <div class="card-body">
+        {% if photos %}
+        <div class="row">
+          {% for p in photos %}
+          <div class="col-6 col-md-4 mb-3">
+            <div class="position-relative">
+              <img src="{{ p.url }}" class="img-fluid border rounded" style="height: 140px; width: 100%; object-fit: cover;" alt="{{ p.filename }}">
+              <form method="POST" action="{{ url_for('delete_store_item_photo', item_id=item.id, photo_id=p.id) }}"
+                    class="position-absolute top-0 end-0 m-1" onsubmit="return confirm('Delete this photo?');">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <button class="btn btn-sm btn-danger py-0 px-1" title="Delete photo"><i class="fas fa-times"></i></button>
+              </form>
+            </div>
+          </div>
+          {% endfor %}
+        </div>
+        {% else %}
+        <div class="alert alert-info mb-0">No photos yet — add some below.</div>
+        {% endif %}
+
+        <form method="POST" action="{{ url_for('add_store_item_photos', item_id=item.id) }}" enctype="multipart/form-data" class="mt-2">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <div class="input-group">
+            <input type="file" name="photos" class="form-control" accept="image/*" multiple required>
+            <button type="submit" class="btn btn-outline-primary"><i class="fas fa-upload"></i> Upload</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-lg-5 mb-4">
+    <div class="card shadow-sm mb-4">
+      <div class="card-header"><i class="fas fa-cash-register"></i> Sell</div>
+      <div class="card-body">
+        <div class="d-flex justify-content-between align-items-center mb-2">
+          <span class="text-muted">In stock</span>
+          <span class="badge {{ 'bg-danger' if item.quantity == 0 else 'bg-secondary' }} fs-6">{{ item.quantity }}</span>
+        </div>
+        <div class="d-flex justify-content-between align-items-center mb-3">
+          <span class="text-muted">List price</span>
+          <span class="fw-bold text-success fs-5">${{ "%.2f"|format(item.price) }}</span>
+        </div>
+
+        <form method="POST" action="{{ url_for('sell_store_item', item_id=item.id) }}"
+              onsubmit="return confirm('Record this sale and reduce the quantity on hand?');">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <input type="hidden" name="from" value="detail">
+          <div class="row g-2 mb-2">
+            <div class="col-6">
+              <label class="form-label small fw-semibold">Qty sold</label>
+              <input type="number" name="quantity" class="form-control" value="1" min="1" max="{{ item.quantity }}" required>
+            </div>
+            <div class="col-6">
+              <label class="form-label small fw-semibold">Sale price / unit</label>
+              <input type="number" name="unit_price" class="form-control" step="0.01" min="0" value="{{ item.price }}">
+            </div>
+          </div>
+          <button type="submit" class="btn btn-success w-100" {{ 'disabled' if item.quantity == 0 }}>
+            <i class="fas fa-cash-register"></i> Mark Sold
+          </button>
+        </form>
+
+        <form method="POST" action="{{ url_for('restock_store_item', item_id=item.id) }}" class="mt-2 d-flex gap-2">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <input type="hidden" name="from" value="detail">
+          <input type="number" name="amount" class="form-control" value="1" min="1" style="max-width: 90px;">
+          <button type="submit" class="btn btn-outline-secondary flex-grow-1"><i class="fas fa-plus"></i> Restock</button>
+        </form>
+
+        {% if item.sold_count %}
+        <div class="text-muted small mt-2"><i class="fas fa-check-circle"></i> {{ item.sold_count }} sold total</div>
+        {% endif %}
+      </div>
+    </div>
+
+    <div class="card shadow-sm">
+      <div class="card-header"><i class="fas fa-pen"></i> Details</div>
+      <div class="card-body">
+        <form method="POST" action="{{ url_for('update_store_item', item_id=item.id) }}">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <div class="mb-3">
+            <label class="form-label fw-semibold">Name</label>
+            <input type="text" name="name" class="form-control" value="{{ item.name }}" required>
+          </div>
+          <div class="row">
+            <div class="col-6 mb-3">
+              <label class="form-label fw-semibold">Category</label>
+              <input type="text" name="category" class="form-control" value="{{ item.category or '' }}">
+            </div>
+            <div class="col-3 mb-3">
+              <label class="form-label fw-semibold">Qty</label>
+              <input type="number" name="quantity" class="form-control" value="{{ item.quantity }}" min="0">
+            </div>
+            <div class="col-3 mb-3">
+              <label class="form-label fw-semibold">Price</label>
+              <input type="number" name="price" class="form-control" step="0.01" min="0" value="{{ item.price }}">
+            </div>
+          </div>
+          <div class="mb-3">
+            <label class="form-label fw-semibold">Description</label>
+            <textarea name="description" class="form-control" rows="3">{{ item.description or '' }}</textarea>
+          </div>
+          <button type="submit" class="btn btn-primary w-100">Save changes</button>
+        </form>
+
+        <hr>
+        <form method="POST" action="{{ url_for('delete_store_item', item_id=item.id) }}"
+              onsubmit="return confirm('Delete this item and all its photos? This cannot be undone.');">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <button type="submit" class="btn btn-outline-danger w-100"><i class="fas fa-trash"></i> Delete Item</button>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+
+{% if sales %}
+<div class="card shadow-sm mb-4">
+  <div class="card-header"><i class="fas fa-receipt"></i> Sale History</div>
+  <div class="table-responsive">
+    <table class="table table-sm mb-0">
+      <thead>
+        <tr>
+          <th>Date</th>
+          <th class="text-end">Qty</th>
+          <th class="text-end">Unit Price</th>
+          <th class="text-end">Total</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for s in sales %}
+        <tr>
+          <td>{{ s.sold_at.strftime("%b %d, %Y") }}</td>
+          <td class="text-end">{{ s.quantity }}</td>
+          <td class="text-end">${{ "%.2f"|format(s.unit_price) }}</td>
+          <td class="text-end">${{ "%.2f"|format(s.total_price) }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endif %}
+
+<a href="{{ url_for('store_list') }}" class="btn btn-outline-secondary">
+  <i class="fas fa-arrow-left"></i> Back to Store
+</a>
+
+{% endblock %}

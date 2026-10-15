@@ -643,6 +643,17 @@
                    class="btn btn-sm btn-outline-warning mb-1">
                   <i class="fas fa-file-contract"></i> Client Package
                 </a>
+                {% if estimate.store_item_id %}
+                <a href="{{ url_for('store_item_detail', item_id=estimate.store_item_id) }}"
+                   class="btn btn-sm btn-outline-success mb-1">
+                  <i class="fas fa-store"></i> View in Store
+                </a>
+                {% else %}
+                <button type="button" class="btn btn-sm btn-success mb-1"
+                        data-bs-toggle="modal" data-bs-target="#addToStoreModal{{ estimate.id }}">
+                  <i class="fas fa-store"></i> Add to Store
+                </button>
+                {% endif %}
                 <br>
                 <small class="text-muted">
                   {% if estimate.created_at %}
@@ -675,7 +686,64 @@
             {% endif %}
           </div>
         </div>
+
+        {% if not estimate.store_item_id %}
+        <div class="modal fade" id="addToStoreModal{{ estimate.id }}" tabindex="-1">
+          <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+              <div class="modal-header bg-success text-white">
+                <h5 class="modal-title"><i class="fas fa-store"></i> Add to Store</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+              </div>
+              <form method="POST" action="{{ url_for('add_estimate_to_store', estimate_id=estimate.id) }}">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <div class="modal-body">
+                  <p class="text-muted small">
+                    Creates a store listing using this quote's details.
+                    {% if uploaded_images %}
+                    {{ uploaded_images|length }} photo{{ 's' if uploaded_images|length != 1 }} from this job will be copied over as product photos.
+                    {% else %}
+                    This job has no photos yet — you can add some on the store item afterward.
+                    {% endif %}
+                  </p>
+                  <div class="mb-3">
+                    <label class="form-label fw-semibold">Product Name</label>
+                    <input type="text" name="name" class="form-control"
+                           value="{{ estimate.name or (job.client_name ~ ' Piece') }}" required>
+                  </div>
+                  <div class="row">
+                    <div class="col-6 mb-3">
+                      <label class="form-label fw-semibold">Category</label>
+                      <input type="text" name="category" class="form-control" list="storeCategoryOptionsJob" placeholder="Vanities, Kitchens...">
+                    </div>
+                    <div class="col-3 mb-3">
+                      <label class="form-label fw-semibold">Qty</label>
+                      <input type="number" name="quantity" class="form-control" value="1" min="1">
+                    </div>
+                    <div class="col-3 mb-3">
+                      <label class="form-label fw-semibold">Price</label>
+                      <input type="number" name="price" class="form-control" step="0.01" min="0"
+                             value="{{ estimate.amount }}" required>
+                    </div>
+                  </div>
+                </div>
+                <div class="modal-footer">
+                  <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                  <button type="submit" class="btn btn-success"><i class="fas fa-store"></i> Add to Store</button>
+                </div>
+              </form>
+            </div>
+          </div>
+        </div>
+        {% endif %}
         {% endfor %}
+
+        <datalist id="storeCategoryOptionsJob">
+          <option value="Vanities">
+          <option value="Kitchens">
+          <option value="Cabinets">
+          <option value="Countertops">
+        </datalist>
       </div>
     </div>
     {% endif %}

@@ -149,6 +149,44 @@ CREATE TABLE stocks (
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
+-- Store items (finished pieces for sale — vanities, kitchens, etc.)
+CREATE TABLE store_items (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    name VARCHAR(255) NOT NULL,
+    category VARCHAR(100) DEFAULT 'Uncategorized',
+    description TEXT,
+    price DECIMAL(10,2) NOT NULL DEFAULT 0,
+    quantity INTEGER DEFAULT 0,
+    sold_count INTEGER DEFAULT 0,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+-- Photos for a store item
+CREATE TABLE store_item_photos (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    item_id UUID NOT NULL REFERENCES store_items(id) ON DELETE CASCADE,
+    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    filename VARCHAR(255) NOT NULL,
+    storage_path VARCHAR(500) NOT NULL,
+    uploaded_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+-- Sale history for store items (recorded each time one is marked sold)
+CREATE TABLE store_sales (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    item_id UUID NOT NULL REFERENCES store_items(id) ON DELETE CASCADE,
+    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    quantity INTEGER NOT NULL DEFAULT 1,
+    unit_price DECIMAL(10,2) NOT NULL,
+    total_price DECIMAL(10,2) NOT NULL,
+    sold_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+-- Links an estimate/quote to the store item it was turned into (one-click "Add to Store")
+ALTER TABLE estimates ADD COLUMN store_item_id UUID REFERENCES store_items(id) ON DELETE SET NULL;
+
 -- Create indexes for better performance
 CREATE INDEX idx_jobs_user_id ON jobs(user_id);
 CREATE INDEX idx_jobs_created_at ON jobs(created_at);
@@ -172,6 +210,11 @@ CREATE INDEX idx_files_user_id ON files(user_id);
 CREATE INDEX idx_stocks_user_id ON stocks(user_id);
 CREATE INDEX idx_stocks_category ON stocks(category);
 
+CREATE INDEX idx_store_items_user_id ON store_items(user_id);
+CREATE INDEX idx_store_items_category ON store_items(category);
+CREATE INDEX idx_store_item_photos_item_id ON store_item_photos(item_id);
+CREATE INDEX idx_store_sales_item_id ON store_sales(item_id);
+
 CREATE INDEX idx_journal_entries_user_date ON journal_entries(user_id, entry_date DESC);
 CREATE INDEX idx_journal_files_entry_id ON journal_files(entry_id);
 CREATE INDEX idx_reminders_user_due ON reminders(user_id, is_done, remind_at);
@@ -192,4 +235,7 @@ CREATE TRIGGER update_jobs_updated_at BEFORE UPDATE ON jobs
     FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
 CREATE TRIGGER update_stocks_updated_at BEFORE UPDATE ON stocks
+    FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+CREATE TRIGGER update_store_items_updated_at BEFORE UPDATE ON store_items
     FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();

@@ -39,6 +39,14 @@ STANDARD_RULES = {
 6. Si el cliente cancela después de haber pagado el depósito, este podrá perderse para cubrir materiales ya ordenados y el tiempo reservado, a discreción del contratista.
 7. Los precios de los materiales están sujetos a cambios según las condiciones del mercado antes del pago del depósito.
 8. Al firmar a continuación, ambas partes aceptan los términos, precios y alcance del trabajo descritos en este paquete.""",
+    "fr": """1. Ce devis est valable 30 jours à compter de la date ci-dessus; les prix peuvent changer après cette période.
+2. Un acompte de 50 % du montant total est requis pour réserver votre date de production et d'installation. Les travaux ne commenceront pas avant réception de l'acompte.
+3. Le solde restant de 50 % est dû intégralement à l'achèvement de l'installation.
+4. Toute modification de la portée des travaux convenue (matériaux, dimensions, conception) après signature peut entraîner des frais supplémentaires et un calendrier révisé.
+5. Le client est responsable de fournir des zones de travail dégagées et accessibles. Les retards causés par des zones inaccessibles peuvent entraîner un report et des frais supplémentaires.
+6. Si le client annule après le paiement de l'acompte, celui-ci peut être perdu pour couvrir les matériaux déjà commandés et le temps réservé, à la discrétion de l'entrepreneur.
+7. Les prix des matériaux sont susceptibles de changer en fonction des conditions du marché avant le paiement de l'acompte.
+8. En signant ci-dessous, les deux parties acceptent les conditions, les prix et la portée des travaux décrits dans ce dossier.""",
 }
 
 

@@ -1,0 +1,148 @@
+{% extends "base.html" %}
+{% block title %}Store - Cut byZewo{% endblock %}
+{% block content %}
+
+<div class="row mb-3">
+  <div class="col-md-6">
+    <h1 class="display-6 mb-0">
+      <i class="fas fa-store text-success"></i> Store
+    </h1>
+    <p class="text-muted">Finished pieces ready to sell — vanities, kitchens, anything sitting in inventory. Photo, price, and quantity per item.</p>
+  </div>
+  <div class="col-md-6 text-md-end">
+    <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#addStoreItemModal">
+      <i class="fas fa-plus"></i> Add Item
+    </button>
+  </div>
+</div>
+
+{% if grouped_items %}
+  {% for category, items in grouped_items.items() %}
+  <div class="mb-4">
+    <h5 class="text-muted text-uppercase small fw-bold mb-2">
+      <i class="fas fa-tag"></i> {{ category }}
+    </h5>
+    <div class="row">
+      {% for item in items %}
+      <div class="col-lg-4 col-md-6 mb-3">
+        <div class="card h-100 shadow-sm">
+          <a href="{{ url_for('store_item_detail', item_id=item.id) }}" class="text-decoration-none text-reset">
+            {% if item.cover_photo %}
+            <img src="{{ item.cover_photo.url }}" class="card-img-top" style="height: 180px; object-fit: cover;" alt="{{ item.name }}">
+            {% else %}
+            <div class="d-flex align-items-center justify-content-center bg-light" style="height: 180px;">
+              <i class="fas fa-image fa-2x text-muted"></i>
+            </div>
+            {% endif %}
+          </a>
+          <div class="card-body d-flex flex-column">
+            <div class="d-flex justify-content-between align-items-start">
+              <h6 class="card-title mb-1">
+                <a href="{{ url_for('store_item_detail', item_id=item.id) }}" class="text-decoration-none text-reset">{{ item.name }}</a>
+              </h6>
+              <span class="badge {{ 'bg-danger' if item.quantity == 0 else 'bg-secondary' }}">
+                {{ item.quantity }} in stock
+              </span>
+            </div>
+            {% if item.quantity == 0 %}
+            <div class="text-danger small fw-bold mb-1"><i class="fas fa-triangle-exclamation"></i> Sold out</div>
+            {% endif %}
+            <div class="fw-bold text-success mb-1">${{ "%.2f"|format(item.price) }}</div>
+            {% if item.photo_count %}
+            <div class="small text-muted mb-1"><i class="fas fa-images"></i> {{ item.photo_count }} photo{{ 's' if item.photo_count != 1 }}</div>
+            {% endif %}
+            {% if item.sold_count %}
+            <div class="small text-muted mb-2"><i class="fas fa-check-circle"></i> {{ item.sold_count }} sold</div>
+            {% endif %}
+
+            <div class="d-flex align-items-center gap-1 mt-auto pt-2">
+              <form method="POST" action="{{ url_for('sell_store_item', item_id=item.id) }}" class="d-inline"
+                    onsubmit="return confirm('Mark 1 {{ item.name }} as sold for ${{ '%.2f'|format(item.price) }}?');">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <input type="hidden" name="quantity" value="1">
+                <button class="btn btn-sm btn-success" title="Mark 1 sold" {{ 'disabled' if item.quantity == 0 }}>
+                  <i class="fas fa-cash-register"></i> Sell 1
+                </button>
+              </form>
+              <a href="{{ url_for('store_item_detail', item_id=item.id) }}" class="btn btn-sm btn-outline-secondary ms-auto">
+                <i class="fas fa-pen"></i> Manage
+              </a>
+            </div>
+          </div>
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+  {% endfor %}
+{% else %}
+<div class="card">
+  <div class="card-body text-center py-5">
+    <i class="fas fa-store fa-3x text-muted mb-3"></i>
+    <h4 class="text-muted">Nothing in the store yet</h4>
+    <p class="text-muted">Add finished pieces — vanities, kitchens, anything ready to sell — with a photo, price, and quantity.</p>
+    <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#addStoreItemModal">
+      <i class="fas fa-plus"></i> Add Item
+    </button>
+  </div>
+</div>
+{% endif %}
+
+<datalist id="storeCategoryOptions">
+  <option value="Vanities">
+  <option value="Kitchens">
+  <option value="Cabinets">
+  <option value="Countertops">
+  {% for c in categories %}
+  <option value="{{ c }}">
+  {% endfor %}
+</datalist>
+
+<!-- Add Item Modal -->
+<div class="modal fade" id="addStoreItemModal" tabindex="-1">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title"><i class="fas fa-plus"></i> Add Store Item</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <form method="POST" action="{{ url_for('add_store_item') }}" enctype="multipart/form-data">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <div class="modal-body">
+          <div class="mb-3">
+            <label class="form-label fw-semibold">Name</label>
+            <input type="text" name="name" class="form-control" placeholder="e.g. 36in Shaker Vanity, White Oak Kitchen" required autofocus>
+          </div>
+          <div class="row">
+            <div class="col-6 mb-3">
+              <label class="form-label fw-semibold">Category</label>
+              <input type="text" name="category" class="form-control" list="storeCategoryOptions" placeholder="Vanities, Kitchens...">
+            </div>
+            <div class="col-3 mb-3">
+              <label class="form-label fw-semibold">Qty</label>
+              <input type="number" name="quantity" class="form-control" value="1" min="0">
+            </div>
+            <div class="col-3 mb-3">
+              <label class="form-label fw-semibold">Price</label>
+              <input type="number" name="price" class="form-control" step="0.01" min="0" placeholder="0.00" required>
+            </div>
+          </div>
+          <div class="mb-3">
+            <label class="form-label fw-semibold">Description <span class="text-muted fw-normal">(optional)</span></label>
+            <textarea name="description" class="form-control" rows="2" placeholder="Dimensions, wood species, finish..."></textarea>
+          </div>
+          <div class="mb-0">
+            <label class="form-label fw-semibold">Photos <span class="text-muted fw-normal">(optional)</span></label>
+            <input type="file" name="photos" class="form-control" accept="image/*" multiple>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+          <button type="submit" class="btn btn-primary">Add to store</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+{% endblock %}

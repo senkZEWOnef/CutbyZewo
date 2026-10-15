@@ -205,6 +205,57 @@ except Exception as _e:
 
 try:
     execute_query("""
+        CREATE TABLE IF NOT EXISTS store_items (
+            id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+            user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            name VARCHAR(255) NOT NULL,
+            category VARCHAR(100) DEFAULT 'Uncategorized',
+            description TEXT,
+            price DECIMAL(10,2) NOT NULL DEFAULT 0,
+            quantity INTEGER DEFAULT 0,
+            sold_count INTEGER DEFAULT 0,
+            created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+            updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+        )
+    """, fetch=False)
+    execute_query("""
+        CREATE TABLE IF NOT EXISTS store_item_photos (
+            id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+            item_id UUID NOT NULL REFERENCES store_items(id) ON DELETE CASCADE,
+            user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            filename VARCHAR(255) NOT NULL,
+            storage_path VARCHAR(500) NOT NULL,
+            uploaded_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+        )
+    """, fetch=False)
+    execute_query("""
+        CREATE TABLE IF NOT EXISTS store_sales (
+            id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+            item_id UUID NOT NULL REFERENCES store_items(id) ON DELETE CASCADE,
+            user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            quantity INTEGER NOT NULL DEFAULT 1,
+            unit_price DECIMAL(10,2) NOT NULL,
+            total_price DECIMAL(10,2) NOT NULL,
+            sold_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+        )
+    """, fetch=False)
+    execute_query("CREATE INDEX IF NOT EXISTS idx_store_items_user_id ON store_items(user_id)", fetch=False)
+    execute_query("CREATE INDEX IF NOT EXISTS idx_store_items_category ON store_items(category)", fetch=False)
+    execute_query("CREATE INDEX IF NOT EXISTS idx_store_item_photos_item_id ON store_item_photos(item_id)", fetch=False)
+    execute_query("CREATE INDEX IF NOT EXISTS idx_store_sales_item_id ON store_sales(item_id)", fetch=False)
+except Exception as _e:
+    print("Warning: could not ensure store tables:", _e)
+
+try:
+    execute_query(
+        "ALTER TABLE estimates ADD COLUMN IF NOT EXISTS store_item_id UUID REFERENCES store_items(id) ON DELETE SET NULL",
+        fetch=False
+    )
+except Exception as _e:
+    print("Warning: could not add store_item_id to estimates:", _e)
+
+try:
+    execute_query("""
         CREATE TABLE IF NOT EXISTS journal_entries (
             id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
             user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -1868,6 +1919,7 @@ def client_package_form(estimate_id):
         language=language,
         standard_rules_en=STANDARD_RULES["en"],
         standard_rules_es=STANDARD_RULES["es"],
+        standard_rules_fr=STANDARD_RULES["fr"],
         uploaded_images=uploaded_images,
     )
 
@@ -3050,13 +3102,396 @@ def delete_stock(stock_id):
         )
         
         flash("Stock item deleted successfully!", "success")
-        
+
     except Exception as e:
         capture_exception(e)
         print("Error deleting stock:", e)
         flash("Could not delete stock item.", "danger")
-    
+
     return redirect(url_for("view_stocks"))
+
+# ===== STORE (FINISHED PIECES FOR SALE) =====
+
+def _store_photos_by_item(user_id):
+    """Returns {item_id: [photo dicts]} for every store item photo belonging to user_id."""
+    rows = execute_query(
+        "SELECT * FROM store_item_photos WHERE user_id = %s ORDER BY uploaded_at",
+        (user_id,), fetch=True
+    )
+    grouped = defaultdict(list)
+    for r in rows:
+        r["url"] = "/" + r["storage_path"]
+        grouped[str(r["item_id"])].append(r)
+    return grouped
+
+
+@app.route("/store")
+def store_list():
+    if "user_id" not in session:
+        return redirect(url_for("login"))
+    user_id = session["user_id"]
+
+    try:
+        items = execute_query(
+            "SELECT * FROM store_items WHERE user_id = %s ORDER BY category, name",
+            (user_id,), fetch=True
+        )
+        photos_by_item = _store_photos_by_item(user_id)
+        for item in items:
+            item_photos = photos_by_item.get(str(item["id"]), [])
+            item["cover_photo"] = item_photos[0] if item_photos else None
+            item["photo_count"] = len(item_photos)
+
+        categories = sorted({(i.get("category") or "Uncategorized") for i in items})
+        grouped = defaultdict(list)
+        for i in items:
+            grouped[i.get("category") or "Uncategorized"].append(i)
+
+        return render_template("store.html", grouped_items=dict(grouped), categories=categories)
+
+    except Exception as e:
+        capture_exception(e)
+        print("Error loading store items:", e)
+        flash("Could not load the store.", "danger")
+        return redirect(url_for("home"))
+
+
+@app.route("/estimate/<estimate_id>/add-to-store", methods=["POST"])
+def add_estimate_to_store(estimate_id):
+    """One-click "make this a product" from a finished quote: creates a
+    store_items row (price/quantity confirmed on the form) and copies the
+    job's uploaded photos over as the product's photos."""
+    if "user_id" not in session:
+        return redirect(url_for("login"))
+    user_id = session["user_id"]
+
+    estimate, job = _fetch_estimate_for_package(estimate_id, user_id)
+    if not estimate:
+        flash("Estimate not found.", "danger")
+        return redirect(url_for("jobs"))
+
+    if estimate.get("store_item_id"):
+        flash("This quote is already linked to a store item.", "info")
+        return redirect(url_for("store_item_detail", item_id=estimate["store_item_id"]))
+
+    try:
+        name = request.form.get("name", "").strip() or estimate.get("name") or f"{job.get('client_name') or 'Job'} Piece"
+        category = request.form.get("category", "").strip() or "Uncategorized"
+        price = float(request.form.get("price") or estimate["amount"])
+        quantity = int(request.form.get("quantity", 1) or 1)
+        description = request.form.get("description", "").strip() or estimate.get("description") or None
+
+        item = execute_single(
+            "INSERT INTO store_items (user_id, name, category, description, price, quantity) "
+            "VALUES (%s, %s, %s, %s, %s, %s) RETURNING id",
+            (user_id, name, category, description, price, quantity)
+        )
+        item_id = item["id"]
+
+        image_exts = {'.jpg', '.jpeg', '.png', '.gif', '.webp', '.bmp'}
+        job_files = execute_query(
+            "SELECT * FROM files WHERE job_id = %s ORDER BY uploaded_at",
+            (str(job["id"]),), fetch=True
+        )
+        copied = 0
+        for f in job_files:
+            if os.path.splitext(f["filename"])[1].lower() not in image_exts:
+                continue
+            src_path = f["storage_path"]
+            if not os.path.exists(src_path):
+                continue
+            filename = f"{uuid.uuid4().hex}_{secure_filename(f['filename'])}"
+            dest_path = f"static/uploads/store/{item_id}/{filename}"
+            os.makedirs(os.path.dirname(dest_path), exist_ok=True)
+            shutil.copy2(src_path, dest_path)
+            execute_query(
+                "INSERT INTO store_item_photos (item_id, user_id, filename, storage_path) VALUES (%s, %s, %s, %s)",
+                (item_id, user_id, filename, dest_path), fetch=False
+            )
+            copied += 1
+
+        execute_query(
+            "UPDATE estimates SET store_item_id = %s WHERE id = %s",
+            (item_id, estimate_id), fetch=False
+        )
+
+        flash(f"Added to the store with {copied} photo(s)!", "success")
+        return redirect(url_for("store_item_detail", item_id=item_id))
+
+    except Exception as e:
+        capture_exception(e)
+        print("Error adding estimate to store:", e)
+        flash("Could not add this quote to the store.", "danger")
+        return redirect(url_for("job_details", job_id=job["id"]))
+
+
+@app.route("/store/add", methods=["POST"])
+def add_store_item():
+    if "user_id" not in session:
+        return redirect(url_for("login"))
+    user_id = session["user_id"]
+
+    try:
+        name = request.form.get("name", "").strip()
+        category = request.form.get("category", "").strip() or "Uncategorized"
+        description = request.form.get("description", "").strip()
+        price = float(request.form.get("price", 0) or 0)
+        quantity = int(request.form.get("quantity", 0) or 0)
+
+        if not name:
+            flash("Item name is required.", "warning")
+            return redirect(url_for("store_list"))
+
+        item = execute_single(
+            "INSERT INTO store_items (user_id, name, category, description, price, quantity) "
+            "VALUES (%s, %s, %s, %s, %s, %s) RETURNING id",
+            (user_id, name, category, description or None, price, quantity)
+        )
+        item_id = item["id"]
+
+        saved = 0
+        for file in request.files.getlist("photos"):
+            if file and file.filename:
+                filename = f"{uuid.uuid4().hex}_{secure_filename(file.filename)}"
+                file_path = f"static/uploads/store/{item_id}/{filename}"
+                os.makedirs(os.path.dirname(file_path), exist_ok=True)
+                file.save(file_path)
+                execute_query(
+                    "INSERT INTO store_item_photos (item_id, user_id, filename, storage_path) VALUES (%s, %s, %s, %s)",
+                    (item_id, user_id, filename, file_path), fetch=False
+                )
+                saved += 1
+
+        flash("Item added to the store!", "success")
+
+    except Exception as e:
+        capture_exception(e)
+        print("Error adding store item:", e)
+        flash("Could not add item.", "danger")
+
+    return redirect(url_for("store_list"))
+
+
+@app.route("/store/<item_id>")
+def store_item_detail(item_id):
+    if "user_id" not in session:
+        return redirect(url_for("login"))
+    user_id = session["user_id"]
+
+    item = execute_single("SELECT * FROM store_items WHERE id = %s AND user_id = %s", (item_id, user_id))
+    if not item:
+        flash("Item not found.", "danger")
+        return redirect(url_for("store_list"))
+
+    photos = execute_query(
+        "SELECT * FROM store_item_photos WHERE item_id = %s ORDER BY uploaded_at",
+        (item_id,), fetch=True
+    )
+    for p in photos:
+        p["url"] = "/" + p["storage_path"]
+
+    sales = execute_query(
+        "SELECT * FROM store_sales WHERE item_id = %s ORDER BY sold_at DESC LIMIT 25",
+        (item_id,), fetch=True
+    )
+
+    return render_template("store_detail.html", item=item, photos=photos, sales=sales)
+
+
+@app.route("/store/<item_id>/edit", methods=["POST"])
+def update_store_item(item_id):
+    if "user_id" not in session:
+        return redirect(url_for("login"))
+    user_id = session["user_id"]
+
+    item = execute_single("SELECT * FROM store_items WHERE id = %s AND user_id = %s", (item_id, user_id))
+    if not item:
+        flash("Item not found.", "danger")
+        return redirect(url_for("store_list"))
+
+    try:
+        name = request.form.get("name", "").strip() or item["name"]
+        category = request.form.get("category", "").strip() or item.get("category") or "Uncategorized"
+        description = request.form.get("description", "").strip() or None
+        price = float(request.form.get("price", item["price"]) or 0)
+        quantity = int(request.form.get("quantity", item["quantity"]) or 0)
+
+        execute_query(
+            "UPDATE store_items SET name = %s, category = %s, description = %s, price = %s, quantity = %s "
+            "WHERE id = %s AND user_id = %s",
+            (name, category, description, price, quantity, item_id, user_id), fetch=False
+        )
+        flash("Item updated.", "success")
+
+    except Exception as e:
+        capture_exception(e)
+        print("Error updating store item:", e)
+        flash("Could not update item.", "danger")
+
+    return redirect(url_for("store_item_detail", item_id=item_id))
+
+
+@app.route("/store/<item_id>/sell", methods=["POST"])
+def sell_store_item(item_id):
+    """Marks `quantity` units sold: decrements stock, bumps sold_count, and
+    logs a store_sales row so the sale price/history is kept even if the
+    item's list price changes later."""
+    if "user_id" not in session:
+        return redirect(url_for("login"))
+    user_id = session["user_id"]
+
+    item = execute_single("SELECT * FROM store_items WHERE id = %s AND user_id = %s", (item_id, user_id))
+    if not item:
+        flash("Item not found.", "danger")
+        return redirect(url_for("store_list"))
+
+    from_detail = request.form.get("from") == "detail"
+
+    def _redirect_back():
+        if from_detail:
+            return redirect(url_for("store_item_detail", item_id=item_id))
+        return redirect(url_for("store_list"))
+
+    try:
+        qty = int(request.form.get("quantity", 1) or 1)
+        unit_price = float(request.form.get("unit_price") or item["price"])
+
+        if qty < 1:
+            flash("Quantity must be at least 1.", "warning")
+            return _redirect_back()
+
+        rowcount = execute_query(
+            "UPDATE store_items SET quantity = quantity - %s, sold_count = sold_count + %s "
+            "WHERE id = %s AND user_id = %s AND quantity >= %s",
+            (qty, qty, item_id, user_id, qty), fetch=False
+        )
+
+        if not rowcount:
+            flash(f"Only {item['quantity']} in stock — can't sell {qty}.", "warning")
+        else:
+            execute_query(
+                "INSERT INTO store_sales (item_id, user_id, quantity, unit_price, total_price) VALUES (%s, %s, %s, %s, %s)",
+                (item_id, user_id, qty, unit_price, unit_price * qty), fetch=False
+            )
+            flash(f"Sold {qty} — ${unit_price * qty:,.2f}.", "success")
+
+    except Exception as e:
+        capture_exception(e)
+        print("Error selling store item:", e)
+        flash("Could not record the sale.", "danger")
+
+    return _redirect_back()
+
+
+@app.route("/store/<item_id>/restock", methods=["POST"])
+def restock_store_item(item_id):
+    if "user_id" not in session:
+        return redirect(url_for("login"))
+    user_id = session["user_id"]
+
+    item = execute_single("SELECT * FROM store_items WHERE id = %s AND user_id = %s", (item_id, user_id))
+    if not item:
+        flash("Item not found.", "danger")
+        return redirect(url_for("store_list"))
+
+    amount = int(request.form.get("amount", 1) or 1)
+    execute_query(
+        "UPDATE store_items SET quantity = quantity + %s WHERE id = %s AND user_id = %s",
+        (amount, item_id, user_id), fetch=False
+    )
+    flash(f"Added {amount} to stock.", "success")
+
+    if request.form.get("from") == "detail":
+        return redirect(url_for("store_item_detail", item_id=item_id))
+    return redirect(url_for("store_list"))
+
+
+@app.route("/store/<item_id>/photos", methods=["POST"])
+def add_store_item_photos(item_id):
+    if "user_id" not in session:
+        return redirect(url_for("login"))
+    user_id = session["user_id"]
+
+    item = execute_single("SELECT id FROM store_items WHERE id = %s AND user_id = %s", (item_id, user_id))
+    if not item:
+        flash("Item not found.", "danger")
+        return redirect(url_for("store_list"))
+
+    saved = 0
+    for file in request.files.getlist("photos"):
+        if file and file.filename:
+            filename = f"{uuid.uuid4().hex}_{secure_filename(file.filename)}"
+            file_path = f"static/uploads/store/{item_id}/{filename}"
+            os.makedirs(os.path.dirname(file_path), exist_ok=True)
+            file.save(file_path)
+            execute_query(
+                "INSERT INTO store_item_photos (item_id, user_id, filename, storage_path) VALUES (%s, %s, %s, %s)",
+                (item_id, user_id, filename, file_path), fetch=False
+            )
+            saved += 1
+
+    if saved:
+        flash(f"Uploaded {saved} photo(s).", "success")
+    else:
+        flash("No photos were selected.", "warning")
+    return redirect(url_for("store_item_detail", item_id=item_id))
+
+
+@app.route("/store/<item_id>/photos/<photo_id>/delete", methods=["POST"])
+def delete_store_item_photo(item_id, photo_id):
+    if "user_id" not in session:
+        return redirect(url_for("login"))
+    user_id = session["user_id"]
+
+    photo = execute_single(
+        "SELECT * FROM store_item_photos WHERE id = %s AND item_id = %s AND user_id = %s",
+        (photo_id, item_id, user_id)
+    )
+    if photo:
+        execute_query("DELETE FROM store_item_photos WHERE id = %s", (photo_id,), fetch=False)
+        try:
+            if photo.get("storage_path") and os.path.exists(photo["storage_path"]):
+                os.remove(photo["storage_path"])
+        except Exception as e:
+            capture_exception(e)
+            print("Error removing store item photo from disk:", e)
+        flash("Photo deleted.", "success")
+    else:
+        flash("Photo not found.", "warning")
+    return redirect(url_for("store_item_detail", item_id=item_id))
+
+
+@app.route("/store/<item_id>/delete", methods=["POST"])
+def delete_store_item(item_id):
+    if "user_id" not in session:
+        return redirect(url_for("login"))
+    user_id = session["user_id"]
+
+    item = execute_single("SELECT * FROM store_items WHERE id = %s AND user_id = %s", (item_id, user_id))
+    if not item:
+        flash("Item not found.", "danger")
+        return redirect(url_for("store_list"))
+
+    try:
+        photos = execute_query(
+            "SELECT * FROM store_item_photos WHERE item_id = %s", (item_id,), fetch=True
+        )
+        execute_query("DELETE FROM store_items WHERE id = %s AND user_id = %s", (item_id, user_id), fetch=False)
+        for p in photos:
+            try:
+                if p.get("storage_path") and os.path.exists(p["storage_path"]):
+                    os.remove(p["storage_path"])
+            except Exception as e:
+                capture_exception(e)
+                print("Error removing store item photo from disk:", e)
+        flash("Item deleted.", "success")
+
+    except Exception as e:
+        capture_exception(e)
+        print("Error deleting store item:", e)
+        flash("Could not delete item.", "danger")
+
+    return redirect(url_for("store_list"))
 
 # ===== CABINET DESIGNER ROUTES =====
 
