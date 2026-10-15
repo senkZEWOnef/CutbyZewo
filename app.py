@@ -3671,6 +3671,10 @@ def dashboard():
 def robots_txt():
     return app.send_static_file("robots.txt")
 
+# ===== AI ASSISTANT =====
+from assistant import init_assistant
+init_assistant(app, regenerate_cut_sheets)
+
 # ===== RUN APPLICATION =====
 
 if __name__ == "__main__":
