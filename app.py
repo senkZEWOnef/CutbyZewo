@@ -1454,7 +1454,8 @@ def job_details(job_id):
             sheet_images = [{"src": row["src"], "label": row["label"]} for row in cut_sheet_rows]
 
         payments = execute_query(
-            "SELECT * FROM payments WHERE job_id = %s ORDER BY paid_at DESC",
+            "SELECT p.*, (SELECT bt.id FROM budget_transactions bt WHERE bt.payment_id = p.id AND bt.has_receipt LIMIT 1) AS receipt_tx_id "
+            "FROM payments p WHERE p.job_id = %s ORDER BY p.paid_at DESC",
             (job_id,), fetch=True
         )
         total_paid = sum(float(p['amount']) for p in payments)
@@ -1761,14 +1762,24 @@ def add_payment(job_id):
         flash("Job not found.", "danger")
         return redirect(url_for("jobs"))
     try:
-        amount = float(request.form.get("amount", 0))
+        from budget import parse_amount, read_receipt, record_transaction
+        amount = float(parse_amount(request.form.get("amount", 0)))
         payment_type = request.form.get("payment_type", "deposit")
         notes = request.form.get("notes", "").strip() or None
-        execute_query(
-            "INSERT INTO payments (job_id, user_id, amount, payment_type, notes) VALUES (%s, %s, %s, %s, %s)",
-            (job_id, user_id, amount, payment_type, notes), fetch=False
+        receipt = read_receipt(request.files.get("receipt"))  # validate before saving anything
+        pay = execute_single(
+            "INSERT INTO payments (job_id, user_id, amount, payment_type, notes) VALUES (%s, %s, %s, %s, %s) RETURNING id",
+            (job_id, user_id, amount, payment_type, notes)
         )
-        flash(f"Payment of ${amount:,.2f} recorded.", "success")
+        # Money received goes straight into the workshop budget.
+        record_transaction(
+            user_id, "income", amount,
+            category="Client deposit" if payment_type == "deposit" else "Client payment",
+            description=f"{payment_type.capitalize()} - {job['client_name']}" + (f" ({notes})" if notes else ""),
+            job_id=job_id, payment_id=pay["id"], receipt=receipt)
+        flash(f"Payment of ${amount:,.2f} recorded and added to your budget.", "success")
+    except ValueError as e:
+        flash(str(e), "warning")
     except Exception as e:
         capture_exception(e)
         flash("Could not record payment.", "danger")
@@ -3026,14 +3037,28 @@ def add_stock():
             flash("Item name is required.", "warning")
             return redirect(url_for("view_stocks"))
 
-        execute_query(
-            "INSERT INTO stocks (user_id, name, category, quantity, unit, code, color, notes) VALUES (%s, %s, %s, %s, %s, %s, %s, %s)",
-            (user_id, name, category, int(quantity or 0), unit or None, code or None, color or None, notes or None),
-            fetch=False
+        cost = request.form.get("cost", "").strip()
+        receipt = None
+        if cost:
+            from budget import parse_amount, read_receipt
+            parse_amount(cost)
+            receipt = read_receipt(request.files.get("receipt"))
+
+        row = execute_single(
+            "INSERT INTO stocks (user_id, name, category, quantity, unit, code, color, notes) VALUES (%s, %s, %s, %s, %s, %s, %s, %s) RETURNING id",
+            (user_id, name, category, int(quantity or 0), unit or None, code or None, color or None, notes or None)
         )
 
-        flash("Stock item added successfully!", "success")
+        if cost:
+            # Paid for it: record the purchase in the budget (quantity is already on the item).
+            from budget import record_transaction
+            record_transaction(user_id, "expense", cost, category="Materials", description=f"Bought {name}", receipt=receipt)
+            flash(f"Stock item added and ${float(cost):,.2f} deducted from your budget.", "success")
+        else:
+            flash("Stock item added successfully!", "success")
 
+    except ValueError as e:
+        flash(str(e), "warning")
     except Exception as e:
         capture_exception(e)
         print("Error adding stock:", e)
@@ -3672,6 +3697,9 @@ def robots_txt():
     return app.send_static_file("robots.txt")
 
 # ===== AI ASSISTANT =====
+from budget import init_budget
+init_budget(app)
+
 from assistant import init_assistant
 init_assistant(app, regenerate_cut_sheets)
 

@@ -1,0 +1,210 @@
+{% extends "base.html" %}
+{% block title %}Budget - Cut byZewo{% endblock %}
+{% block content %}
+{% macro money(v) %}${{ "{:,.2f}".format(v|float) }}{% endmacro %}
+
+<div class="d-flex flex-wrap justify-content-between align-items-center mb-3 gap-2">
+  <div>
+    <h1 class="display-6 mb-0"><i class="fas fa-wallet text-primary"></i> Workshop Budget</h1>
+    <p class="text-muted mb-0">Money in and out of the shop. Client payments are added automatically.</p>
+  </div>
+  <div class="d-flex gap-2">
+    <a class="btn btn-outline-secondary" href="{{ url_for('budget.budget_export') }}"><i class="fas fa-download"></i> CSV</a>
+    <button class="btn btn-danger" data-bs-toggle="modal" data-bs-target="#addTxModal" data-type="expense"><i class="fas fa-minus"></i> Expense</button>
+    <button class="btn btn-success" data-bs-toggle="modal" data-bs-target="#addTxModal" data-type="income"><i class="fas fa-plus"></i> Income</button>
+  </div>
+</div>
+
+<div class="row g-3 mb-4">
+  <div class="col-md-4"><div class="card h-100 shadow-sm"><div class="card-body">
+    <div class="text-muted small">Current balance</div>
+    <div class="display-6 fw-bold {{ 'text-danger' if balance < 0 else 'text-success' }}">{{ money(balance) }}</div>
+    <div class="small text-muted">All time</div>
+  </div></div></div>
+  <div class="col-6 col-md-4"><div class="card h-100 shadow-sm"><div class="card-body">
+    <div class="text-muted small">In {{ '(' ~ month ~ ')' if month != 'all' else '(all time)' }}</div>
+    <div class="h3 text-success mb-0">{{ money(period.income) }}</div>
+  </div></div></div>
+  <div class="col-6 col-md-4"><div class="card h-100 shadow-sm"><div class="card-body">
+    <div class="text-muted small">Out {{ '(' ~ month ~ ')' if month != 'all' else '(all time)' }}</div>
+    <div class="h3 text-danger mb-0">{{ money(period.expense) }}</div>
+    <div class="small text-muted">Net {{ money(period.net) }}</div>
+  </div></div></div>
+</div>
+
+<form method="GET" class="row g-2 mb-3 align-items-end">
+  <div class="col-6 col-md-2">
+    <label class="form-label small mb-0">Month</label>
+    <input type="month" name="month" class="form-control form-control-sm" value="{{ '' if month == 'all' else month }}">
+  </div>
+  <div class="col-6 col-md-2">
+    <label class="form-label small mb-0">Type</label>
+    <select name="type" class="form-select form-select-sm">
+      <option value="">All</option>
+      <option value="income" {{ 'selected' if tx_type == 'income' }}>Income</option>
+      <option value="expense" {{ 'selected' if tx_type == 'expense' }}>Expenses</option>
+    </select>
+  </div>
+  <div class="col-6 col-md-3">
+    <label class="form-label small mb-0">Category</label>
+    <select name="category" class="form-select form-select-sm">
+      <option value="">All</option>
+      {% for c in expense_categories + income_categories %}
+      <option value="{{ c }}" {{ 'selected' if category == c }}>{{ c }}</option>
+      {% endfor %}
+    </select>
+  </div>
+  <div class="col-6 col-md-3">
+    <label class="form-label small mb-0">Search</label>
+    <input type="text" name="q" class="form-control form-control-sm" value="{{ q }}" placeholder="description, client, item">
+  </div>
+  <div class="col-12 col-md-2 d-flex gap-1">
+    <button class="btn btn-sm btn-primary flex-fill">Filter</button>
+    <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('budget.budget_home', month='all') }}">All time</a>
+  </div>
+</form>
+
+{% if by_cat %}
+<div class="mb-3 small">
+  {% for c in by_cat %}
+  <span class="badge {{ 'bg-success' if c.tx_type == 'income' else 'bg-danger' }} bg-opacity-75 me-1 mb-1">
+    {{ c.category }}: {{ money(c.total) }}
+  </span>
+  {% endfor %}
+</div>
+{% endif %}
+
+<div class="card shadow-sm">
+  {% if rows %}
+  <div class="table-responsive">
+    <table class="table table-hover align-middle mb-0">
+      <thead class="table-light">
+        <tr><th>Date</th><th>Description</th><th>Category</th><th class="text-end">Amount</th><th></th></tr>
+      </thead>
+      <tbody>
+        {% for r in rows %}
+        <tr>
+          <td class="text-nowrap small">{{ r.tx_date.strftime('%b %d, %Y') }}</td>
+          <td>
+            {{ r.description or '—' }}
+            {% if r.client_name %}<div class="small text-muted"><i class="fas fa-briefcase"></i> <a href="{{ url_for('job_details', job_id=r.job_id) }}">{{ r.client_name }}</a></div>{% endif %}
+            {% if r.stock_name %}<div class="small text-muted"><i class="fas fa-box"></i> +{{ r.stock_qty }} {{ r.stock_name }}</div>{% endif %}
+          </td>
+          <td class="small">{{ r.category or '' }}</td>
+          <td class="text-end fw-semibold text-nowrap {{ 'text-success' if r.tx_type == 'income' else 'text-danger' }}">
+            {{ '+' if r.tx_type == 'income' else '−' }}{{ money(r.amount) }}
+          </td>
+          <td class="text-end text-nowrap">
+            {% if r.has_receipt %}
+            <a href="{{ url_for('budget.budget_receipt', tx_id=r.id) }}" target="_blank" class="btn btn-sm btn-outline-primary" title="View receipt"><i class="fas fa-receipt"></i></a>
+            {% endif %}
+            <button class="btn btn-sm btn-outline-secondary" data-bs-toggle="modal" data-bs-target="#editTx{{ r.id }}" title="Edit"><i class="fas fa-pen"></i></button>
+            {% if not r.payment_id %}
+            <form method="POST" action="{{ url_for('budget.budget_delete', tx_id=r.id) }}" class="d-inline" onsubmit="return confirm('Delete this entry?');">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+              <button class="btn btn-sm btn-outline-danger" title="Delete"><i class="fas fa-trash"></i></button>
+            </form>
+            {% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% if truncated %}<div class="p-2 small text-muted">Showing the latest 300 entries. Narrow the filters to see others.</div>{% endif %}
+  {% else %}
+  <div class="card-body text-center py-5 text-muted">
+    <i class="fas fa-wallet fa-3x mb-3"></i>
+    <h5>No entries for this view</h5>
+    <p class="mb-0">Add an <b>Opening balance</b> as income to start from what's in the account today, then record expenses as you spend.</p>
+  </div>
+  {% endif %}
+</div>
+
+{# ---- edit modals ---- #}
+{% for r in rows %}
+<div class="modal fade" id="editTx{{ r.id }}" tabindex="-1"><div class="modal-dialog modal-dialog-centered"><div class="modal-content">
+  <form method="POST" action="{{ url_for('budget.budget_edit', tx_id=r.id) }}" enctype="multipart/form-data">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <div class="modal-header"><h5 class="modal-title">Edit entry</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+    <div class="modal-body">
+      {% if r.payment_id %}<div class="alert alert-info small py-2">From a client payment. Change the amount from the job page.</div>{% endif %}
+      {% if not r.payment_id %}
+      <div class="row">
+        <div class="col-6 mb-3"><label class="form-label fw-semibold">Amount ($)</label>
+          <input type="number" step="0.01" min="0.01" name="amount" class="form-control" value="{{ r.amount }}" required></div>
+        <div class="col-6 mb-3"><label class="form-label fw-semibold">Date</label>
+          <input type="date" name="tx_date" class="form-control" value="{{ r.tx_date.isoformat() }}" required></div>
+      </div>
+      <div class="mb-3"><label class="form-label fw-semibold">Category</label>
+        <select name="category" class="form-select">
+          {% for c in (expense_categories if r.tx_type == 'expense' else income_categories) %}
+          <option {{ 'selected' if r.category == c }}>{{ c }}</option>{% endfor %}
+        </select></div>
+      {% endif %}
+      <div class="mb-3"><label class="form-label fw-semibold">Description</label>
+        <input type="text" name="description" class="form-control" maxlength="500" value="{{ r.description or '' }}"></div>
+      <div class="mb-0"><label class="form-label fw-semibold">Receipt {{ '(replace)' if r.has_receipt else '' }}</label>
+        <input type="file" name="receipt" accept="image/*,application/pdf" class="form-control">
+        {% if r.has_receipt %}<div class="form-check mt-2"><input class="form-check-input" type="checkbox" name="remove_receipt" id="rm{{ r.id }}">
+          <label class="form-check-label small" for="rm{{ r.id }}">Remove current receipt</label></div>{% endif %}</div>
+    </div>
+    <div class="modal-footer"><button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button><button class="btn btn-primary">Save</button></div>
+  </form>
+</div></div></div>
+{% endfor %}
+
+{# ---- add modal ---- #}
+<div class="modal fade" id="addTxModal" tabindex="-1"><div class="modal-dialog modal-dialog-centered"><div class="modal-content">
+  <form method="POST" action="{{ url_for('budget.budget_add') }}" enctype="multipart/form-data">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <input type="hidden" name="tx_type" id="txType" value="expense">
+    <div class="modal-header"><h5 class="modal-title" id="addTxTitle">Add expense</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+    <div class="modal-body">
+      <div class="row">
+        <div class="col-6 mb-3"><label class="form-label fw-semibold">Amount ($)</label>
+          <input type="number" step="0.01" min="0.01" name="amount" class="form-control" required inputmode="decimal"></div>
+        <div class="col-6 mb-3"><label class="form-label fw-semibold">Date</label>
+          <input type="date" name="tx_date" id="txDate" class="form-control" value="{{ today }}" required></div>
+      </div>
+      <div class="mb-3"><label class="form-label fw-semibold">Category</label>
+        <select name="category" id="txCategory" class="form-select"></select></div>
+      <div class="mb-3"><label class="form-label fw-semibold">Description</label>
+        <input type="text" name="description" class="form-control" maxlength="500" placeholder="e.g. 10 sheets 3/4 maple ply, Home Depot"></div>
+      <div class="mb-3"><label class="form-label fw-semibold">Job <span class="text-muted fw-normal">(optional)</span></label>
+        <select name="job_id" class="form-select"><option value="">—</option>
+          {% for j in jobs %}<option value="{{ j.id }}">{{ j.client_name }}</option>{% endfor %}</select></div>
+
+      <div id="stockBox" class="border rounded p-2 mb-3 bg-light">
+        <div class="fw-semibold small mb-1"><i class="fas fa-box"></i> Add to inventory <span class="text-muted fw-normal">(optional)</span></div>
+        <div class="row g-2">
+          <div class="col-8"><select name="stock_id" id="stockSel" class="form-select form-select-sm">
+            <option value="">Don't update inventory</option>
+            {% for s in stocks %}<option value="{{ s.id }}">{{ s.name }} (have {{ s.quantity }} {{ s.unit or '' }})</option>{% endfor %}
+            </select></div>
+          <div class="col-4"><input type="number" name="stock_qty" min="1" class="form-control form-control-sm" placeholder="Qty bought"></div>
+          <div class="col-8"><input type="text" name="new_stock_name" class="form-control form-control-sm" placeholder="…or a new item name"></div>
+          <div class="col-4"><input type="text" name="stock_unit" class="form-control form-control-sm" placeholder="unit"></div>
+        </div>
+      </div>
+      <div class="mb-0"><label class="form-label fw-semibold">Receipt <span class="text-muted fw-normal">(photo or PDF)</span></label>
+        <input type="file" name="receipt" accept="image/*,application/pdf" class="form-control"></div>
+    </div>
+    <div class="modal-footer"><button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button><button class="btn btn-primary">Save</button></div>
+  </form>
+</div></div></div>
+
+<script>
+  const EXP = {{ expense_categories|tojson }}, INC = {{ income_categories|tojson }};
+  document.getElementById('addTxModal').addEventListener('show.bs.modal', e => {
+    const type = (e.relatedTarget && e.relatedTarget.dataset.type) || 'expense';
+    document.getElementById('txType').value = type;
+    document.getElementById('addTxTitle').textContent = type === 'expense' ? 'Add expense' : 'Add income';
+    document.getElementById('txCategory').innerHTML = (type === 'expense' ? EXP : INC).map(c => `<option>${c}</option>`).join('');
+    document.getElementById('stockBox').style.display = type === 'expense' ? '' : 'none';
+    // Default to the user's local date, not the server's.
+    const d = new Date(); d.setMinutes(d.getMinutes() - d.getTimezoneOffset());
+    document.getElementById('txDate').value = d.toISOString().slice(0, 10);
+  });
+</script>
+{% endblock %}
